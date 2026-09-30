@@ -694,19 +694,19 @@
     if (ui.scroll > max) ui.scroll = max;
   }
 
-  function logColor(text) {
+  function logTag(text) {
     var ch = text.charAt(0);
-    if (ch === "!") return CRIMSON;
-    if (ch === "+") return GOLD;
-    if (ch === "*") return CYAN;
     var low = text.toLowerCase();
-    if (low.indexOf("audit") >= 0 || low.indexOf("freeze") >= 0 || low.indexOf("discrep") >= 0 || low.indexOf("theft") >= 0) return CRIMSON;
-    if (text.indexOf("$") >= 0 || low.indexOf("capital") >= 0 || low.indexOf("market") >= 0 || low.indexOf("wage") >= 0) return GOLD;
-    if (low.indexOf("rank") >= 0 || low.indexOf("scout") >= 0 || low.indexOf("blueprint") >= 0 || low.indexOf("lab") >= 0 || low.indexOf("research") >= 0) return CYAN;
-    return "#d5ddd8";
+    if (ch === "!" || low.indexOf("audit") >= 0 || low.indexOf("freeze") >= 0 || low.indexOf("discrep") >= 0 || low.indexOf("theft") >= 0 || low.indexOf("overheat") >= 0) {
+      return { tag: "[ALERT]", color: CRIMSON, alert: true };
+    }
+    if (ch === "+" || text.indexOf("$") >= 0 || low.indexOf("capital") >= 0 || low.indexOf("market") >= 0 || low.indexOf("wage") >= 0 || low.indexOf("buy") >= 0) {
+      return { tag: "[FINANCE]", color: GOLD, alert: false };
+    }
+    return { tag: "[TECH]", color: CYAN, alert: false };
   }
 
-  function drawLog(ctx, game, ui, L) {
+  function drawLog(ctx, game, ui, L, now) {
     var x = 16;
     var y = L.header + 4;
     var w = L.w - 32;
@@ -745,6 +745,7 @@
     var count = end - start;
     var slide = (1 - easeOut(logAnim.t)) * lineH;
     var y0 = top + areaH - count * lineH + slide;
+    var tagFont = "700 " + px + "px " + MONO;
     ctx.save();
     ctx.beginPath();
     ctx.rect(x, top, w, areaH);
@@ -754,24 +755,38 @@
       var text = S.logLine(game, i) || "";
       var ly = y0 + (i - start) * lineH;
       var rel = (ly - top) / Math.max(1, areaH);
-      var alpha = rel < 0.42 ? rel / 0.42 : 1;
-      if (alpha < 0) alpha = 0;
-      if (alpha > 1) alpha = 1;
-      var color = logColor(text);
+      var fade = rel < 0.32 ? rel / 0.32 : 1;
+      if (fade < 0) fade = 0;
+      var alpha = fade * fade;
+      var meta = logTag(text);
+      var body = text;
+      if (body.charAt(0) === "!" || body.charAt(0) === "+" || body.charAt(0) === "*") body = body.substring(1).replace(/^\s+/, "");
+      ctx.font = tagFont;
+      var tagW = measure(ctx, tagFont, meta.tag + " ");
+      var tagAlpha = alpha;
+      if (meta.alert) tagAlpha = alpha * (0.35 + 0.65 * Math.abs(Math.sin((now || 0) * 0.014)));
+      ctx.globalAlpha = tagAlpha;
+      ctx.fillStyle = meta.color;
+      setGlow(ctx, meta.color);
+      ctx.fillText(meta.tag, x, ly);
+      clearGlow(ctx);
+      ctx.font = f;
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = color;
-      setGlow(ctx, color);
-      if (text.length > maxChars) text = text.substring(0, maxChars - 1) + "…";
-      ctx.fillText(text, x, ly);
+      ctx.fillStyle = "#d7e0dc";
+      var shown = clipText(ctx, f, body, Math.max(12, w - tagW));
+      if (shown.length > maxChars) shown = shown.substring(0, maxChars - 1) + "…";
+      ctx.fillText(shown, x + tagW, ly);
     }
     ctx.restore();
     ctx.globalAlpha = 1;
     clearGlow(ctx);
   }
 
-  function capsule(ctx, x, y, w, h, label, valueText, fill, color, t, phase) {
+  function capsule(ctx, x, y, w, h, label, valueText, fill, color, t, phase, opts) {
     if (fill < 0) fill = 0;
     if (fill > 1) fill = 1;
+    var flat = !glowOk();
+    if (opts && opts.glitch && !flat && Math.sin(t * 0.23) > 0.72) x += 1;
     var r = h * 0.5;
     clearGlow(ctx);
     round(ctx, x, y, w, h, r);
@@ -782,22 +797,42 @@
       ctx.save();
       round(ctx, x, y, w, h, r);
       ctx.clip();
-      ctx.beginPath();
-      var amp = frameGame && frameGame.settings && frameGame.settings.performanceMode ? 0 : Math.min(3.2, h * 0.22);
-      var steps = amp > 0 ? 10 : 1;
-      var edge = x + fw;
-      ctx.moveTo(x, y + h);
-      ctx.lineTo(x, y);
-      var s;
-      for (s = 0; s <= steps; s++) {
-        var py = y + (h * s / steps);
-        var ox = amp * Math.sin(py * 0.45 + t * 0.003 + phase);
-        ctx.lineTo(Math.min(x + w, edge + ox), py);
-      }
-      ctx.lineTo(x, y + h);
-      ctx.closePath();
+      var amp = flat ? 0 : Math.min(2.8, h * 0.2);
+      var steps = amp > 0 ? 8 : 1;
+      var wave = function (harm, scale) {
+        ctx.beginPath();
+        var edge = x + fw;
+        ctx.moveTo(x, y + h);
+        ctx.lineTo(x, y);
+        var s;
+        for (s = 0; s <= steps; s++) {
+          var py = y + (h * s / steps);
+          var ox = amp * scale * Math.sin(py * 0.52 + t * 0.004 + phase + harm);
+          ox += amp * scale * 0.55 * Math.sin(py * 1.15 - t * 0.0026 + phase * 1.6);
+          ctx.lineTo(Math.min(x + w, edge + ox), py);
+        }
+        ctx.lineTo(x, y + h);
+        ctx.closePath();
+      };
+      wave(0, 1);
       ctx.fillStyle = color;
       ctx.fill();
+      if (!flat) {
+        ctx.globalAlpha = 0.38;
+        wave(1.4, 0.72);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      if (opts && opts.sparks && particlesOk() && fw > 10) {
+        var n;
+        ctx.fillStyle = "#fff6c2";
+        for (n = 0; n < 6; n++) {
+          var sx = x + 3 + ((n * 41 + t * 0.03) % (fw - 6));
+          var sy = y + h * (0.35 + 0.3 * Math.sin(t * 0.006 + n * 1.2));
+          ctx.fillRect(sx, sy, 1.5, 1.5);
+        }
+      }
       ctx.restore();
     }
     round(ctx, x, y, w, h, r);
@@ -828,12 +863,20 @@
     var y = L.b0 + (band - h) * 0.5;
     if (w < 20) return;
     var capitalFill = 1 - Math.exp(-game.player.capital / 500);
-    var stressT = game.player.stress / 100;
-    if (glowOk()) stressT = stressT * (0.72 + 0.28 * (0.5 + 0.5 * Math.sin(t * 0.008)));
-    var stressColor = mixHex(CYAN, CRIMSON, stressT);
-    capsule(ctx, x, y, w, h, "CAPITAL", S.money(game.player.capital), capitalFill, GOLD, t, 0);
+    var stressN = game.player.stress;
+    var stressColor = CRIMSON;
+    var glitch = false;
+    if (stressN > 50) {
+      glitch = true;
+      if (glowOk()) {
+        var spike = Math.abs(Math.sin(t * 0.021) * Math.sin(t * 0.067));
+        if (Math.sin(t * 0.11) > 0.88) spike = 1;
+        stressColor = mixHex(CRIMSON, "#ffd0dc", spike);
+      }
+    } else stressColor = mixHex(CYAN, CRIMSON, stressN / 50);
+    capsule(ctx, x, y, w, h, "CAPITAL", S.money(game.player.capital), capitalFill, GOLD, t, 0, { sparks: true });
     capsule(ctx, x + (w + gap), y, w, h, "INTELLIGENCE", String(Math.round(game.player.intelligence)), game.player.intelligence / 100, CYAN, t, 1.7);
-    capsule(ctx, x + (w + gap) * 2, y, w, h, "STRESS", String(Math.round(game.player.stress)), game.player.stress / 100, stressColor, t, 3.1);
+    capsule(ctx, x + (w + gap) * 2, y, w, h, "STRESS", String(Math.round(stressN)), stressN / 100, stressColor, t, 3.1, { glitch: glitch });
     capsule(ctx, x + (w + gap) * 3, y, w, h, "VISIBILITY", String(Math.round(game.player.visibility)), game.player.visibility / 100, GOLD, t, 4.6);
   }
 
@@ -885,7 +928,6 @@
       ? [["Occupation"], ["Education", "& Market"], ["Invention", "Lab"], ["Scouts", "& Assets"]]
       : [["Occupation"], ["Education & Market"], ["Invention Lab"], ["Scouts & Assets"]];
     var ids = ["job", "edu", "lab", "scout"];
-    var filaments = [GOLD, CYAN, CRIMSON, CYAN];
     var gap = 8;
     var bw = (L.w - 32 - gap * 3) / 4;
     var i;
@@ -910,17 +952,18 @@
       round(ctx, x, ty, tw, th, 8);
       ctx.fillStyle = "rgba(15,15,15,0.85)";
       ctx.fill();
-      var stroke = filaments[i];
-      ctx.strokeStyle = stroke;
-      ctx.globalAlpha = hover || on ? 1 : 0.85;
-      ctx.lineWidth = 1;
-      setGlow(ctx, stroke);
-      ctx.stroke();
+      ctx.strokeStyle = GOLD;
       ctx.globalAlpha = 1;
+      ctx.lineWidth = 1;
+      if (hover && glowOk()) {
+        ctx.shadowColor = GOLD;
+        ctx.shadowBlur = 6;
+      }
+      ctx.stroke();
       clearGlow(ctx);
       ctx.font = font(L.w < 860 ? 11 : 13, true);
       ctx.fillStyle = "#f4f7f6";
-      setGlow(ctx, stroke);
+      setGlow(ctx, GOLD);
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       var lines = labels[i];
@@ -933,6 +976,16 @@
     }
     ctx.textAlign = "left";
     ctx.globalAlpha = 1;
+  }
+
+  function drawGrid(ctx, w, h) {
+    var step = 32;
+    ctx.fillStyle = "rgba(0, 255, 204, 0.02)";
+    var x;
+    var y;
+    for (y = step; y < h; y += step) {
+      for (x = step; x < w; x += step) ctx.fillRect(x, y, 1, 1);
+    }
   }
 
   function drawRules(ctx, L) {
@@ -956,7 +1009,7 @@
       logAnim.n = game.logN;
       logAnim.head = game.logHead;
     } else if (logAnim.t < 1) {
-      logAnim.t += dt / 280;
+      logAnim.t += dt / 150;
       if (logAnim.t > 1) logAnim.t = 1;
     }
     if (!particlesOk()) return;
@@ -983,10 +1036,10 @@
     if (!particlesOk()) return 0;
     var spawned = 0;
     var i;
-    for (i = 0; i < pool.length && spawned < 12; i++) {
+    for (i = 0; i < pool.length && spawned < 10; i++) {
       var p = pool[i];
       if (p.alive) continue;
-      var ang = (spawned / 12) * Math.PI * 2;
+      var ang = (spawned / 10) * Math.PI * 2;
       var sp = 48 + (spawned % 4) * 16;
       p.alive = true;
       p.x = x;
@@ -1060,9 +1113,10 @@
     var ox = 0;
     var oy = 0;
     if (shakeLeft > 0) {
-      var mag = 4;
-      ox = Math.sin(shakeLeft * 2.4) * mag;
-      oy = Math.cos(shakeLeft * 1.7) * mag;
+      var bounce = [0, 2, -5, 6];
+      var mag = bounce[shakeLeft] || 0;
+      ox = mag;
+      oy = mag * 0.4;
       shakeLeft -= 1;
     }
     ctx.setTransform(dpr, 0, 0, dpr, ox * dpr, oy * dpr);
@@ -1071,9 +1125,10 @@
     ui.hits.length = 0;
     var bg = ensurePlate(w, h, !!game.settings.performanceMode, dpr);
     ctx.drawImage(bg, 0, 0, w, h);
+    drawGrid(ctx, w, h);
     var L = layout(w, h);
     ui.L = L;
-    drawLog(ctx, game, ui, L);
+    drawLog(ctx, game, ui, L, now);
     drawMeters(ctx, game, L, now);
     drawRules(ctx, L);
     if (ui.menu && ui.menuT > 0.02) drawMenu(ctx, game, ui, L);
