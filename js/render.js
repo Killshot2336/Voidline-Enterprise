@@ -912,7 +912,7 @@
       ctx.fill();
       var stroke = filaments[i];
       ctx.strokeStyle = stroke;
-      ctx.globalAlpha = hover || on ? 1 : 0.55;
+      ctx.globalAlpha = hover || on ? 1 : 0.85;
       ctx.lineWidth = 1;
       setGlow(ctx, stroke);
       ctx.stroke();

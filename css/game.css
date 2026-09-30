@@ -11,16 +11,8 @@ html, body {
   position: fixed;
   inset: 0;
   pointer-events: none;
-}
-
-body:not(.perf) #wash {
-  backdrop-filter: blur(18px);
-  background: rgba(5, 5, 5, 0.2);
-}
-
-body.perf #wash {
+  background: transparent;
   backdrop-filter: none;
-  background: rgba(5, 5, 5, 0.94);
 }
 
 #view {
