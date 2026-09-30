@@ -182,7 +182,7 @@
   function traitText(game, traitId, caught) {
     var t = D.TRAITS[traitId];
     if (!t) return traitId;
-    if (t.hidden && !caught && game.player.intelligence < 75) return "Sealed trait";
+    if (t.hidden && !caught && game.player.intelligence < 75 && !(game.flags && game.flags.exposeTraits)) return "Sealed trait";
     return t.name;
   }
 
@@ -322,6 +322,16 @@
   }
 
   function drawEducation(flow, game, ui) {
+    section(flow, "ACADEMIC RANK");
+    para(flow, "XP " + Math.floor(game.player.xp) + " / " + Math.round(S.xpNeed(game.player.level)) + " for rank " + (game.player.level + 1) + ". Each rank grants 1 Void Point.");
+    if (D.GRADS) {
+      var g;
+      for (g = 0; g < D.GRADS.length; g++) {
+        var grad = D.GRADS[g];
+        var held = game.grad && game.grad[grad.id];
+        para(flow, (held ? "Graduated" : Math.round(grad.xp) + " XP") + " · " + grad.name + " · " + grad.text);
+      }
+    }
     section(flow, "DEGREES");
     para(flow, "Study time follows the device clock and speeds up or slows with the hour.");
     if (game.degree) {
@@ -355,8 +365,8 @@
     }
 
     section(flow, "MARKET");
-    var phase = S.phaseAt(game.lastReal || Date.now());
-    para(flow, phase.name + " adjusts prices. Visibility trims them slightly.");
+    var vol = S.volatilityFactor(game.lastReal || Date.now());
+    para(flow, "Clock ticker. Volatility " + vol.toFixed(2) + ". Visibility trims the quote.");
     for (i = 0; i < D.ITEMS.length; i++) {
       var item = D.ITEMS[i];
       var ir = row(flow, 32);
@@ -398,7 +408,7 @@
     }
 
     section(flow, "R&D SYNTHESIZER");
-    para(flow, "Combine Idea, Staff, Marketing, and Asset. Legendary recipes are filed in the Journal.");
+    para(flow, "Four baseline parts, or any two slots for a legendary pair. The Journal files what you discover.");
     var cats = [
       ["idea", "Idea"],
       ["staff", "Staff"],
@@ -424,13 +434,12 @@
       var any = false;
       for (i = 0; i < D.ITEMS.length; i++) {
         var mat = D.ITEMS[i];
-        if (mat.cat !== ui.pick) continue;
         var count = game.mats[mat.id] || 0;
         if (count <= 0) continue;
         any = true;
         var pr = row(flow, 32);
         if (!pr.on) continue;
-        button(flow.ctx, ui, "use:" + mat.cat + ":" + mat.id, flow.x, pr.y, flow.w, 28, mat.name + "  ×" + count, ui.synth[mat.cat] === mat.id, false);
+        button(flow.ctx, ui, "use:" + ui.pick + ":" + mat.id, flow.x, pr.y, flow.w, 28, mat.name + "  ×" + count, ui.synth[ui.pick] === mat.id, false);
       }
       if (!any) para(flow, "None in stores. Buy baseline materials in Education & Market.");
     }
@@ -453,6 +462,9 @@
       flow.ctx.fillText(clipText(flow.ctx, font(13, false), scout.name + " · " + scout.text, flow.w - 110), flow.x, sr.y + 16);
       button(flow.ctx, uiOf(flow), "scout:" + scout.id, flow.x + flow.w - 100, sr.y + 2, 100, 28, S.money(scout.cost), false, !game.nodes.charter);
     }
+    if (S.liquidationValue) {
+      para(flow, "Space research " + (game.space || 0) + "%  ·  Liquidation " + S.money(S.liquidationValue(game, game.lastReal || Date.now())));
+    }
     section(flow, "CHANNELS");
     if (!game.scouts.length) para(flow, "No scouts in the field.");
     for (i = 0; i < game.scouts.length; i++) {
@@ -466,7 +478,8 @@
     for (i = 0; i < game.crafted.length; i++) {
       var crafted = game.crafted[i];
       var tag = crafted.legendary ? "Legendary" : "Hybrid";
-      para(flow, tag + " · " + crafted.name + " · " + crafted.tag + " x" + Number(crafted.mult).toFixed(2));
+      var extra = crafted.blurb ? crafted.blurb : crafted.tag + " x" + Number(crafted.mult).toFixed(2);
+      para(flow, tag + " · " + crafted.name + " · " + extra);
     }
   }
 
@@ -476,21 +489,30 @@
 
   function drawJournal(flow, game, ui) {
     section(flow, "BLUEPRINT COOKBOOK");
-    para(flow, "Discovered recipes stay here. Craft instantly when the four materials are in stores.");
+    para(flow, "Discovered recipes stay here. Craft when the listed materials are in stores.");
     if (!game.book.length) para(flow, "The cookbook is empty. Experiment in the lab, or spend a Void Point to research.");
     var i;
     for (i = 0; i < game.book.length; i++) {
       var key = game.book[i];
-      var legend = D.recipeByKey[key];
+      var pair = key.indexOf("pair:") === 0 && D.pairById ? D.pairById[Number(key.slice(5))] : null;
+      var legend = pair || D.recipeByKey[key];
       var name = legend ? legend.name : key;
-      var ids = legend ? [legend.idea, legend.staff, legend.marketing, legend.asset] : key.split("|");
+      var ids = pair ? [pair.a, pair.b] : legend ? [legend.idea, legend.staff, legend.marketing, legend.asset] : key.split("|");
       var bits = [];
       var k;
       var have = true;
+      if (pair) {
+        var ownedN = 0;
+        var needN = 2;
+        for (k = 0; k < game.crafted.length; k++) if (game.crafted[k].rid === 134) needN = 1;
+        if ((game.mats[pair.a] || 0) >= 1) ownedN += 1;
+        if ((game.mats[pair.b] || 0) >= 1) ownedN += 1;
+        have = ownedN >= needN;
+      }
       for (k = 0; k < ids.length; k++) {
         var item = D.itemById[ids[k]];
         bits.push(item ? item.fragment : ids[k]);
-        if ((game.mats[ids[k]] || 0) < 1) have = false;
+        if (!pair && (game.mats[ids[k]] || 0) < 1) have = false;
       }
       var active = false;
       for (k = 0; k < game.crafted.length; k++) if (game.crafted[k].key === key) active = true;
@@ -654,7 +676,7 @@
     ctx.font = font(11, false);
     ctx.fillStyle = "#d6b25e";
     ctx.fillText("THE GALACTIC GRIND", 16, L.header * 0.78);
-    var meta = "Rk " + game.player.level + "  VP " + game.player.vp + "  " + S.clockLabel(game.lastReal || Date.now()) + "  " + phase.name;
+    var meta = "Rk " + game.player.level + "  XP " + Math.floor(game.player.xp) + "  VP " + game.player.vp + "  " + S.clockLabel(game.lastReal || Date.now()) + "  " + phase.name;
     ctx.fillStyle = "#9aa1ad";
     ctx.font = font(12, false);
     var mw = measure(ctx, font(12, false), meta);

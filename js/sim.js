@@ -4,7 +4,75 @@
   var D = root.VoidData;
 
   function xpNeed(level) {
-    return 20 + (level - 1) * 30;
+    return 500 * Math.pow(level, 1.5);
+  }
+
+  function clockMinutes(now) {
+    var d = new Date(now);
+    return d.getHours() * 60 + d.getMinutes();
+  }
+
+  function clockHour(now) {
+    var d = new Date(now);
+    return d.getHours() + d.getMinutes() / 60;
+  }
+
+  function volatilityFactor(now) {
+    var m = clockMinutes(now);
+    if (m >= 480 && m < 570) return 0.6;
+    if (m >= 660 && m < 780) return 0.1;
+    if (m >= 840 && m < 930) return 0.75;
+    return 0;
+  }
+
+  function tickerPrice(base, now) {
+    var hour = clockHour(now);
+    var price = base * (1 + Math.sin(hour * Math.PI / 12) * 0.4 + Math.cos(hour * Math.PI / 4) * volatilityFactor(now));
+    if (price < 1) price = 1;
+    return price;
+  }
+
+  function hasRid(game, rid) {
+    var list = game.crafted;
+    var i;
+    if (!list) return false;
+    for (i = 0; i < list.length; i++) if (list[i].rid === rid) return true;
+    return false;
+  }
+
+  function gradOn(game, id) {
+    return !!(game.grad && game.grad[id]);
+  }
+
+  function resumeCap(game) {
+    return gradOn(game, "ba") ? 5 : 4;
+  }
+
+  function offlineCapMs(game) {
+    return hasRid(game, 124) ? 72 * 3600000 : 24 * 3600000;
+  }
+
+  function inSpan(now, startMin, endMin) {
+    var m = clockMinutes(now);
+    if (startMin <= endMin) return m >= startMin && m < endMin;
+    return m >= startMin || m < endMin;
+  }
+
+  function schoolHours(now) {
+    var m = clockMinutes(now);
+    return m >= 480 && m < 900;
+  }
+
+  function campaignScale(game) {
+    return hasRid(game, 115) ? 2 : 1;
+  }
+
+  function scoutVelocity(game, phase) {
+    var mod = phase.scout * recomputeBonus(game).scout;
+    if (hasRid(game, 111)) mod *= 1.5;
+    if (hasRid(game, 132)) mod *= 1.4;
+    if (gradOn(game, "pr")) mod *= 1.3;
+    return mod;
   }
 
   function money(n) {
@@ -93,7 +161,8 @@
         intelligence: 12,
         stress: 15,
         visibility: 8,
-        shifts: 0
+        shifts: 0,
+        rp: 0
       },
       settings: { highFX: true, fpsCap: 60, performanceMode: false },
       log: new Array(D.LOG_CAP),
@@ -114,7 +183,22 @@
       shiftAt: 0,
       restAt: 0,
       pulse: 0,
-      lastNet: 0
+      lastNet: 0,
+      grad: {},
+      space: 0,
+      fx: {
+        ghostUntil: 0,
+        sugarUntil: 0,
+        hypeUntil: 0,
+        visLockUntil: 0,
+        quantKey: "",
+        foundryAt: 0,
+        pennyAt: 0,
+        rpAt: 0,
+        synthAt: 0,
+        gateLogged: false,
+        hypeMark: -1
+      }
     };
     game.mats.grease = 1;
     game.mats.neon = 1;
@@ -173,15 +257,38 @@
   function maybeLevel(game) {
     var leveled = false;
     var guard = 0;
-    while (game.player.xp >= xpNeed(game.player.level) && guard < 12) {
-      game.player.xp -= xpNeed(game.player.level);
+    while (game.player.xp >= xpNeed(game.player.level) && guard < 80) {
       game.player.level += 1;
       game.player.vp += 1;
       leveled = true;
-      pushLog(game, "* Rank " + game.player.level + ". +1 Void Point.");
+      if (game.player.level % 10 === 0) {
+        if (hasRid(game, 129)) game.player.vp += 1;
+        pushLog(game, "* Prestige mark at rank " + game.player.level + "." + (hasRid(game, 129) ? " Neural Ledger +1 VP." : ""));
+      }
+      pushLog(game, "* Rank " + game.player.level + ". +1 Void Point. Next XP threshold " + Math.round(xpNeed(game.player.level)) + ".");
       guard += 1;
     }
     return leveled;
+  }
+
+  function checkGrad(game) {
+    if (!game.grad) game.grad = {};
+    if (!D.GRADS) return;
+    var i;
+    for (i = 0; i < D.GRADS.length; i++) {
+      var g = D.GRADS[i];
+      if (!game.grad[g.id] && game.player.xp >= g.xp) {
+        game.grad[g.id] = true;
+        pushLog(game, "* Graduated: " + g.name + ". " + g.text);
+      }
+    }
+  }
+
+  function addXp(game, amount) {
+    if (!(amount > 0)) return;
+    game.player.xp += amount;
+    maybeLevel(game);
+    checkGrad(game);
   }
 
   function jobUnlocked(game, job) {
@@ -195,7 +302,10 @@
     var sec = 1.7;
     if (game.nodes.timer) sec *= 0.8;
     sec /= bonus.cycle;
-    if (sec < 0.45) sec = 0.45;
+    if (hasRid(game, 108)) sec /= 1.25;
+    if (hasRid(game, 103)) sec /= 5;
+    var floor = hasRid(game, 103) ? 0.2 : 0.45;
+    if (sec < floor) sec = floor;
     return sec;
   }
 
@@ -211,52 +321,87 @@
     return m;
   }
 
-  function resolveCycle(game, slot, phase, rng) {
+  function ghostCover(game, slot, now) {
+    return !slot.employee && game.fx && now < game.fx.ghostUntil;
+  }
+
+  function resolveCycle(game, slot, phase, rng, now, quiet) {
+    if (!now) now = game.lastReal || Date.now();
     slot.cycles += 1;
+    if (!hasRid(game, 122) && (hasRid(game, 126) || (game.mats && game.mats.miner > 0)) && rng() < 0.04) {
+      if (!quiet) pushLog(game, "! Server overheat. Slot " + (slot.id + 1) + " skipped a cycle.");
+      return;
+    }
+    if (hasRid(game, 139) && !hasRid(game, 118) && rng() < 0.01) {
+      if (!quiet) pushLog(game, "! Regulatory audit freeze on slot " + (slot.id + 1) + ".");
+      return;
+    }
     if (slot.stock <= 0) {
-      if (slot.cycles % 4 === 0) {
+      if (!quiet && slot.cycles % 4 === 0) {
         pushLog(game, "Audit: slot " + (slot.id + 1) + " is out of stock.");
       }
       return;
     }
     var emp = slot.employee;
-    var steal = emp && hasTrait(emp, "fingers") && rng() < (0.22 / recomputeBonus(game).theft);
+    var autoNight = hasRid(game, 102) && inSpan(now, 1320, 240);
+    var theftChance = 0.22 / recomputeBonus(game).theft;
+    if (hasRid(game, 107)) theftChance += 0.02;
+    var steal = emp && hasTrait(emp, "fingers") && rng() < theftChance;
     slot.stock -= 1;
     if (steal) {
       var loss = Math.round((10 + jobBase(slot) * 0.3) * phase.revenue);
       game.player.capital = Math.max(0, game.player.capital - loss);
       if (slot.camera) {
         emp.caught = true;
-        pushLog(game, "! Camera slot " + (slot.id + 1) + ": " + emp.name + " caught lifting stock. Loss " + money(loss) + ".");
-      } else {
+        if (hasRid(game, 121)) {
+          emp.salary = Math.max(1, Math.round(emp.salary * 0.75));
+          if (!quiet) pushLog(game, "! Sentinel slashed " + emp.name + " to " + money(emp.salary) + ". Loss " + money(loss) + ".");
+        } else if (!quiet) {
+          pushLog(game, "! Camera slot " + (slot.id + 1) + ": " + emp.name + " caught lifting stock. Loss " + money(loss) + ".");
+        }
+      } else if (!quiet) {
         pushLog(game, "! Inventory discrepancy on slot " + (slot.id + 1) + ". Unexplained loss " + money(loss) + ". Stock -1.");
       }
-      game.player.stress = clampStat(game.player.stress + 2);
+      if (!hasRid(game, 118)) game.player.stress = clampStat(game.player.stress + 2);
       return;
     }
     var bonus = recomputeBonus(game);
     var rush = phase.revenue;
     if (phase.id === "lunch") rush *= bonus.lunch;
     if (phase.id === "night") rush *= bonus.night;
-    if (phase.id === "morning") rush *= 1;
+    if (inSpan(now, 690, 780) && hasRid(game, 101)) rush *= 4;
     var stressTax = 1;
     if (game.player.stress > 90) stressTax = 0.7;
     else if (game.player.stress > 70) stressTax = 0.85;
-    var gross = (9 + jobBase(slot) * 0.45) * rush * staffMult(emp, phase) * bonus.revenue * stressTax;
+    var covered = ghostCover(game, slot, now) || autoNight;
+    var gross = (9 + jobBase(slot) * 0.45) * rush * staffMult(emp || (covered ? { traits: [] } : null), phase) * bonus.revenue * stressTax;
+    if (slot.jobId === "fast_food" && hasRid(game, 105)) gross *= 2;
+    if (hasRid(game, 109)) gross *= 2;
+    if (hasRid(game, 120)) gross *= 1.5;
     var wage = emp ? emp.salary / 20 : 0;
     wage /= bonus.wage;
-    var net = gross - wage;
+    if (hasRid(game, 107)) wage *= 0.85;
+    if (gradOn(game, "ba")) wage *= 0.9;
+    var utility = gross * 0.02;
+    if (hasRid(game, 128)) utility *= 0.6;
+    var net = gross - wage - utility;
     game.player.capital += net;
     if (game.player.capital < 0) game.player.capital = 0;
-    var xp = 1 * bonus.xp;
-    game.player.xp += xp;
-    if (emp && hasTrait(emp, "clock")) game.player.stress = clampStat(game.player.stress + 0.45);
-    else game.player.stress = clampStat(game.player.stress + 0.05);
-    game.player.visibility = clampStat(game.player.visibility + 0.04 * bonus.visibility);
-    maybeLevel(game);
-    var line = (net >= 0 ? "+ " : "! ") + "Slot " + (slot.id + 1) + " cycle " + money(net) + ". Stock " + slot.stock + ".";
-    pushLog(game, line);
-    markPulse(game, net);
+    addXp(game, 1 * bonus.xp);
+    var stressGain = emp && hasTrait(emp, "clock") ? 0.45 : 0.05;
+    if (hasRid(game, 103)) stressGain *= 1.2;
+    if (hasRid(game, 110)) stressGain *= 0.9;
+    if (hasRid(game, 102) && inSpan(now, 1320, 240)) stressGain = 0;
+    game.player.stress = clampStat(game.player.stress + stressGain);
+    var vis = 0.04 * bonus.visibility;
+    if (hasRid(game, 114) && schoolHours(now)) vis *= 1.15;
+    game.player.visibility = clampStat(game.player.visibility + vis);
+    if (game.fx && now < game.fx.visLockUntil) game.player.visibility = 100;
+    if (!quiet) {
+      var line = (net >= 0 ? "+ " : "! ") + "Slot " + (slot.id + 1) + " cycle " + money(net) + ". Stock " + slot.stock + ".";
+      pushLog(game, line);
+      markPulse(game, net);
+    }
   }
 
   function jobBase(slot) {
@@ -306,7 +451,7 @@
       var s;
       for (s = game.scouts.length - 1; s >= 0; s--) {
         var mission = game.scouts[s];
-        mission.left -= dt * phase.scout * recomputeBonus(game).scout;
+        mission.left -= dt * scoutVelocity(game, phase);
         if (mission.left <= 0) completeScout(game, s, phase);
       }
       t = next;
@@ -343,18 +488,28 @@
     game.rev += 1;
   }
 
-  function scoutPool(id) {
+  function scoutPool(game, id) {
+    if (hasRid(game, 135)) return ["hush", "broth", "static", "halo", "rack", "lens", "lunar", "relay", "parade", "warden", "library", "quant", "rocket", "shares"];
     if (id === "block") return ["chalk", "grease", "trainee", "fryer", "poster"];
     if (id === "city") return ["neon", "orbit", "jingle", "scooter", "kiosk", "closer", "beacon"];
     return ["hush", "broth", "static", "halo", "rack", "lens", "lunar", "relay", "parade", "warden"];
   }
 
+  function grantScoutItem(game, itemId) {
+    game.mats[itemId] = (game.mats[itemId] || 0) + 1;
+    if (game.space == null) game.space = 0;
+    if (game.space < 100) game.space = Math.min(100, game.space + 2);
+  }
+
   function completeScout(game, index, phase) {
     var mission = game.scouts[index];
     game.scouts.splice(index, 1);
-    var pool = scoutPool(mission.id);
+    var pool = scoutPool(game, mission.id);
     var itemId = pool[Math.floor(Math.random() * pool.length)];
-    game.mats[itemId] = (game.mats[itemId] || 0) + 1;
+    grantScoutItem(game, itemId);
+    if (hasRid(game, 111)) grantScoutItem(game, pool[Math.floor(Math.random() * pool.length)]);
+    if (hasRid(game, 133)) grantScoutItem(game, pool[Math.floor(Math.random() * pool.length)]);
+    if (hasRid(game, 138) && Math.random() < 0.25) grantScoutItem(game, pool[Math.floor(Math.random() * pool.length)]);
     var item = D.itemById[itemId];
     var vis = mission.id === "orbital" ? 6 : mission.id === "city" ? 3 : 1.5;
     game.player.visibility = clampStat(game.player.visibility + vis * recomputeBonus(game).visibility);
@@ -384,12 +539,17 @@
     for (i = 0; i < D.RECIPES.length; i++) {
       if (!bookHas(game, D.RECIPES[i].key)) unknown.push(D.RECIPES[i]);
     }
+    if (D.PAIRS) {
+      for (i = 0; i < D.PAIRS.length; i++) {
+        if (!bookHas(game, D.PAIRS[i].bookKey)) unknown.push(D.PAIRS[i]);
+      }
+    }
     if (!unknown.length) {
       pushLog(game, "Cookbook already holds every legendary recipe.");
       return false;
     }
     var rec = unknown[Math.floor(Math.random() * unknown.length)];
-    game.book.push(rec.key);
+    game.book.push(rec.bookKey || rec.key);
     pushLog(game, "* Blueprint researched (" + via + "): " + rec.name + ".");
     game.rev += 1;
     return true;
@@ -421,11 +581,15 @@
     if (wall > 0) {
       applyWall(game, game.lastReal, now);
       var biz = wall;
-      if (biz > 120000) biz = 120000;
+      var capMs = offlineCapMs(game);
+      if (biz > capMs) biz = capMs;
       if (!game.booted && wall > 1500) {
-        pushLog(game, "Catch-up used the device clock (" + Math.round(wall / 1000) + "s). Business sim capped at 120s.");
+        var hours = hasRid(game, 124) ? 72 : 24;
+        pushLog(game, "Catch-up used the device clock (" + Math.round(wall / 1000) + "s). Business buffer is " + hours + "h.");
       }
-      runBusiness(game, now, biz, rng);
+      if (biz > 20000) bulkBusiness(game, now, biz, rng);
+      else runBusiness(game, now, biz, rng);
+      serviceEngines(game, now, wall);
       game.lastReal = now;
     }
     var phase = phaseAt(now);
@@ -433,8 +597,143 @@
       pushLog(game, "Clock phase: " + phase.name + ". Revenue x" + phase.revenue.toFixed(2) + ".");
     }
     game.phaseId = phase.id;
+    if (game.fx && now < game.fx.visLockUntil) game.player.visibility = 100;
     game.booted = true;
     return phase;
+  }
+
+  function bulkBusiness(game, now, ms, rng) {
+    var phase = phaseAt(now);
+    ensureSlots(game);
+    var len = cycleSeconds(game);
+    var cycles = Math.floor(ms / 1000 / len);
+    if (cycles < 1) return;
+    if (cycles > 8000) cycles = 8000;
+    var i;
+    var netSum = 0;
+    for (i = 0; i < game.slots.length; i++) {
+      var slot = game.slots[i];
+      var ran = 0;
+      var n;
+      for (n = 0; n < cycles; n++) {
+        var before = game.player.capital;
+        resolveCycle(game, slot, phase, rng, now, true);
+        netSum += game.player.capital - before;
+        ran += 1;
+        if (slot.stock <= 0) break;
+      }
+      pushLog(game, "Offline slot " + (slot.id + 1) + " ran " + ran + " cycles. Net " + money(netSum) + ".");
+    }
+  }
+
+  function serviceEngines(game, now, wall) {
+    var fx = game.fx;
+    if (!fx) return;
+    if (now < fx.visLockUntil) game.player.visibility = 100;
+    if (hasRid(game, 126)) {
+      var steps = Math.floor(wall / 5000);
+      if (steps > 0) {
+        if (steps > 4000) steps = 4000;
+        game.player.capital += steps * 0.05;
+        fx.pennyAt = now;
+      }
+    }
+    if (now - fx.rpAt >= 60000) {
+      var ticks = Math.floor((now - fx.rpAt) / 60000);
+      if (ticks > 72 * 60) ticks = 72 * 60;
+      if (fx.rpAt === 0) ticks = 1;
+      var rp = ticks * (hasRid(game, 125) ? 1.5 : 1);
+      game.player.rp = (game.player.rp || 0) + rp;
+      fx.rpAt = now;
+    }
+    if (hasRid(game, 130) && (fx.foundryAt === 0 || now - fx.foundryAt >= 3600000)) {
+      if (fx.foundryAt !== 0) {
+        var tier = D.TIER1[Math.floor(Math.random() * D.TIER1.length)];
+        game.mats[tier] = (game.mats[tier] || 0) + 1;
+        var found = D.itemById[tier];
+        pushLog(game, "* Foundry pressed " + (found ? found.name : tier) + ".");
+      }
+      fx.foundryAt = now;
+    }
+    if (now < fx.hypeUntil) {
+      var mark = Math.floor(now / 60000);
+      if (mark !== fx.hypeMark) {
+        fx.hypeMark = mark;
+        pushLog(game, "Hype Wave " + fmtMs(fx.hypeUntil - now) + " remaining.");
+        if (game.settings.highFX) markPulse(game, 1);
+      }
+    }
+    if (hasRid(game, 123)) quantTick(game, now);
+    moonGate(game, now);
+  }
+
+  function quantTick(game, now) {
+    var fx = game.fx;
+    var m = clockMinutes(now);
+    var windowId = "";
+    if (m >= 480 && m < 570) windowId = "open";
+    else if (m >= 840 && m < 930) windowId = "surge";
+    else return;
+    var d = new Date(now);
+    var key = d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate() + "-" + windowId;
+    if (fx.quantKey === key) return;
+    fx.quantKey = key;
+    if (windowId === "open") {
+      var best = null;
+      var i;
+      for (i = 0; i < D.ITEMS.length; i++) {
+        var item = D.ITEMS[i];
+        if (item.level > game.player.level) continue;
+        var cost = marketCost(game, item);
+        if (game.player.capital >= cost && (!best || cost < best.cost)) best = { item: item, cost: cost };
+      }
+      if (best) {
+        game.player.capital -= best.cost;
+        game.mats[best.item.id] = (game.mats[best.item.id] || 0) + 1;
+        pushLog(game, "* Quant bot bought the morning dip: " + best.item.name + ".");
+      }
+      return;
+    }
+    var sell = null;
+    var j;
+    for (j = 0; j < D.ITEMS.length; j++) {
+      var held = D.ITEMS[j];
+      if ((game.mats[held.id] || 0) < 1) continue;
+      var quote = marketCost(game, held);
+      if (!sell || quote > sell.quote) sell = { item: held, quote: quote };
+    }
+    if (sell) {
+      game.mats[sell.item.id] -= 1;
+      game.player.capital += sell.quote;
+      pushLog(game, "* Quant bot shorted the afternoon spike: " + sell.item.name + ".");
+    }
+  }
+
+  function liquidationValue(game, now) {
+    var value = game.player.capital;
+    var i;
+    for (i = 0; i < D.ITEMS.length; i++) {
+      var item = D.ITEMS[i];
+      var count = game.mats[item.id] || 0;
+      if (!count) continue;
+      var quote = tickerPrice(item.cost, now);
+      if (item.cat === "asset" && hasRid(game, 139)) quote *= 3;
+      value += quote * count;
+    }
+    if (hasRid(game, 131)) value *= 10;
+    return value;
+  }
+
+  function moonGate(game, now) {
+    var gate = D.MOON_GATE;
+    if (hasRid(game, 136)) gate *= 0.7;
+    var value = liquidationValue(game, now);
+    game.liquidation = value;
+    game.moonGate = gate;
+    if (!game.fx.gateLogged && value >= gate) {
+      game.fx.gateLogged = true;
+      pushLog(game, "* Moon launch gate cleared. Valuation " + money(value) + ".");
+    }
   }
 
   function workShift(game, now) {
@@ -443,8 +742,9 @@
     var phase = phaseAt(now);
     var bonus = recomputeBonus(game);
     var pay = Math.round((14 + game.player.level * 2) * phase.revenue * bonus.revenue);
+    if (game.fx && now < game.fx.sugarUntil) pay *= 2;
     game.player.capital += pay;
-    game.player.xp += 22 * bonus.xp;
+    addXp(game, 22 * bonus.xp);
     game.player.stress = clampStat(game.player.stress + 4);
     game.player.intelligence = clampStat(game.player.intelligence + 0.4);
     game.player.shifts += 1;
@@ -492,7 +792,7 @@
 
   function rollResume(game, rng) {
     if (!rng) rng = Math.random;
-    if (game.resumes.length >= 4) {
+    if (game.resumes.length >= resumeCap(game)) {
       pushLog(game, "Applicant board is full.");
       return null;
     }
@@ -684,11 +984,13 @@
       pushLog(game, "Both scout channels are already out.");
       return { ok: false };
     }
-    if (game.player.capital < def.cost) {
-      pushLog(game, "! Dispatch costs " + money(def.cost) + ".");
+    var scoutCost = def.cost;
+    if (hasRid(game, 116)) scoutCost = Math.round(scoutCost * 0.7);
+    if (game.player.capital < scoutCost) {
+      pushLog(game, "! Dispatch costs " + money(scoutCost) + ".");
       return { ok: false };
     }
-    game.player.capital -= def.cost;
+    game.player.capital -= scoutCost;
     game.scouts.push({ id: def.id, left: def.ms, total: def.ms });
     pushLog(game, "Scout dispatched: " + def.name + ". The clock is running.");
     game.rev += 1;
@@ -719,7 +1021,70 @@
     return idea + "|" + staff + "|" + marketing + "|" + asset;
   }
 
-  function combine(ideaId, staffId, marketingId, assetId) {
+  function pairNeed(game) {
+    return game && hasRid(game, 134) ? 1 : 2;
+  }
+
+  function matchPair(ids, game) {
+    if (!D.PAIRS) return null;
+    var present = {};
+    var i;
+    for (i = 0; i < ids.length; i++) {
+      if (ids[i]) present[ids[i]] = true;
+    }
+    var need = pairNeed(game);
+    var best = null;
+    for (i = 0; i < D.PAIRS.length; i++) {
+      var rec = D.PAIRS[i];
+      var hits = (present[rec.a] ? 1 : 0) + (present[rec.b] ? 1 : 0);
+      if (rec.a === rec.b) hits = present[rec.a] ? 1 : 0;
+      if (hits < need) continue;
+      if (!best) {
+        best = rec;
+        continue;
+      }
+      var bestDone = game && craftedHas(game, best.bookKey);
+      var recDone = game && craftedHas(game, rec.bookKey);
+      if (bestDone && !recDone) best = rec;
+      else if (!bestDone && recDone) continue;
+      else if (rec.id < best.id) best = rec;
+    }
+    return best;
+  }
+
+  function pairSpend(rec, ids, game) {
+    var need = pairNeed(game);
+    var out = [];
+    var i;
+    var seen = {};
+    for (i = 0; i < ids.length; i++) {
+      if (!ids[i] || seen[ids[i]]) continue;
+      if (ids[i] === rec.a || ids[i] === rec.b) {
+        seen[ids[i]] = true;
+        out.push(ids[i]);
+      }
+    }
+    if (out.length > need) out.length = need;
+    return out;
+  }
+
+  function combine(ideaId, staffId, marketingId, assetId, game) {
+    var slots = [ideaId, staffId, marketingId, assetId];
+    var pair = matchPair(slots, game);
+    if (pair) {
+      return {
+        key: pair.bookKey,
+        rid: pair.id,
+        legendary: true,
+        name: pair.name,
+        tag: "pair",
+        mult: 1,
+        power: 1,
+        synergy: 0,
+        blurb: pair.blurb,
+        spend: pairSpend(pair, slots, game)
+      };
+    }
     var idea = D.itemById[ideaId];
     var staff = D.itemById[staffId];
     var marketing = D.itemById[marketingId];
@@ -735,7 +1100,8 @@
         tag: legend.tag,
         mult: legend.mult,
         power: legend.mult,
-        synergy: 0
+        synergy: 0,
+        spend: slots
       };
     }
     var avg = idea.power * D.W_IDEA + staff.power * D.W_STAFF + marketing.power * D.W_MKT + asset.power * D.W_ASSET;
@@ -749,7 +1115,8 @@
       mult: 1 + power / 250,
       power: power,
       synergy: avg * D.SYNERGY,
-      avg: avg
+      avg: avg,
+      spend: slots
     };
   }
 
@@ -762,6 +1129,36 @@
     return true;
   }
 
+  function applyInstant(game, result) {
+    var now = game.lastReal || Date.now();
+    var scale = campaignScale(game);
+    if (!game.fx) game.fx = {};
+    var id = result.rid;
+    if (id === 104) game.fx.ghostUntil = now + 30 * 60000 * scale;
+    if (id === 106) game.fx.sugarUntil = now + 5 * 60000 * scale;
+    if (id === 112) {
+      game.fx.hypeUntil = now + 45 * 60000 * scale;
+      pushLog(game, "* Hype Wave countdown: " + (45 * scale) + " minutes.");
+    }
+    if (id === 113) game.fx.visLockUntil = now + 3 * 3600000 * scale;
+    if (id === 117) {
+      var drop = Math.round(150 * game.player.level);
+      game.player.capital += drop;
+      pushLog(game, "* Influencer swarm wired " + money(drop) + ".");
+    }
+    if (id === 119) {
+      if (!game.flags) game.flags = {};
+      game.flags.exposeTraits = true;
+    }
+    if (id === 130 && !game.fx.foundryAt) game.fx.foundryAt = now;
+    if (id === 140) {
+      var space = game.space || 0;
+      if (space < 95) space = 95;
+      game.space = Math.min(100, space + 5);
+      pushLog(game, "* Space research tree at " + game.space + "%.");
+    }
+  }
+
   function activateResult(game, result) {
     if (craftedHas(game, result.key)) {
       pushLog(game, result.name + " is already active. Materials kept.");
@@ -770,13 +1167,18 @@
     if (!bookHas(game, result.key)) game.book.push(result.key);
     game.crafted.push({
       key: result.key,
+      rid: result.rid || 0,
       name: result.name,
       tag: result.tag,
       mult: result.mult,
-      legendary: result.legendary
+      legendary: result.legendary,
+      blurb: result.blurb || ""
     });
     game.bonusRev = -1;
-    if (result.legendary) {
+    if (result.rid) applyInstant(game, result);
+    if (result.legendary && result.rid) {
+      pushLog(game, "* Legendary blueprint: " + result.name + ". " + result.blurb);
+    } else if (result.legendary) {
       pushLog(game, "* Legendary blueprint: " + result.name + ". " + result.tag + " x" + result.mult.toFixed(2) + ".");
     } else {
       pushLog(game, "Hybrid filed: " + result.name + ". Power " + result.power.toFixed(2) + " after 11.5% synergy.");
@@ -785,20 +1187,33 @@
     return { ok: true, result: result };
   }
 
+  function synthCooldown(game) {
+    return gradOn(game, "cs") ? 2000 : 4000;
+  }
+
   function synthesize(game, idea, staff, marketing, asset) {
-    var result = combine(idea, staff, marketing, asset);
-    if (!result) return { ok: false };
-    var ids = [idea, staff, marketing, asset];
+    var result = combine(idea, staff, marketing, asset, game);
+    if (!result) {
+      pushLog(game, "Synthesis needs a legendary pair or four baseline parts.");
+      return { ok: false };
+    }
+    if (craftedHas(game, result.key)) {
+      pushLog(game, result.name + " is already active. Materials kept.");
+      return { ok: false, reason: "duplicate" };
+    }
+    var now = game.lastReal || Date.now();
+    if (!game.fx) game.fx = {};
+    if (game.fx.synthAt && now - game.fx.synthAt < synthCooldown(game)) {
+      pushLog(game, "Synthesis cooling down.");
+      return { ok: false, reason: "cooldown" };
+    }
+    var ids = result.spend || [idea, staff, marketing, asset];
     if (!spendMats(game, ids)) {
       pushLog(game, "Synthesis missing a baseline material.");
       return { ok: false, reason: "mats" };
     }
-    var act = activateResult(game, result);
-    if (!act.ok && act.reason === "duplicate") {
-      var k;
-      for (k = 0; k < ids.length; k++) game.mats[ids[k]] += 1;
-    }
-    return act;
+    game.fx.synthAt = now;
+    return activateResult(game, result);
   }
 
   function craftFromBook(game, key) {
@@ -806,23 +1221,56 @@
       pushLog(game, "That blueprint is already running.");
       return { ok: false, reason: "duplicate" };
     }
+    if (key.indexOf("pair:") === 0) {
+      var rid = Number(key.slice(5));
+      var rec = D.pairById ? D.pairById[rid] : null;
+      if (!rec) return { ok: false };
+      if (!bookHas(game, key)) {
+        pushLog(game, "Blueprint is not in the cookbook yet.");
+        return { ok: false };
+      }
+      var owned = [];
+      if ((game.mats[rec.a] || 0) >= 1) owned.push(rec.a);
+      if (rec.b !== rec.a && (game.mats[rec.b] || 0) >= 1) owned.push(rec.b);
+      var ids = pairSpend(rec, owned, game);
+      var need = pairNeed(game);
+      if (ids.length < need) {
+        pushLog(game, "Auto-craft needs the baseline materials on hand.");
+        return { ok: false, reason: "mats" };
+      }
+      if (!spendMats(game, ids)) {
+        pushLog(game, "Auto-craft needs the baseline materials on hand.");
+        return { ok: false, reason: "mats" };
+      }
+      return activateResult(game, {
+        key: rec.bookKey,
+        rid: rec.id,
+        legendary: true,
+        name: rec.name,
+        tag: "pair",
+        mult: 1,
+        power: 1,
+        synergy: 0,
+        blurb: rec.blurb
+      });
+    }
     var legend = D.recipeByKey[key];
-    var ids;
+    var ids4;
     var result;
     if (legend) {
-      ids = [legend.idea, legend.staff, legend.marketing, legend.asset];
+      ids4 = [legend.idea, legend.staff, legend.marketing, legend.asset];
       result = combine(legend.idea, legend.staff, legend.marketing, legend.asset);
     } else {
-      ids = key.split("|");
-      if (ids.length !== 4) return { ok: false };
-      result = combine(ids[0], ids[1], ids[2], ids[3]);
+      ids4 = key.split("|");
+      if (ids4.length !== 4) return { ok: false };
+      result = combine(ids4[0], ids4[1], ids4[2], ids4[3]);
     }
     if (!result) return { ok: false };
     if (!bookHas(game, key) && !bookHas(game, result.key)) {
       pushLog(game, "Blueprint is not in the cookbook yet.");
       return { ok: false };
     }
-    if (!spendMats(game, ids)) {
+    if (!spendMats(game, result.spend || ids4)) {
       pushLog(game, "Auto-craft needs the baseline materials on hand.");
       return { ok: false, reason: "mats" };
     }
@@ -850,10 +1298,7 @@
       pushLog(game, item.name + " lists at rank " + item.level + ".");
       return { ok: false };
     }
-    var phase = phaseAt(game.lastReal || Date.now());
-    var vis = game.player.visibility;
-    var cost = item.cost * (phase.id === "lunch" ? 1.15 : 1) * (1 - Math.min(0.25, vis * 0.002));
-    cost = Math.max(1, Math.round(cost));
+    var cost = marketCost(game, item);
     if (game.player.capital < cost) {
       pushLog(game, "! Market price is " + money(cost) + ".");
       return { ok: false };
@@ -866,9 +1311,13 @@
   }
 
   function marketCost(game, item) {
-    var phase = phaseAt(game.lastReal || Date.now());
+    var now = game.lastReal || Date.now();
+    var cost = tickerPrice(item.cost, now);
+    if (hasRid(game, 137)) cost *= 0.85;
+    if (hasRid(game, 116) && item.cat === "marketing") cost *= 0.7;
+    if (hasRid(game, 127) && item.cat === "asset") cost *= 0.8;
     var vis = game.player.visibility;
-    var cost = item.cost * (phase.id === "lunch" ? 1.15 : 1) * (1 - Math.min(0.25, vis * 0.002));
+    cost *= 1 - Math.min(0.25, vis * 0.002);
     return Math.max(1, Math.round(cost));
   }
 
@@ -891,7 +1340,10 @@
       crafted: game.crafted,
       flags: game.flags,
       shiftAt: game.shiftAt,
-      restAt: game.restAt
+      restAt: game.restAt,
+      fx: game.fx,
+      grad: game.grad,
+      space: game.space
     };
   }
 
@@ -921,6 +1373,15 @@
     game.shiftAt = data.shiftAt || 0;
     game.restAt = data.restAt || 0;
     game.lastReal = data.lastReal || now;
+    if (data.fx) {
+      var fk;
+      for (fk in data.fx) {
+        if (Object.prototype.hasOwnProperty.call(data.fx, fk)) game.fx[fk] = data.fx[fk];
+      }
+    }
+    game.grad = data.grad || {};
+    game.space = data.space || 0;
+    if (game.player.rp == null) game.player.rp = 0;
     var i;
     var lines = data.log || [];
     for (i = 0; i < lines.length; i++) pushLog(game, lines[i]);
@@ -976,6 +1437,9 @@
     dispatchScout: dispatchScout,
     unlockNode: unlockNode,
     combine: combine,
+    tickerPrice: tickerPrice,
+    volatilityFactor: volatilityFactor,
+    liquidationValue: liquidationValue,
     synthesize: synthesize,
     craftFromBook: craftFromBook,
     research: research,

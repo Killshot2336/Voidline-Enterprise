@@ -5,6 +5,7 @@ var path = require("path");
 
 global.window = global;
 eval(fs.readFileSync(path.join(__dirname, "../js/data.js"), "utf8"));
+eval(fs.readFileSync(path.join(__dirname, "../js/pairs.js"), "utf8"));
 eval(fs.readFileSync(path.join(__dirname, "../js/sim.js"), "utf8"));
 
 var D = global.VoidData;
@@ -193,6 +194,100 @@ function lastLog(game) {
   assert(loaded.settings.fpsCap === 30, "fps saved");
   assert(loaded.settings.performanceMode === true, "perf saved");
   assert(loaded.degree && loaded.degree.id === "cert", "degree saved");
+  loaded.grad = { ba: true };
+  loaded.space = 40;
+  loaded.fx.sugarUntil = 99;
+  S.save(loaded, storage);
+  var again = S.load(now + 8000, storage);
+  assert(again.grad.ba === true, "grad saved");
+  assert(again.space === 40, "space saved");
+  assert(again.fx.sugarUntil === 99, "fx saved");
+  assert(again.player.rp != null, "rp restored");
+})();
+
+(function engines() {
+  assert(D.PAIRS.length === 40, "40 pair recipes");
+  var seen = {};
+  var i;
+  for (i = 101; i <= 140; i++) seen[i] = false;
+  for (i = 0; i < D.PAIRS.length; i++) {
+    assert(seen[D.PAIRS[i].id] === false, "duplicate pair " + D.PAIRS[i].id);
+    seen[D.PAIRS[i].id] = true;
+  }
+  for (i = 101; i <= 140; i++) assert(seen[i], "missing pair " + i);
+  assert(S.xpNeed(1) === 500, "xp curve level 1");
+  assert(Math.abs(S.xpNeed(2) - 500 * Math.pow(2, 1.5)) < 1e-9, "xp curve level 2");
+
+  var now = Date.now();
+  var game = S.fresh(now);
+  var xp = S.xpNeed(1) - 1;
+  game.player.xp = xp;
+  assert(S.workShift(game, now).ok, "shift into level");
+  assert(game.player.level === 2, "level incremented");
+  assert(game.player.xp === xp + 22, "lifetime xp kept");
+  var dumped = "";
+  for (i = 0; i < game.logN; i++) dumped += S.logLine(game, i);
+  assert(dumped.indexOf("Next XP threshold") >= 0, "threshold logged");
+
+  var ba = S.fresh(now);
+  ba.player.xp = 5000 - 22;
+  S.workShift(ba, now);
+  assert(ba.grad.ba, "business administration");
+  assert(!ba.grad.pr, "pr still sealed at 5000");
+  var rolls = 0;
+  while (S.rollResume(ba, function () { return 0; }) && rolls < 8) rolls += 1;
+  assert(ba.resumes.length === 5, "resume board is 5");
+
+  var pr = S.fresh(now);
+  pr.player.xp = 6000 - 22;
+  S.workShift(pr, now);
+  assert(pr.grad.pr, "public relations");
+  var cs = S.fresh(now);
+  cs.player.xp = 7500 - 22;
+  S.workShift(cs, now);
+  assert(cs.grad.cs && cs.grad.ba && cs.grad.pr, "computer science");
+
+  var clock = new Date();
+  clock.setHours(8, 0, 0, 0);
+  var at8 = clock.getTime();
+  var hour = 8;
+  var expect = 10 * (1 + Math.sin(hour * Math.PI / 12) * 0.4 + Math.cos(hour * Math.PI / 4) * 0.6);
+  assert(S.volatilityFactor(at8) === 0.6, "opening volatility");
+  assert(Math.abs(S.tickerPrice(10, at8) - Math.max(1, expect)) < 1e-9, "ticker equation");
+  clock.setHours(12, 0, 0, 0);
+  assert(S.volatilityFactor(clock.getTime()) === 0.1, "lunch volatility");
+  clock.setHours(14, 30, 0, 0);
+  assert(S.volatilityFactor(clock.getTime()) === 0.75, "afternoon volatility");
+  clock.setHours(16, 0, 0, 0);
+  assert(S.volatilityFactor(clock.getTime()) === 0, "off-window volatility");
+
+  var hijack = S.combine("blueprint", "viral", "chalk", "fryer");
+  assert(hijack && hijack.rid === 101 && hijack.name === "Lunchtime Hijack", "pair 101");
+  assert(hijack.spend.length === 2 && hijack.spend.indexOf("chalk") < 0, "pair ignores fillers");
+  var still = S.combine("grease", "trainee", "chalk", "fryer");
+  assert(still.legendary && still.name === "Corner Dynasty", "legacy recipe kept");
+
+  var lab = S.fresh(now);
+  lab.mats.blueprint = 1;
+  lab.mats.viral = 1;
+  var made = S.synthesize(lab, "blueprint", "viral", null, null);
+  assert(made.ok && made.result.rid === 101, "synthesize pair");
+  assert(lab.mats.blueprint === 0 && lab.mats.viral === 0 && lab.mats.chalk === 1, "only pair parts spent");
+  lab.mats.temp = 1;
+  lab.mats.license = 1;
+  lab.lastReal = now + 5000;
+  var deal = S.synthesize(lab, "temp", "license", null, null);
+  assert(deal.ok && deal.result.rid === 107, "under-counter before smuggling");
+  lab.mats.temp = 1;
+  lab.mats.license = 1;
+  lab.lastReal = now + 12000;
+  var smug = S.synthesize(lab, "temp", "license", null, null);
+  assert(smug.ok && smug.result.rid === 139, "smuggling grid second");
+  lab.mats.temp = 1;
+  lab.mats.license = 1;
+  var third = S.synthesize(lab, "temp", "license", null, null);
+  assert(!third.ok && third.reason === "duplicate", "both pair ids filed");
+  assert(lab.mats.temp === 1, "duplicate kept materials");
 })();
 
 console.log(ok + " passed, " + fails + " failed");

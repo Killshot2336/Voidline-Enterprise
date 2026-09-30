@@ -114,10 +114,6 @@
     }
     if (id === "synth") {
       var s = ui.synth;
-      if (!s.idea || !s.staff || !s.marketing || !s.asset) {
-        S.pushLog(game, "Synthesis needs one Idea, Staff, Marketing, and Asset.");
-        return;
-      }
       S.synthesize(game, s.idea, s.staff, s.marketing, s.asset);
       return;
     }
