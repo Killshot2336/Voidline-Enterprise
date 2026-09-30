@@ -285,16 +285,16 @@
       ctx2.textBaseline = "middle";
       ctx2.fillText(card.name, flow.x + 12, cr.y + 18);
       ctx2.font = font(12, false);
-      ctx2.fillStyle = "#d6b25e";
-      ctx2.fillText("Asks " + S.money(card.ask) + "   ·   strikes " + card.strikes + "/3", flow.x + 12, cr.y + 40);
-      ctx2.fillStyle = "#c8c2b4";
-      ctx2.fillText(clipText(ctx2, font(12, false), traitLine(game, card.traits, false), flow.w - 24), flow.x + 12, cr.y + 60);
+      var askLine = "Asks " + S.money(card.ask) + "   ·   strikes " + card.strikes + "/3";
       if (game.flags.insight || game.player.intelligence >= 75) {
         var low = Math.round(card.floor * 0.9);
         var high = Math.min(card.ask, Math.round(card.floor * 1.12));
-        ctx2.fillStyle = "#9aa1ad";
-        ctx2.fillText("Dossier range " + S.money(low) + "–" + S.money(high), flow.x + 220, cr.y + 40);
+        askLine += "   ·   range " + S.money(low) + "-" + S.money(high);
       }
+      ctx2.fillStyle = "#d6b25e";
+      ctx2.fillText(clipText(ctx2, font(12, false), askLine, flow.w - 24), flow.x + 12, cr.y + 40);
+      ctx2.fillStyle = "#c8c2b4";
+      ctx2.fillText(clipText(ctx2, font(12, false), traitLine(game, card.traits, false), flow.w - 24), flow.x + 12, cr.y + 60);
       if (!card.dying) pushHit(ui, "resume:" + card.id, flow.x, cr.y, flow.w, 74);
       if (selected && !card.dying) drawKeypad(ctx2, ui, flow.x + 12, cr.y + 78, Math.min(280, flow.w - 24));
       ctx2.restore();
@@ -565,6 +565,9 @@
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.fillText("CORPORATE ACTIVITY", x, y);
+    ctx.textAlign = "right";
+    ctx.fillText(Math.round(ui.fps || 0) + " fps", x + w, y);
+    ctx.textAlign = "left";
     var top = y + 16;
     var areaH = h - 16;
     var lineH = 18;
@@ -769,12 +772,6 @@
     drawHeader(ctx, game, ui, L);
     drawDock(ctx, game, ui, L);
     drawParts(ctx);
-    ctx.font = font(11, false);
-    ctx.fillStyle = "#6c7380";
-    ctx.textAlign = "right";
-    ctx.textBaseline = "top";
-    ctx.fillText(Math.round(ui.fps || 0) + " fps", w - 16, L.a1 + 2);
-    ctx.textAlign = "left";
   }
 
   function hitTest(ui, x, y) {
