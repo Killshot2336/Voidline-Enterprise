@@ -1,0 +1,34 @@
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #101216;
+  color: #f6f3ec;
+  overflow: hidden;
+}
+
+#wash {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+body:not(.perf) #wash {
+  backdrop-filter: blur(18px);
+  background: rgba(16, 18, 22, 0.28);
+}
+
+body.perf #wash {
+  backdrop-filter: none;
+  background: rgba(16, 18, 22, 0.94);
+}
+
+#view {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
