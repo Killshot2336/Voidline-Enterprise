@@ -1,8 +1,9 @@
 html, body {
   margin: 0;
   height: 100%;
-  background: #101216;
-  color: #f6f3ec;
+  background: #050505;
+  color: #f4f7f6;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   overflow: hidden;
 }
 
@@ -14,12 +15,12 @@ html, body {
 
 body:not(.perf) #wash {
   backdrop-filter: blur(18px);
-  background: rgba(16, 18, 22, 0.28);
+  background: rgba(5, 5, 5, 0.2);
 }
 
 body.perf #wash {
   backdrop-filter: none;
-  background: rgba(16, 18, 22, 0.94);
+  background: rgba(5, 5, 5, 0.94);
 }
 
 #view {

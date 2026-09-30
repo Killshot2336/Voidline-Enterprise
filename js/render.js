@@ -3,16 +3,89 @@
 
   var D = root.VoidData;
   var S = root.VoidSim;
-  var SANS = "system-ui, Segoe UI, sans-serif";
   var MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
   var plate = null;
   var plateKey = "";
-  var parts = [];
   var textCache = {};
   var cacheN = 0;
 
+  var GOLD = "#FFD700";
+  var CYAN = "#00ffcc";
+  var CRIMSON = "#ff3366";
+  var ONYX = "#050505";
+  var frameGame = null;
+  var logAnim = { n: -1, head: -1, t: 1 };
+  var shakeLeft = 0;
+  var pool = [];
+  var pi;
+  for (pi = 0; pi < 64; pi++) {
+    pool.push({ alive: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, rot: 0, kind: 0, color: GOLD });
+  }
+
   function font(px, mono) {
-    return px + "px " + (mono ? MONO : SANS);
+    return px + "px " + MONO;
+  }
+
+  function glowOk() {
+    var g = frameGame;
+    if (!g || !g.settings) return false;
+    if (g.settings.performanceMode) return false;
+    if (g.settings.fpsCap === 30) return false;
+    return true;
+  }
+
+  function particlesOk() {
+    var g = frameGame;
+    return !!(g && g.settings && g.settings.highFX && glowOk());
+  }
+
+  function setGlow(ctx, color) {
+    if (!glowOk()) {
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = "transparent";
+      return;
+    }
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 8;
+  }
+
+  function clearGlow(ctx) {
+    ctx.shadowBlur = 0;
+  }
+
+  function easeOut(t) {
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+    var u = 1 - t;
+    return 1 - u * u * u;
+  }
+
+  function uiScale(ui, id) {
+    var base = ui.hover === id ? 1.05 : 1;
+    var press = ui.press;
+    if (!press || press.id !== id) return base;
+    var age = (ui.now || 0) - press.at;
+    if (age < 0 || age >= 180) return base;
+    var u = age / 180;
+    var dip = 0.9;
+    if (u < 0.4) return base - (u / 0.4) * (base - dip);
+    return dip + ((u - 0.4) / 0.6) * (base - dip);
+  }
+
+  function mixHex(a, b, t) {
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+    var out = "#";
+    var i;
+    for (i = 0; i < 3; i++) {
+      var av = parseInt(a.substr(1 + i * 2, 2), 16);
+      var bv = parseInt(b.substr(1 + i * 2, 2), 16);
+      var v = Math.round(av + (bv - av) * t);
+      var s = v.toString(16);
+      if (s.length < 2) s = "0" + s;
+      out += s;
+    }
+    return out;
   }
 
   function measure(ctx, fontStr, text) {
@@ -59,16 +132,16 @@
     c.height = Math.max(1, Math.floor(h * dpr));
     var g = c.getContext("2d");
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.fillStyle = "#101216";
+    g.fillStyle = ONYX;
     g.fillRect(0, 0, w, h);
     var i;
     for (i = 0; i < 42; i++) {
-      var a = 0.18 + rand(i + 4) * 0.5;
-      g.fillStyle = "rgba(240,212,138," + a.toFixed(3) + ")";
-      g.fillRect(rand(i) * w, rand(i + 21) * h, 1.6, 1.6);
+      var a = 0.15 + rand(i + 4) * 0.45;
+      g.fillStyle = i % 3 === 0 ? "rgba(0,255,204," + a.toFixed(3) + ")" : "rgba(255,215,0," + a.toFixed(3) + ")";
+      g.fillRect(rand(i) * w, rand(i + 21) * h, 1.4, 1.4);
     }
     if (perf) {
-      g.fillStyle = "rgba(16,18,22,0.9)";
+      g.fillStyle = ONYX;
       g.fillRect(0, 0, w, h);
       plate = c;
     } else {
@@ -80,7 +153,7 @@
       b.drawImage(c, 0, 0);
       b.filter = "none";
       b.setTransform(dpr, 0, 0, dpr, 0, 0);
-      b.fillStyle = "rgba(16,18,22,0.38)";
+      b.fillStyle = "rgba(5,5,5,0.55)";
       b.fillRect(0, 0, w, h);
       plate = blur;
     }
@@ -114,18 +187,35 @@
   }
 
   function button(ctx, ui, id, x, y, w, h, label, on, disabled) {
+    var scale = disabled ? 1 : uiScale(ui, id);
+    var hover = ui.hover === id && !disabled;
+    var cx = x + w * 0.5;
+    var cy = y + h * 0.5;
+    ctx.save();
+    if (scale !== 1) {
+      ctx.translate(cx, cy);
+      ctx.scale(scale, scale);
+      ctx.translate(-cx, -cy);
+    }
+    clearGlow(ctx);
     round(ctx, x, y, w, h, 6);
-    ctx.fillStyle = disabled ? "#1a1d24" : on ? "#3c331f" : "#242a34";
+    ctx.fillStyle = disabled ? "rgba(15,15,15,0.7)" : "rgba(15,15,15,0.85)";
     ctx.fill();
-    ctx.strokeStyle = on ? "#d6b25e" : "#3d4452";
+    var stroke = disabled ? "#3a3a3a" : on ? GOLD : hover ? CYAN : "rgba(0,255,204,0.45)";
+    ctx.strokeStyle = stroke;
     ctx.lineWidth = 1;
+    if (!disabled) setGlow(ctx, on ? GOLD : CYAN);
     ctx.stroke();
-    var f = font(w < 110 ? 11 : 13, false);
+    clearGlow(ctx);
+    var f = font(w < 110 ? 11 : 13, true);
     ctx.font = f;
-    ctx.fillStyle = disabled ? "#6c7380" : "#f6f3ec";
+    ctx.fillStyle = disabled ? "#6c7380" : "#f4f1ea";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(clipText(ctx, f, label, w - 12), x + w * 0.5, y + h * 0.5);
+    if (!disabled) setGlow(ctx, on ? GOLD : "#f4f1ea");
+    ctx.fillText(clipText(ctx, f, label, w - 12), cx, cy);
+    clearGlow(ctx);
+    ctx.restore();
     ctx.textAlign = "left";
     if (!disabled) pushHit(ui, id, x, y, w, h);
   }
@@ -159,24 +249,28 @@
     var r = row(flow, 26);
     if (!r.on) return;
     var ctx = flow.ctx;
-    var f = font(11, false);
+    var f = font(11, true);
     ctx.font = f;
-    ctx.fillStyle = "#d6b25e";
+    ctx.fillStyle = CYAN;
+    setGlow(ctx, CYAN);
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillText(text, flow.x, r.y + 13);
+    clearGlow(ctx);
   }
 
   function para(flow, text) {
     var r = row(flow, 20);
     if (!r.on) return;
     var ctx = flow.ctx;
-    var f = font(13, false);
+    var f = font(13, true);
     ctx.font = f;
-    ctx.fillStyle = "#9aa1ad";
+    ctx.fillStyle = "#c9d4d6";
+    setGlow(ctx, "#7f9aa0");
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillText(clipText(ctx, f, text, flow.w), flow.x, r.y + 10);
+    clearGlow(ctx);
   }
 
   function traitText(game, traitId, caught) {
@@ -203,11 +297,15 @@
       var r = row(flow, 108);
       if (r.on) {
         var ctx = flow.ctx;
+        clearGlow(ctx);
         round(ctx, flow.x, r.y, flow.w, 100, 8);
-        ctx.fillStyle = ui.focusSlot === i ? "#2a2418" : "#1c212b";
+        ctx.fillStyle = "rgba(15,15,15,0.85)";
         ctx.fill();
-        ctx.strokeStyle = "#3a3324";
+        ctx.strokeStyle = ui.focusSlot === i ? GOLD : CYAN;
+        ctx.lineWidth = 1;
+        setGlow(ctx, ctx.strokeStyle);
         ctx.stroke();
+        clearGlow(ctx);
         var f = font(15, false);
         ctx.font = f;
         ctx.fillStyle = "#f6f3ec";
@@ -274,11 +372,15 @@
       var ctx2 = flow.ctx;
       ctx2.save();
       ctx2.translate(slide, 0);
+      clearGlow(ctx2);
       round(ctx2, flow.x, cr.y, flow.w, height, 8);
-      ctx2.fillStyle = selected ? "#2a2418" : "#1c212b";
+      ctx2.fillStyle = "rgba(15,15,15,0.85)";
       ctx2.fill();
-      ctx2.strokeStyle = card.dying ? "#e06a5c" : "#3a3324";
+      ctx2.strokeStyle = card.dying ? CRIMSON : selected ? GOLD : CYAN;
+      ctx2.lineWidth = 1;
+      setGlow(ctx2, ctx2.strokeStyle);
       ctx2.stroke();
+      clearGlow(ctx2);
       ctx2.font = font(15, false);
       ctx2.fillStyle = "#f6f3ec";
       ctx2.textAlign = "left";
@@ -534,12 +636,12 @@
     section(flow, "SYSTEM SETTINGS");
     para(flow, "Tuned for low-end machines. Drawing is capped. The simulation still follows the clock.");
     var r1 = row(flow, 40);
-    if (r1.on) button(flow.ctx, ui, "opt:fx", flow.x, r1.y, flow.w, 32, "Text bursts: " + (game.settings.highFX ? "On" : "Off"), game.settings.highFX, false);
+    if (r1.on) button(flow.ctx, ui, "opt:fx", flow.x, r1.y, flow.w, 32, "Particle bursts: " + (game.settings.highFX ? "On" : "Off"), game.settings.highFX, false);
     var r2 = row(flow, 40);
     if (r2.on) button(flow.ctx, ui, "opt:fps", flow.x, r2.y, flow.w, 32, "Draw cap: " + (game.settings.fpsCap === 30 ? "30 Hz" : "60 Hz"), false, false);
     var r3 = row(flow, 40);
-    if (r3.on) button(flow.ctx, ui, "opt:perf", flow.x, r3.y, flow.w, 32, "Performance mode: " + (game.settings.performanceMode ? "Flat fills" : "Soft plate"), game.settings.performanceMode, false);
-    para(flow, "Performance mode skips the blurred plate and uses a translucent charcoal fill.");
+    if (r3.on) button(flow.ctx, ui, "opt:perf", flow.x, r3.y, flow.w, 32, "Performance mode: " + (game.settings.performanceMode ? "Flat plate" : "Soft plate"), game.settings.performanceMode, false);
+    para(flow, "Performance mode and the 30 Hz cap skip text glow and particle physics.");
     section(flow, "LEDGER");
     var r4 = row(flow, 40);
     if (r4.on) button(flow.ctx, ui, ui.resetArm ? "reset:yes" : "reset", flow.x, r4.y, flow.w, 32, ui.resetArm ? "Confirm wipe" : "Reset save", false, false);
@@ -550,12 +652,15 @@
     var ease = ui.menuT;
     var y = L.header + (1 - ease) * (L.tabY - L.header);
     var h = L.tabY - y;
+    clearGlow(ctx);
     round(ctx, 10, y, L.w - 20, h, 10);
-    ctx.fillStyle = game.settings.performanceMode ? "rgba(16,18,22,0.94)" : "rgba(18,20,26,0.78)";
+    ctx.fillStyle = "rgba(15,15,15,0.85)";
     ctx.fill();
-    ctx.strokeStyle = "#d6b25e";
+    ctx.strokeStyle = GOLD;
     ctx.lineWidth = 1;
+    setGlow(ctx, GOLD);
     ctx.stroke();
+    clearGlow(ctx);
     if (ease < 0.8) return;
     var rect = { x: 10, y: y, w: L.w - 20, h: h };
     if (ui.scroll < 0) ui.scroll = 0;
@@ -577,18 +682,35 @@
     if (ui.scroll > max) ui.scroll = max;
   }
 
+  function logColor(text) {
+    var ch = text.charAt(0);
+    if (ch === "!") return CRIMSON;
+    if (ch === "+") return GOLD;
+    if (ch === "*") return CYAN;
+    var low = text.toLowerCase();
+    if (low.indexOf("audit") >= 0 || low.indexOf("freeze") >= 0 || low.indexOf("discrep") >= 0 || low.indexOf("theft") >= 0) return CRIMSON;
+    if (text.indexOf("$") >= 0 || low.indexOf("capital") >= 0 || low.indexOf("market") >= 0 || low.indexOf("wage") >= 0) return GOLD;
+    if (low.indexOf("rank") >= 0 || low.indexOf("scout") >= 0 || low.indexOf("blueprint") >= 0 || low.indexOf("lab") >= 0 || low.indexOf("research") >= 0) return CYAN;
+    return "#d5ddd8";
+  }
+
   function drawLog(ctx, game, ui, L) {
     var x = 16;
     var y = L.header + 4;
     var w = L.w - 32;
     var h = L.a1 - y - 8;
-    ctx.font = font(11, false);
-    ctx.fillStyle = "#6c7380";
+    var fHead = font(11, true);
+    ctx.font = fHead;
+    ctx.fillStyle = CYAN;
+    setGlow(ctx, CYAN);
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.fillText("CORPORATE ACTIVITY", x, y);
     ctx.textAlign = "right";
+    ctx.fillStyle = GOLD;
+    setGlow(ctx, GOLD);
     ctx.fillText(Math.round(ui.fps || 0) + " fps", x + w, y);
+    clearGlow(ctx);
     ctx.textAlign = "left";
     var top = y + 16;
     var areaH = h - 16;
@@ -609,7 +731,8 @@
     var start = end - vis;
     if (start < 0) start = 0;
     var count = end - start;
-    var y0 = top + areaH - count * lineH;
+    var slide = (1 - easeOut(logAnim.t)) * lineH;
+    var y0 = top + areaH - count * lineH + slide;
     ctx.save();
     ctx.beginPath();
     ctx.rect(x, top, w, areaH);
@@ -617,71 +740,112 @@
     var i;
     for (i = start; i < end; i++) {
       var text = S.logLine(game, i) || "";
-      var ch = text.charAt(0);
-      ctx.fillStyle = ch === "!" ? "#e06a5c" : ch === "+" ? "#d6b25e" : ch === "*" ? "#6fce9a" : "#d7d0c4";
+      var ly = y0 + (i - start) * lineH;
+      var rel = (ly - top) / Math.max(1, areaH);
+      var alpha = rel < 0.42 ? rel / 0.42 : 1;
+      if (alpha < 0) alpha = 0;
+      if (alpha > 1) alpha = 1;
+      var color = logColor(text);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = color;
+      setGlow(ctx, color);
       if (text.length > maxChars) text = text.substring(0, maxChars - 1) + "…";
-      ctx.fillText(text, x, y0 + (i - start) * lineH);
+      ctx.fillText(text, x, ly);
     }
     ctx.restore();
+    ctx.globalAlpha = 1;
+    clearGlow(ctx);
   }
 
-  function meter(ctx, x, y, w, h, label, valueText, fill, color) {
-    ctx.font = font(11, false);
-    ctx.fillStyle = "#9aa1ad";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillText(label, x, y);
-    ctx.fillStyle = "#f6f3ec";
-    ctx.font = font(13, false);
-    ctx.textAlign = "right";
-    ctx.fillText(valueText, x + w, y);
-    var by = y + 18;
-    round(ctx, x, by, w, 8, 4);
-    ctx.fillStyle = "#2a303a";
+  function capsule(ctx, x, y, w, h, label, valueText, fill, color, t, phase) {
+    if (fill < 0) fill = 0;
+    if (fill > 1) fill = 1;
+    var r = h * 0.5;
+    clearGlow(ctx);
+    round(ctx, x, y, w, h, r);
+    ctx.fillStyle = "rgba(15,15,15,0.85)";
     ctx.fill();
-    var fw = w * fill;
-    if (fw < 0) fw = 0;
-    if (fw > w) fw = w;
-    if (fw > 0) {
-      round(ctx, x, by, Math.max(4, fw), 8, 4);
+    var fw = Math.max(0, w * fill);
+    if (fw > 2) {
+      ctx.save();
+      round(ctx, x, y, w, h, r);
+      ctx.clip();
+      ctx.beginPath();
+      var amp = frameGame && frameGame.settings && frameGame.settings.performanceMode ? 0 : Math.min(3.2, h * 0.22);
+      var steps = amp > 0 ? 10 : 1;
+      var edge = x + fw;
+      ctx.moveTo(x, y + h);
+      ctx.lineTo(x, y);
+      var s;
+      for (s = 0; s <= steps; s++) {
+        var py = y + (h * s / steps);
+        var ox = amp * Math.sin(py * 0.45 + t * 0.003 + phase);
+        ctx.lineTo(Math.min(x + w, edge + ox), py);
+      }
+      ctx.lineTo(x, y + h);
+      ctx.closePath();
       ctx.fillStyle = color;
       ctx.fill();
+      ctx.restore();
     }
+    round(ctx, x, y, w, h, r);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    setGlow(ctx, color);
+    ctx.stroke();
+    clearGlow(ctx);
+    var f = font(h < 18 ? 10 : 11, true);
+    ctx.font = f;
+    ctx.fillStyle = "#f4f7f6";
+    setGlow(ctx, color);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(clipText(ctx, f, label, w * 0.52), x + 10, y + h * 0.5);
+    ctx.textAlign = "right";
+    ctx.fillText(clipText(ctx, f, valueText, w * 0.4), x + w - 10, y + h * 0.5);
+    clearGlow(ctx);
     ctx.textAlign = "left";
   }
 
   function drawMeters(ctx, game, L, t) {
-    var y = L.b0 + 8;
     var x = 16;
-    var gap = 12;
+    var gap = 10;
     var w = (L.w - 32 - gap * 3) / 4;
-    var h = L.b1 - L.b0 - 16;
-    if (h < 8) return;
-    var wave = game.settings.highFX ? 0.985 + Math.sin(t * 0.004) * 0.015 : 1;
+    var band = L.b1 - L.b0;
+    var h = Math.max(16, Math.min(band - 10, 36));
+    var y = L.b0 + (band - h) * 0.5;
+    if (w < 20) return;
     var capitalFill = 1 - Math.exp(-game.player.capital / 500);
-    meter(ctx, x, y, w, h, "CAPITAL", S.money(game.player.capital), capitalFill * wave, "#d6b25e");
-    meter(ctx, x + (w + gap), y, w, h, "INTELLIGENCE", String(Math.round(game.player.intelligence)), game.player.intelligence / 100, "#f6f3ec");
-    var stressColor = game.player.stress > 70 ? "#e06a5c" : "#d6b25e";
-    meter(ctx, x + (w + gap) * 2, y, w, h, "STRESS", String(Math.round(game.player.stress)), game.player.stress / 100, stressColor);
-    meter(ctx, x + (w + gap) * 3, y, w, h, "VISIBILITY", String(Math.round(game.player.visibility)), game.player.visibility / 100, "#f6f3ec");
+    var stressT = game.player.stress / 100;
+    if (glowOk()) stressT = stressT * (0.72 + 0.28 * (0.5 + 0.5 * Math.sin(t * 0.008)));
+    var stressColor = mixHex(CYAN, CRIMSON, stressT);
+    capsule(ctx, x, y, w, h, "CAPITAL", S.money(game.player.capital), capitalFill, GOLD, t, 0);
+    capsule(ctx, x + (w + gap), y, w, h, "INTELLIGENCE", String(Math.round(game.player.intelligence)), game.player.intelligence / 100, CYAN, t, 1.7);
+    capsule(ctx, x + (w + gap) * 2, y, w, h, "STRESS", String(Math.round(game.player.stress)), game.player.stress / 100, stressColor, t, 3.1);
+    capsule(ctx, x + (w + gap) * 3, y, w, h, "VISIBILITY", String(Math.round(game.player.visibility)), game.player.visibility / 100, GOLD, t, 4.6);
   }
 
   function drawHeader(ctx, game, ui, L) {
     var phase = S.phaseAt(game.lastReal || Date.now());
-    ctx.font = font(L.w < 720 ? 13 : 16, false);
-    ctx.fillStyle = "#f6f3ec";
+    ctx.font = font(L.w < 720 ? 13 : 16, true);
+    ctx.fillStyle = "#f4f7f6";
+    setGlow(ctx, CYAN);
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillText("VOIDLINE", 16, L.header * 0.42);
-    ctx.font = font(11, false);
-    ctx.fillStyle = "#d6b25e";
+    ctx.font = font(11, true);
+    ctx.fillStyle = GOLD;
+    setGlow(ctx, GOLD);
     ctx.fillText("THE GALACTIC GRIND", 16, L.header * 0.78);
+    clearGlow(ctx);
     var meta = "Rk " + game.player.level + "  XP " + Math.floor(game.player.xp) + "  VP " + game.player.vp + "  " + S.clockLabel(game.lastReal || Date.now()) + "  " + phase.name;
-    ctx.fillStyle = "#9aa1ad";
-    ctx.font = font(12, false);
+    ctx.fillStyle = CYAN;
+    setGlow(ctx, CYAN);
+    ctx.font = font(12, true);
     var mw = measure(ctx, font(12, false), meta);
     var bx = L.w - 16 - 92 - 8 - 78;
     if (bx - mw > 200) ctx.fillText(meta, bx - mw - 12, L.header * 0.55);
+    clearGlow(ctx);
     button(ctx, ui, "hdr:journal", L.w - 16 - 92 - 8 - 78, (L.header - 28) / 2, 78, 28, "Journal", ui.menu === "journal", false);
     button(ctx, ui, "hdr:settings", L.w - 16 - 92, (L.header - 28) / 2, 92, 28, "Settings", ui.menu === "settings", false);
   }
@@ -690,49 +854,78 @@
     var y = L.b1 + 8;
     var bottom = L.tabY - 6;
     if (ui.menuT < 0.5 && bottom > y + 20) {
-      ctx.font = font(13, false);
-      ctx.fillStyle = "#9aa1ad";
+      ctx.font = font(13, true);
+      ctx.fillStyle = CYAN;
+      setGlow(ctx, CYAN);
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
       var slot = game.slots[0];
       var job = D.jobById[slot.jobId];
       var emp = slot.employee ? slot.employee.name : "no hire";
       var line = (job ? job.name : "Kiosk") + " · stock " + slot.stock + " · " + emp + " · " + S.money(game.player.capital);
-      ctx.fillText(clipText(ctx, font(13, false), line, L.w - 32), 16, y);
-      ctx.font = font(12, false);
-      ctx.fillStyle = "#6c7380";
+      ctx.fillText(clipText(ctx, font(13, true), line, L.w - 32), 16, y);
+      clearGlow(ctx);
+      ctx.font = font(12, true);
+      ctx.fillStyle = "#9eb0b4";
       ctx.fillText("Open a tab. The ledger above records every cycle, hire, and audit.", 16, y + 22);
     }
     var labels = L.w < 860
       ? [["Occupation"], ["Education", "& Market"], ["Invention", "Lab"], ["Scouts", "& Assets"]]
       : [["Occupation"], ["Education & Market"], ["Invention Lab"], ["Scouts & Assets"]];
     var ids = ["job", "edu", "lab", "scout"];
+    var filaments = [GOLD, CYAN, CRIMSON, CYAN];
     var gap = 8;
     var bw = (L.w - 32 - gap * 3) / 4;
     var i;
     for (i = 0; i < 4; i++) {
       var x = 16 + i * (bw + gap);
+      var tw = bw;
+      var th = L.tabH - 16;
+      var ty = L.tabY + 8;
+      var id = "tab:" + ids[i];
       var on = ui.menu === ids[i];
-      round(ctx, x, L.tabY + 8, bw, L.tabH - 16, 8);
-      ctx.fillStyle = on ? "#3c331f" : "#1b2028";
+      var scale = uiScale(ui, id);
+      var cx = x + tw * 0.5;
+      var cy = ty + th * 0.5;
+      var hover = ui.hover === id;
+      ctx.save();
+      if (scale !== 1) {
+        ctx.translate(cx, cy);
+        ctx.scale(scale, scale);
+        ctx.translate(-cx, -cy);
+      }
+      clearGlow(ctx);
+      round(ctx, x, ty, tw, th, 8);
+      ctx.fillStyle = "rgba(15,15,15,0.85)";
       ctx.fill();
-      ctx.strokeStyle = on ? "#d6b25e" : "#3d4452";
+      var stroke = filaments[i];
+      ctx.strokeStyle = stroke;
+      ctx.globalAlpha = hover || on ? 1 : 0.55;
+      ctx.lineWidth = 1;
+      setGlow(ctx, stroke);
       ctx.stroke();
-      ctx.font = font(L.w < 860 ? 11 : 13, false);
-      ctx.fillStyle = "#f6f3ec";
+      ctx.globalAlpha = 1;
+      clearGlow(ctx);
+      ctx.font = font(L.w < 860 ? 11 : 13, true);
+      ctx.fillStyle = "#f4f7f6";
+      setGlow(ctx, stroke);
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       var lines = labels[i];
-      var ly = L.tabY + L.tabH * 0.5 - (lines.length - 1) * 7;
+      var ly = cy - (lines.length - 1) * 7;
       var n;
-      for (n = 0; n < lines.length; n++) ctx.fillText(lines[n], x + bw * 0.5, ly + n * 14);
-      pushHit(ui, "tab:" + ids[i], x, L.tabY + 8, bw, L.tabH - 16);
+      for (n = 0; n < lines.length; n++) ctx.fillText(lines[n], cx, ly + n * 14);
+      clearGlow(ctx);
+      ctx.restore();
+      pushHit(ui, id, x, ty, tw, th);
     }
     ctx.textAlign = "left";
+    ctx.globalAlpha = 1;
   }
 
   function drawRules(ctx, L) {
-    ctx.strokeStyle = "rgba(214,178,94,0.35)";
+    ctx.strokeStyle = "rgba(255,215,0,0.45)";
+    setGlow(ctx, GOLD);
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(12, L.a1);
@@ -740,50 +933,131 @@
     ctx.moveTo(12, L.b1);
     ctx.lineTo(L.w - 12, L.b1);
     ctx.stroke();
+    clearGlow(ctx);
+  }
+
+  function tick(dt, game) {
+    frameGame = game;
+    if (logAnim.n !== game.logN || logAnim.head !== game.logHead) {
+      if (logAnim.n < 0) logAnim.t = 1;
+      else logAnim.t = 0;
+      logAnim.n = game.logN;
+      logAnim.head = game.logHead;
+    } else if (logAnim.t < 1) {
+      logAnim.t += dt / 280;
+      if (logAnim.t > 1) logAnim.t = 1;
+    }
+    if (!particlesOk()) return;
+    var i;
+    var step = dt / 1000;
+    for (i = 0; i < pool.length; i++) {
+      var p = pool[i];
+      if (!p.alive) continue;
+      p.x += p.vx * step;
+      p.y += p.vy * step;
+      p.vy += 20 * step;
+      p.rot += dt * 0.005;
+      p.life -= dt / 680;
+      if (p.life <= 0) p.alive = false;
+    }
   }
 
   function tickParts(dt) {
+    if (frameGame) tick(dt, frameGame);
+  }
+
+  function burst(x, y, color, game) {
+    if (game) frameGame = game;
+    if (!particlesOk()) return 0;
+    var spawned = 0;
     var i;
-    for (i = parts.length - 1; i >= 0; i--) {
-      var p = parts[i];
-      p.life -= dt / 900;
-      p.y += p.vy * dt / 1000;
-      if (p.life <= 0) {
-        var last = parts.length - 1;
-        parts[i] = parts[last];
-        parts.pop();
-      }
+    for (i = 0; i < pool.length && spawned < 12; i++) {
+      var p = pool[i];
+      if (p.alive) continue;
+      var ang = (spawned / 12) * Math.PI * 2;
+      var sp = 48 + (spawned % 4) * 16;
+      p.alive = true;
+      p.x = x;
+      p.y = y;
+      p.vx = Math.cos(ang) * sp;
+      p.vy = Math.sin(ang) * sp - 10;
+      p.life = 1;
+      p.rot = ang;
+      p.kind = spawned % 3;
+      p.color = color || CYAN;
+      spawned += 1;
     }
+    return spawned;
   }
 
   function spawn(text, x, y, color) {
-    if (parts.length > 20) {
-      parts.shift();
+    burst(x, y, color, frameGame);
+  }
+
+  function shake(frames) {
+    shakeLeft = frames || 3;
+  }
+
+  function drawBit(ctx, p) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot);
+    ctx.fillStyle = p.color;
+    setGlow(ctx, p.color);
+    if (p.kind === 0) ctx.fillRect(-2.2, -2.2, 4.4, 4.4);
+    else if (p.kind === 1) {
+      ctx.beginPath();
+      ctx.moveTo(0, -3.6);
+      ctx.lineTo(3.2, 0);
+      ctx.lineTo(0, 3.6);
+      ctx.lineTo(-3.2, 0);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(0, -3.6);
+      ctx.lineTo(3.3, 2.6);
+      ctx.lineTo(-3.3, 2.6);
+      ctx.closePath();
+      ctx.fill();
     }
-    parts.push({ text: text, x: x, y: y, vy: -36, life: 1, color: color });
+    clearGlow(ctx);
+    ctx.restore();
   }
 
   function drawParts(ctx) {
-    ctx.font = font(14, false);
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
+    if (!particlesOk()) return;
     var i;
-    for (i = 0; i < parts.length; i++) {
-      var p = parts[i];
-      ctx.globalAlpha = Math.max(0, p.life);
-      ctx.fillStyle = p.color;
-      ctx.fillText(p.text, p.x, p.y);
+    for (i = 0; i < pool.length; i++) {
+      var p = pool[i];
+      if (!p.alive) continue;
+      ctx.globalAlpha = p.life < 0 ? 0 : p.life;
+      drawBit(ctx, p);
     }
     ctx.globalAlpha = 1;
+    clearGlow(ctx);
   }
 
   function draw(ctx, game, ui, now) {
     var w = ui.w;
     var h = ui.h;
     if (w < 2 || h < 2) return;
-    ctx.setTransform(ui.dpr || 1, 0, 0, ui.dpr || 1, 0, 0);
+    frameGame = game;
+    ui.now = now;
+    var dpr = ui.dpr || 1;
+    var ox = 0;
+    var oy = 0;
+    if (shakeLeft > 0) {
+      var mag = 4;
+      ox = Math.sin(shakeLeft * 2.4) * mag;
+      oy = Math.cos(shakeLeft * 1.7) * mag;
+      shakeLeft -= 1;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, ox * dpr, oy * dpr);
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
     ui.hits.length = 0;
-    var bg = ensurePlate(w, h, !!game.settings.performanceMode, ui.dpr || 1);
+    var bg = ensurePlate(w, h, !!game.settings.performanceMode, dpr);
     ctx.drawImage(bg, 0, 0, w, h);
     var L = layout(w, h);
     ui.L = L;
@@ -794,6 +1068,8 @@
     drawHeader(ctx, game, ui, L);
     drawDock(ctx, game, ui, L);
     drawParts(ctx);
+    clearGlow(ctx);
+    ctx.globalAlpha = 1;
   }
 
   function hitTest(ui, x, y) {
@@ -809,7 +1085,10 @@
     draw: draw,
     hitTest: hitTest,
     tickParts: tickParts,
+    tick: tick,
     spawn: spawn,
+    burst: burst,
+    shake: shake,
     layout: layout
   };
 })(typeof window !== "undefined" ? window : globalThis);

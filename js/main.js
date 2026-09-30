@@ -26,6 +26,9 @@
     dpr: 1,
     fps: 60,
     seenPulse: game.pulse || 0,
+    seenLevel: game.player.level,
+    hover: null,
+    press: null,
     drag: null
   };
 
@@ -141,6 +144,7 @@
       ui.synth = { idea: null, staff: null, marketing: null, asset: null };
       ui.resetArm = false;
       ui.seenPulse = 0;
+      ui.seenLevel = game.player.level;
       root.VOID.game = game;
       persist();
       keep.menu = "settings";
@@ -158,12 +162,15 @@
   canvas.addEventListener("pointerdown", function (e) {
     canvas.setPointerCapture(e.pointerId);
     var p = pointerPos(e);
+    var hit = R.hitTest(ui, p.x, p.y);
+    if (hit) ui.press = { id: hit.id, at: Date.now() };
     ui.drag = { x: p.x, y: p.y, sx: p.x, sy: p.y, scroll: ui.scroll, log: ui.logScroll, moved: false };
   });
 
   canvas.addEventListener("pointermove", function (e) {
     var p = pointerPos(e);
     var hit = R.hitTest(ui, p.x, p.y);
+    ui.hover = hit ? hit.id : null;
     canvas.style.cursor = hit ? "pointer" : "default";
     if (!ui.drag) return;
     var dy = p.y - ui.drag.sy;
@@ -182,8 +189,17 @@
     ui.drag = null;
     if (!drag || drag.moved) return;
     var hit = R.hitTest(ui, p.x, p.y);
-    if (hit) act(hit.id);
+    if (hit) {
+      act(hit.id);
+      var col = "#00ffcc";
+      if (hit.id.indexOf("stock:") === 0 || hit.id.indexOf("buy:") === 0) col = "#FFD700";
+      if (hit.id === "synth" || hit.id.indexOf("craft:") === 0) col = "#FFD700";
+      if (hit.id.indexOf("fire:") === 0 || hit.id === "reset:yes") col = "#ff3366";
+      R.burst(p.x, p.y, col, game);
+    }
   });
+
+  canvas.addEventListener("pointerleave", function () { ui.hover = null; });
 
   canvas.addEventListener("pointercancel", function () { ui.drag = null; });
 
@@ -236,7 +252,7 @@
 
   function paintError(err) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = "#101216";
+    ctx.fillStyle = "#050505";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#e06a5c";
     ctx.font = "16px sans-serif";
@@ -259,15 +275,10 @@
       var target = ui.menu ? 1 : 0;
       ui.menuT += (target - ui.menuT) * Math.min(1, dt / 140);
       if (!ui.menu && ui.menuT < 0.015) ui.menuT = 0;
-      R.tickParts(dt);
-      if (game.pulse !== ui.seenPulse) {
-        ui.seenPulse = game.pulse;
-        if (game.settings.highFX) {
-          var net = game.lastNet || 0;
-          var label = (net >= 0 ? "+" : "") + S.money(net);
-          R.spawn(label, ui.w * 0.22, ui.h * 0.56, net >= 0 ? "#d6b25e" : "#e06a5c");
-        }
-      }
+      R.tick(dt, game);
+      ui.seenPulse = game.pulse;
+      if (game.player.level > ui.seenLevel) R.shake(3);
+      ui.seenLevel = game.player.level;
       document.body.classList.toggle("perf", !!game.settings.performanceMode);
       var cap = game.settings.fpsCap === 30 ? 30 : 60;
       if (ts - lastDraw < (1000 / cap) - 0.5) return;
