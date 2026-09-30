@@ -285,6 +285,7 @@
       var span = lastDraw ? ts - lastDraw : 16;
       lastDraw = ts;
       ui.fps = ui.fps * 0.8 + (1000 / Math.max(span, 1)) * 0.2;
+      ui.dt = span;
       R.draw(ctx, game, ui, now);
       if (game.rev !== savedRev && now - lastSave > 700) {
         persist();

@@ -60,8 +60,20 @@
     return 1 - u * u * u;
   }
 
+  function hoverMix(ui, id) {
+    if (!ui.hot) ui.hot = {};
+    var target = ui.hover === id ? 1 : 0;
+    var cur = ui.hot[id] || 0;
+    var dt = ui.dt > 0 ? ui.dt : 16;
+    var k = 1 - Math.pow(0.001, dt / 140);
+    cur += (target - cur) * k;
+    if (Math.abs(cur - target) < 0.012) cur = target;
+    ui.hot[id] = cur;
+    return cur;
+  }
+
   function uiScale(ui, id) {
-    var base = ui.hover === id ? 1.05 : 1;
+    var base = 1 + 0.05 * hoverMix(ui, id);
     var press = ui.press;
     if (!press || press.id !== id) return base;
     var age = (ui.now || 0) - press.at;
@@ -763,7 +775,7 @@
     var r = h * 0.5;
     clearGlow(ctx);
     round(ctx, x, y, w, h, r);
-    ctx.fillStyle = "rgba(15,15,15,0.85)";
+    ctx.fillStyle = "#141418";
     ctx.fill();
     var fw = Math.max(0, w * fill);
     if (fw > 2) {
