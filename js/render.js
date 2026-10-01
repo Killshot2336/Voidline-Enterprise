@@ -189,7 +189,8 @@
   }
 
   function layout(w, h) {
-    var header = h < 620 ? 118 : 134;
+    var narrow = w < 560;
+    var header = narrow ? 156 : (h < 620 ? 118 : 134);
     var tabH = h < 620 ? 82 : 92;
     var storyBot = h - tabH;
     return {
@@ -305,22 +306,16 @@
       ctx.fillRect(-u * 0.08, -u * 0.55, u * 0.12, u * 1.15);
     } else if (kind === "gear") {
       var t;
-      var a0;
-      ctx.beginPath();
-      for (t = 0; t < 8; t++) {
-        a0 = t * Math.PI / 4 - 0.2;
-        ctx.lineTo(Math.cos(a0) * u * 0.55, Math.sin(a0) * u * 0.55);
-        ctx.lineTo(Math.cos(a0 + 0.22) * u, Math.sin(a0 + 0.22) * u);
-        ctx.lineTo(Math.cos(a0 + 0.5) * u, Math.sin(a0 + 0.5) * u);
-        ctx.lineTo(Math.cos(a0 + 0.72) * u * 0.55, Math.sin(a0 + 0.72) * u * 0.55);
+      for (t = 0; t < 6; t++) {
+        ctx.save();
+        ctx.rotate(t * Math.PI / 3);
+        ctx.fillRect(-u * 0.16, -u * 0.95, u * 0.32, u * 0.4);
+        ctx.restore();
       }
-      ctx.closePath();
-      ctx.fill();
-      ctx.globalCompositeOperation = "destination-out";
       ctx.beginPath();
-      ctx.arc(0, 0, u * 0.22, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalCompositeOperation = "source-over";
+      ctx.arc(0, 0, u * 0.62, 0, Math.PI * 2);
+      ctx.arc(0, 0, u * 0.26, 0, Math.PI * 2, true);
+      ctx.fill("evenodd");
     } else if (kind === "alert") {
       ctx.beginPath();
       ctx.moveTo(0, -u);
@@ -356,6 +351,18 @@
   }
 
   function pushHit(ui, id, x, y, w, h) {
+    if (ui.clip) {
+      var c = ui.clip;
+      var x2 = Math.max(x, c.x);
+      var y2 = Math.max(y, c.y);
+      var rw = Math.min(x + w, c.x + c.w) - x2;
+      var rh = Math.min(y + h, c.y + c.h) - y2;
+      if (rw < 8 || rh < 14) return;
+      x = x2;
+      y = y2;
+      w = rw;
+      h = rh;
+    }
     ui.hits.push({ id: id, x: x, y: y, w: w, h: h });
   }
 
@@ -883,6 +890,7 @@
     if (ease < 0.8) return;
     paperOn = true;
     var rect = { x: 10, y: y, w: L.w - 20, h: h };
+    ui.clip = rect;
     if (ui.scroll < 0) ui.scroll = 0;
     var flow = openFlow(ctx, ui, rect, ui.scroll);
     var titles = { job: "WORK", edu: "SCHOOL", lab: "STUFF", scout: "PEOPLE", journal: "THE BOOK", settings: "SETTINGS" };
@@ -897,6 +905,7 @@
     else if (ui.menu === "settings") drawSettings(flow, game, ui);
     ctx.restore();
     paperOn = false;
+    ui.clip = null;
     ui.contentH = flow.cy + 20;
     var max = ui.contentH - h;
     if (max < 0) max = 0;
@@ -1593,23 +1602,24 @@
     var cashSize = L.w < 520 ? 22 : 28;
     var cashFont = font(cashSize, true);
     var cashW = measure(ctx, cashFont, cash);
-    var gear = 40;
-    var bookX = L.w - 16 - gear - 8 - gear;
+    var gear = L.w < 420 ? 34 : 40;
+    var bookX = L.w - 12 - gear - 8 - gear;
     var pillW = cashW + 52;
-    var pillH = 40;
+    var pillH = L.w < 560 ? 34 : 40;
     var pillX = bookX - 12 - pillW;
-    if (pillX < textX + 80) pillX = textX;
+    var stacked = pillX < textX + 88;
+    if (stacked) pillX = textX;
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.font = font(L.w < 720 ? 20 : 24, false);
     ctx.fillStyle = INK;
-    ctx.fillText("You", textX, 10);
+    ctx.fillText("You", textX, 8);
     var yearFont = font(13, false);
     ctx.font = yearFont;
     ctx.fillStyle = "#d5deea";
-    var yearMax = Math.max(48, pillX - textX - 8);
-    ctx.fillText(clipText(ctx, yearFont, yearBlurb(game, now), yearMax), textX, 36);
-    var pillY = faceY - pillH * 0.5;
+    var yearMax = Math.max(48, (stacked ? bookX : pillX) - textX - 10);
+    ctx.fillText(clipText(ctx, yearFont, yearBlurb(game, now), yearMax), textX, 32);
+    var pillY = stacked ? 52 : faceY - pillH * 0.5;
     clearGlow(ctx);
     round(ctx, pillX, pillY, pillW, pillH, 20);
     ctx.fillStyle = "#2a2416";
@@ -1624,11 +1634,13 @@
     ctx.textAlign = "left";
     ctx.fillText(cash, pillX + 36, faceY);
     noteCash(game, now, pillX + pillW * 0.55, faceY);
-    ctx.font = font(11, false);
-    ctx.fillStyle = "#8b93a7";
-    ctx.textAlign = "right";
-    ctx.textBaseline = "top";
-    ctx.fillText(String(Math.round(ui.fps || 0)), pillX - 6, 8);
+    if (bookX > textX + 36) {
+      ctx.font = font(11, false);
+      ctx.fillStyle = "#8b93a7";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "top";
+      ctx.fillText(String(Math.round(ui.fps || 0)), bookX - 6, 2);
+    }
     var tickY = L.header - 40;
     var gap = 10;
     var tickW = Math.min(160, (L.w - 32 - gap * 2) / 3);
@@ -1836,6 +1848,7 @@
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
     ui.hits.length = 0;
+    ui.clip = null;
     var bg = ensurePlate(w, h, !!game.settings.performanceMode, dpr);
     ctx.drawImage(bg, 0, 0, w, h);
     var L = layout(w, h);
