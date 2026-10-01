@@ -252,7 +252,7 @@
 
   function paintError(err) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = "#050505";
+    ctx.fillStyle = "#0c1020";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "#e06a5c";
     ctx.font = "16px sans-serif";

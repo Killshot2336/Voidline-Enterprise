@@ -3,16 +3,18 @@
 
   var D = root.VoidData;
   var S = root.VoidSim;
+  var SANS = "system-ui, Segoe UI, sans-serif";
   var MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
   var plate = null;
   var plateKey = "";
   var textCache = {};
   var cacheN = 0;
 
-  var GOLD = "#FFD700";
-  var CYAN = "#00ffcc";
-  var CRIMSON = "#ff3366";
-  var ONYX = "#050505";
+  var GOLD = "#f5c542";
+  var CYAN = "#3ec8d8";
+  var CRIMSON = "#e23d3d";
+  var NAVY = "#0c1020";
+  var INK = "#f4efe4";
   var frameGame = null;
   var logAnim = { n: -1, head: -1, t: 1 };
   var shakeLeft = 0;
@@ -23,7 +25,7 @@
   }
 
   function font(px, mono) {
-    return px + "px " + MONO;
+    return "600 " + px + "px " + (mono ? MONO : SANS);
   }
 
   function glowOk() {
@@ -39,14 +41,8 @@
     return !!(g && g.settings && g.settings.highFX && glowOk());
   }
 
-  function setGlow(ctx, color) {
-    if (!glowOk()) {
-      ctx.shadowBlur = 0;
-      ctx.shadowColor = "transparent";
-      return;
-    }
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 8;
+  function setGlow(ctx) {
+    if (ctx) ctx.shadowBlur = 0;
   }
 
   function clearGlow(ctx) {
@@ -131,11 +127,6 @@
     return best || "…";
   }
 
-  function rand(i) {
-    var x = Math.sin(i * 127.1) * 43758.5453;
-    return x - Math.floor(x);
-  }
-
   function ensurePlate(w, h, perf, dpr) {
     var key = (w | 0) + "x" + (h | 0) + ":" + dpr + (perf ? ":p" : ":f");
     if (plate && plateKey === key) return plate;
@@ -144,31 +135,16 @@
     c.height = Math.max(1, Math.floor(h * dpr));
     var g = c.getContext("2d");
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.fillStyle = ONYX;
+    g.fillStyle = NAVY;
     g.fillRect(0, 0, w, h);
-    var i;
-    for (i = 0; i < 42; i++) {
-      var a = 0.15 + rand(i + 4) * 0.45;
-      g.fillStyle = i % 3 === 0 ? "rgba(0,255,204," + a.toFixed(3) + ")" : "rgba(255,215,0," + a.toFixed(3) + ")";
-      g.fillRect(rand(i) * w, rand(i + 21) * h, 1.4, 1.4);
-    }
-    if (perf) {
-      g.fillStyle = ONYX;
+    if (!perf) {
+      var glow = g.createRadialGradient(w * 0.5, h * 0.78, 12, w * 0.5, h * 0.72, Math.max(w, h) * 0.48);
+      glow.addColorStop(0, "rgba(245,197,66,0.18)");
+      glow.addColorStop(1, "rgba(12,16,32,0)");
+      g.fillStyle = glow;
       g.fillRect(0, 0, w, h);
-      plate = c;
-    } else {
-      var blur = document.createElement("canvas");
-      blur.width = c.width;
-      blur.height = c.height;
-      var b = blur.getContext("2d");
-      b.filter = "blur(6px)";
-      b.drawImage(c, 0, 0);
-      b.filter = "none";
-      b.setTransform(dpr, 0, 0, dpr, 0, 0);
-      b.fillStyle = "rgba(5,5,5,0.55)";
-      b.fillRect(0, 0, w, h);
-      plate = blur;
     }
+    plate = c;
     plateKey = key;
     return plate;
   }
@@ -210,23 +186,18 @@
       ctx.translate(-cx, -cy);
     }
     clearGlow(ctx);
-    round(ctx, x, y, w, h, 6);
-    ctx.fillStyle = disabled ? "rgba(15,15,15,0.7)" : "rgba(15,15,15,0.85)";
+    round(ctx, x, y, w, h, 10);
+    ctx.fillStyle = disabled ? "#1a1e2a" : on ? "#3a3018" : hover ? "#243044" : "#171b28";
     ctx.fill();
-    var stroke = disabled ? "#3a3a3a" : on ? GOLD : hover ? CYAN : "rgba(0,255,204,0.45)";
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = 1;
-    if (!disabled) setGlow(ctx, on ? GOLD : CYAN);
+    ctx.strokeStyle = disabled ? "#2a3142" : (on || hover) ? GOLD : "#2c3548";
+    ctx.lineWidth = on ? 2 : 1;
     ctx.stroke();
-    clearGlow(ctx);
-    var f = font(w < 110 ? 11 : 13, true);
+    var f = font(w < 110 ? 12 : 15, false);
     ctx.font = f;
-    ctx.fillStyle = disabled ? "#6c7380" : "#f4f1ea";
+    ctx.fillStyle = disabled ? "#6c7380" : on ? GOLD : INK;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    if (!disabled) setGlow(ctx, on ? GOLD : "#f4f1ea");
     ctx.fillText(clipText(ctx, f, label, w - 12), cx, cy);
-    clearGlow(ctx);
     ctx.restore();
     ctx.textAlign = "left";
     if (!disabled) pushHit(ui, id, x, y, w, h);
@@ -261,10 +232,9 @@
     var r = row(flow, 26);
     if (!r.on) return;
     var ctx = flow.ctx;
-    var f = font(11, true);
+    var f = font(12, false);
     ctx.font = f;
-    ctx.fillStyle = CYAN;
-    setGlow(ctx, CYAN);
+    ctx.fillStyle = GOLD;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillText(text, flow.x, r.y + 13);
@@ -275,10 +245,9 @@
     var r = row(flow, 20);
     if (!r.on) return;
     var ctx = flow.ctx;
-    var f = font(13, true);
+    var f = font(14, false);
     ctx.font = f;
-    ctx.fillStyle = "#c9d4d6";
-    setGlow(ctx, "#7f9aa0");
+    ctx.fillStyle = "#c5cad6";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillText(clipText(ctx, f, text, flow.w), flow.x, r.y + 10);
@@ -652,8 +621,8 @@
     var r2 = row(flow, 40);
     if (r2.on) button(flow.ctx, ui, "opt:fps", flow.x, r2.y, flow.w, 32, "Draw cap: " + (game.settings.fpsCap === 30 ? "30 Hz" : "60 Hz"), false, false);
     var r3 = row(flow, 40);
-    if (r3.on) button(flow.ctx, ui, "opt:perf", flow.x, r3.y, flow.w, 32, "Performance mode: " + (game.settings.performanceMode ? "Flat plate" : "Soft plate"), game.settings.performanceMode, false);
-    para(flow, "Performance mode and the 30 Hz cap skip text glow and particle physics.");
+    if (r3.on) button(flow.ctx, ui, "opt:perf", flow.x, r3.y, flow.w, 32, "Performance mode: " + (game.settings.performanceMode ? "On" : "Off"), game.settings.performanceMode, false);
+    para(flow, "Performance mode and the 30 Hz cap skip particles and the meter wave.");
     section(flow, "LEDGER");
     var r4 = row(flow, 40);
     if (r4.on) button(flow.ctx, ui, ui.resetArm ? "reset:yes" : "reset", flow.x, r4.y, flow.w, 32, ui.resetArm ? "Confirm wipe" : "Reset save", false, false);
@@ -666,18 +635,17 @@
     var h = L.tabY - y;
     clearGlow(ctx);
     round(ctx, 10, y, L.w - 20, h, 10);
-    ctx.fillStyle = "rgba(15,15,15,0.85)";
+    ctx.fillStyle = "rgba(12,16,32,0.94)";
     ctx.fill();
-    ctx.strokeStyle = GOLD;
+    ctx.strokeStyle = "#2c3548";
     ctx.lineWidth = 1;
-    setGlow(ctx, GOLD);
     ctx.stroke();
     clearGlow(ctx);
     if (ease < 0.8) return;
     var rect = { x: 10, y: y, w: L.w - 20, h: h };
     if (ui.scroll < 0) ui.scroll = 0;
     var flow = openFlow(ctx, ui, rect, ui.scroll);
-    var titles = { job: "OCCUPATION", edu: "EDUCATION & MARKET", lab: "INVENTION LAB", scout: "SCOUTS & ASSETS", journal: "JOURNAL", settings: "SETTINGS" };
+    var titles = { job: "THE SHIFT", edu: "SCHOOL", lab: "THE LAB", scout: "THE CREW", journal: "PLAYBOOK", settings: "SETTINGS" };
     section(flow, titles[ui.menu] || "MENU");
     var close = row(flow, 34);
     if (close.on) button(ctx, ui, "close", flow.x + flow.w - 90, close.y, 90, 26, "Close", false, false);
@@ -698,12 +666,12 @@
     var ch = text.charAt(0);
     var low = text.toLowerCase();
     if (ch === "!" || low.indexOf("audit") >= 0 || low.indexOf("freeze") >= 0 || low.indexOf("discrep") >= 0 || low.indexOf("theft") >= 0 || low.indexOf("overheat") >= 0) {
-      return { tag: "[ALERT]", color: CRIMSON, alert: true };
+      return { tag: "ALERT", color: CRIMSON, bg: "#3a1820" };
     }
     if (ch === "+" || text.indexOf("$") >= 0 || low.indexOf("capital") >= 0 || low.indexOf("market") >= 0 || low.indexOf("wage") >= 0 || low.indexOf("buy") >= 0) {
-      return { tag: "[FINANCE]", color: GOLD, alert: false };
+      return { tag: "CASH", color: GOLD, bg: "#3a3018" };
     }
-    return { tag: "[TECH]", color: CYAN, alert: false };
+    return { tag: "LAB", color: CYAN, bg: "#143038" };
   }
 
   function drawLog(ctx, game, ui, L, now) {
@@ -711,24 +679,22 @@
     var y = L.header + 4;
     var w = L.w - 32;
     var h = L.a1 - y - 8;
-    var fHead = font(11, true);
+    var fHead = font(13, false);
     ctx.font = fHead;
-    ctx.fillStyle = CYAN;
-    setGlow(ctx, CYAN);
+    ctx.fillStyle = INK;
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
-    ctx.fillText("CORPORATE ACTIVITY", x, y);
+    ctx.fillText("Tonight", x, y);
     ctx.textAlign = "right";
-    ctx.fillStyle = GOLD;
-    setGlow(ctx, GOLD);
+    ctx.fillStyle = "#8b93a7";
+    ctx.font = font(12, false);
     ctx.fillText(Math.round(ui.fps || 0) + " fps", x + w, y);
-    clearGlow(ctx);
     ctx.textAlign = "left";
     var top = y + 16;
     var areaH = h - 16;
-    var lineH = 18;
-    var px = 13;
-    var f = font(px, true);
+    var lineH = 22;
+    var px = 14;
+    var f = font(px, false);
     ctx.font = f;
     var charW = measure(ctx, f, "0000000000") / 10;
     var maxChars = Math.max(8, Math.floor(w / charW));
@@ -745,7 +711,7 @@
     var count = end - start;
     var slide = (1 - easeOut(logAnim.t)) * lineH;
     var y0 = top + areaH - count * lineH + slide;
-    var tagFont = "700 " + px + "px " + MONO;
+    var chipFont = font(11, false);
     ctx.save();
     ctx.beginPath();
     ctx.rect(x, top, w, areaH);
@@ -761,21 +727,20 @@
       var meta = logTag(text);
       var body = text;
       if (body.charAt(0) === "!" || body.charAt(0) === "+" || body.charAt(0) === "*") body = body.substring(1).replace(/^\s+/, "");
-      ctx.font = tagFont;
-      var tagW = measure(ctx, tagFont, meta.tag + " ");
-      var tagAlpha = alpha;
-      if (meta.alert) tagAlpha = alpha * (0.35 + 0.65 * Math.abs(Math.sin((now || 0) * 0.014)));
-      ctx.globalAlpha = tagAlpha;
-      ctx.fillStyle = meta.color;
-      setGlow(ctx, meta.color);
-      ctx.fillText(meta.tag, x, ly);
-      clearGlow(ctx);
-      ctx.font = f;
+      ctx.font = chipFont;
+      var chipW = measure(ctx, chipFont, meta.tag) + 16;
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = "#d7e0dc";
-      var shown = clipText(ctx, f, body, Math.max(12, w - tagW));
+      round(ctx, x, ly, chipW, 16, 8);
+      ctx.fillStyle = meta.bg;
+      ctx.fill();
+      ctx.fillStyle = meta.color;
+      ctx.textBaseline = "top";
+      ctx.fillText(meta.tag, x + 8, ly + 2);
+      ctx.font = f;
+      ctx.fillStyle = INK;
+      var shown = clipText(ctx, f, body, Math.max(12, w - chipW - 10));
       if (shown.length > maxChars) shown = shown.substring(0, maxChars - 1) + "…";
-      ctx.fillText(shown, x + tagW, ly);
+      ctx.fillText(shown, x + chipW + 8, ly);
     }
     ctx.restore();
     ctx.globalAlpha = 1;
@@ -786,7 +751,6 @@
     if (fill < 0) fill = 0;
     if (fill > 1) fill = 1;
     var flat = !glowOk();
-    if (opts && opts.glitch && !flat && Math.sin(t * 0.23) > 0.72) x += 1;
     var r = h * 0.5;
     clearGlow(ctx);
     round(ctx, x, y, w, h, r);
@@ -797,42 +761,22 @@
       ctx.save();
       round(ctx, x, y, w, h, r);
       ctx.clip();
-      var amp = flat ? 0 : Math.min(2.8, h * 0.2);
-      var steps = amp > 0 ? 8 : 1;
-      var wave = function (harm, scale) {
-        ctx.beginPath();
-        var edge = x + fw;
-        ctx.moveTo(x, y + h);
-        ctx.lineTo(x, y);
-        var s;
-        for (s = 0; s <= steps; s++) {
-          var py = y + (h * s / steps);
-          var ox = amp * scale * Math.sin(py * 0.52 + t * 0.004 + phase + harm);
-          ox += amp * scale * 0.55 * Math.sin(py * 1.15 - t * 0.0026 + phase * 1.6);
-          ctx.lineTo(Math.min(x + w, edge + ox), py);
-        }
-        ctx.lineTo(x, y + h);
-        ctx.closePath();
-      };
-      wave(0, 1);
+      var amp = flat ? 0 : Math.min(2.4, h * 0.18);
+      var steps = amp > 0 ? 6 : 1;
+      ctx.beginPath();
+      var edge = x + fw;
+      ctx.moveTo(x, y + h);
+      ctx.lineTo(x, y);
+      var s;
+      for (s = 0; s <= steps; s++) {
+        var py = y + (h * s / steps);
+        var ox = amp * Math.sin(py * 0.5 + t * 0.003 + phase);
+        ctx.lineTo(Math.min(x + w, edge + ox), py);
+      }
+      ctx.lineTo(x, y + h);
+      ctx.closePath();
       ctx.fillStyle = color;
       ctx.fill();
-      if (!flat) {
-        ctx.globalAlpha = 0.38;
-        wave(1.4, 0.72);
-        ctx.fillStyle = "#ffffff";
-        ctx.fill();
-        ctx.globalAlpha = 1;
-      }
-      if (opts && opts.sparks && particlesOk() && fw > 10) {
-        var n;
-        ctx.fillStyle = "#fff6c2";
-        for (n = 0; n < 6; n++) {
-          var sx = x + 3 + ((n * 41 + t * 0.03) % (fw - 6));
-          var sy = y + h * (0.35 + 0.3 * Math.sin(t * 0.006 + n * 1.2));
-          ctx.fillRect(sx, sy, 1.5, 1.5);
-        }
-      }
       ctx.restore();
     }
     round(ctx, x, y, w, h, r);
@@ -841,15 +785,16 @@
     setGlow(ctx, color);
     ctx.stroke();
     clearGlow(ctx);
-    var f = font(h < 18 ? 10 : 11, true);
+    var f = font(h < 18 ? 11 : 12, false);
     ctx.font = f;
-    ctx.fillStyle = "#f4f7f6";
-    setGlow(ctx, color);
+    ctx.fillStyle = INK;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillText(clipText(ctx, f, label, w * 0.52), x + 10, y + h * 0.5);
     ctx.textAlign = "right";
-    ctx.fillText(clipText(ctx, f, valueText, w * 0.4), x + w - 10, y + h * 0.5);
+    var valueFont = valueText.indexOf("$") >= 0 ? font(h < 18 ? 11 : 12, true) : f;
+    ctx.font = valueFont;
+    ctx.fillText(clipText(ctx, valueFont, valueText, w * 0.4), x + w - 10, y + h * 0.5);
     clearGlow(ctx);
     ctx.textAlign = "left";
   }
@@ -864,43 +809,29 @@
     if (w < 20) return;
     var capitalFill = 1 - Math.exp(-game.player.capital / 500);
     var stressN = game.player.stress;
-    var stressColor = CRIMSON;
-    var glitch = false;
-    if (stressN > 50) {
-      glitch = true;
-      if (glowOk()) {
-        var spike = Math.abs(Math.sin(t * 0.021) * Math.sin(t * 0.067));
-        if (Math.sin(t * 0.11) > 0.88) spike = 1;
-        stressColor = mixHex(CRIMSON, "#ffd0dc", spike);
-      }
-    } else stressColor = mixHex(CYAN, CRIMSON, stressN / 50);
-    capsule(ctx, x, y, w, h, "CAPITAL", S.money(game.player.capital), capitalFill, GOLD, t, 0, { sparks: true });
-    capsule(ctx, x + (w + gap), y, w, h, "INTELLIGENCE", String(Math.round(game.player.intelligence)), game.player.intelligence / 100, CYAN, t, 1.7);
-    capsule(ctx, x + (w + gap) * 2, y, w, h, "STRESS", String(Math.round(stressN)), stressN / 100, stressColor, t, 3.1, { glitch: glitch });
-    capsule(ctx, x + (w + gap) * 3, y, w, h, "VISIBILITY", String(Math.round(game.player.visibility)), game.player.visibility / 100, GOLD, t, 4.6);
+    var stressColor = stressN > 50 ? CRIMSON : "#c47a4a";
+    capsule(ctx, x, y, w, h, "CASH", S.money(game.player.capital), capitalFill, GOLD, t, 0);
+    capsule(ctx, x + (w + gap), y, w, h, "BRAIN", String(Math.round(game.player.intelligence)), game.player.intelligence / 100, CYAN, t, 1.7);
+    capsule(ctx, x + (w + gap) * 2, y, w, h, "STRESS", String(Math.round(stressN)), stressN / 100, stressColor, t, 3.1);
+    capsule(ctx, x + (w + gap) * 3, y, w, h, "CLOUT", String(Math.round(game.player.visibility)), game.player.visibility / 100, CYAN, t, 4.6);
   }
 
   function drawHeader(ctx, game, ui, L) {
     var phase = S.phaseAt(game.lastReal || Date.now());
-    ctx.font = font(L.w < 720 ? 13 : 16, true);
-    ctx.fillStyle = "#f4f7f6";
-    setGlow(ctx, CYAN);
+    ctx.font = font(L.w < 720 ? 18 : 22, false);
+    ctx.fillStyle = INK;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText("VOIDLINE", 16, L.header * 0.42);
-    ctx.font = font(11, true);
+    ctx.fillText("Voidline", 16, L.header * 0.38);
+    ctx.font = font(11, false);
     ctx.fillStyle = GOLD;
-    setGlow(ctx, GOLD);
-    ctx.fillText("THE GALACTIC GRIND", 16, L.header * 0.78);
-    clearGlow(ctx);
-    var meta = "Rk " + game.player.level + "  XP " + Math.floor(game.player.xp) + "  VP " + game.player.vp + "  " + S.clockLabel(game.lastReal || Date.now()) + "  " + phase.name;
-    ctx.fillStyle = CYAN;
-    setGlow(ctx, CYAN);
-    ctx.font = font(12, true);
+    ctx.fillText("Galactic Grind", 16, L.header * 0.78);
+    var meta = "Rank " + game.player.level + "  ·  " + S.clockLabel(game.lastReal || Date.now()) + "  " + phase.name;
+    ctx.fillStyle = "#c5cad6";
+    ctx.font = font(13, false);
     var mw = measure(ctx, font(12, false), meta);
     var bx = L.w - 16 - 92 - 8 - 78;
     if (bx - mw > 200) ctx.fillText(meta, bx - mw - 12, L.header * 0.55);
-    clearGlow(ctx);
     button(ctx, ui, "hdr:journal", L.w - 16 - 92 - 8 - 78, (L.header - 28) / 2, 78, 28, "Journal", ui.menu === "journal", false);
     button(ctx, ui, "hdr:settings", L.w - 16 - 92, (L.header - 28) / 2, 92, 28, "Settings", ui.menu === "settings", false);
   }
@@ -908,25 +839,30 @@
   function drawDock(ctx, game, ui, L) {
     var y = L.b1 + 8;
     var bottom = L.tabY - 6;
-    if (ui.menuT < 0.5 && bottom > y + 20) {
-      ctx.font = font(13, true);
-      ctx.fillStyle = CYAN;
-      setGlow(ctx, CYAN);
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
+    if (ui.menuT < 0.5 && bottom > y + 36) {
       var slot = game.slots[0];
       var job = D.jobById[slot.jobId];
-      var emp = slot.employee ? slot.employee.name : "no hire";
-      var line = (job ? job.name : "Kiosk") + " · stock " + slot.stock + " · " + emp + " · " + S.money(game.player.capital);
-      ctx.fillText(clipText(ctx, font(13, true), line, L.w - 32), 16, y);
+      var emp = slot.employee ? slot.employee.name + " on register" : "Nobody on register";
+      var cardH = Math.min(78, bottom - y - 6);
       clearGlow(ctx);
-      ctx.font = font(12, true);
-      ctx.fillStyle = "#9eb0b4";
-      ctx.fillText("Open a tab. The ledger above records every cycle, hire, and audit.", 16, y + 22);
+      round(ctx, 16, y, L.w - 32, cardH, 14);
+      ctx.fillStyle = "#14182a";
+      ctx.fill();
+      ctx.strokeStyle = "#2c3548";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.font = font(cardH < 64 ? 16 : 20, false);
+      ctx.fillStyle = INK;
+      ctx.fillText(clipText(ctx, font(cardH < 64 ? 16 : 20, false), job ? job.name : "Kiosk", L.w - 240), 32, y + cardH * 0.34);
+      ctx.font = font(13, false);
+      ctx.fillStyle = "#b7c0d0";
+      ctx.fillText(clipText(ctx, font(13, false), emp + "  ·  stock " + slot.stock, L.w - 240), 32, y + cardH * 0.68);
+      var bw = Math.min(168, (L.w - 64) * 0.34);
+      button(ctx, ui, "shift", L.w - 32 - bw, y + (cardH - 42) * 0.5, bw, 42, "Run shift", true, false);
     }
-    var labels = L.w < 860
-      ? [["Occupation"], ["Education", "& Market"], ["Invention", "Lab"], ["Scouts", "& Assets"]]
-      : [["Occupation"], ["Education & Market"], ["Invention Lab"], ["Scouts & Assets"]];
+    var labels = [["Shift"], ["School"], ["Lab"], ["Scouts"]];
     var ids = ["job", "edu", "lab", "scout"];
     var gap = 8;
     var bw = (L.w - 32 - gap * 3) / 4;
@@ -950,20 +886,14 @@
       }
       clearGlow(ctx);
       round(ctx, x, ty, tw, th, 8);
-      ctx.fillStyle = "rgba(15,15,15,0.85)";
+      ctx.fillStyle = on ? "#241c10" : "#171b28";
       ctx.fill();
-      ctx.strokeStyle = GOLD;
+      ctx.strokeStyle = (hover || on) ? GOLD : "#2c3548";
       ctx.globalAlpha = 1;
       ctx.lineWidth = 1;
-      if (hover && glowOk()) {
-        ctx.shadowColor = GOLD;
-        ctx.shadowBlur = 6;
-      }
       ctx.stroke();
-      clearGlow(ctx);
-      ctx.font = font(L.w < 860 ? 11 : 13, true);
-      ctx.fillStyle = "#f4f7f6";
-      setGlow(ctx, GOLD);
+      ctx.font = font(L.w < 860 ? 13 : 15, false);
+      ctx.fillStyle = (hover || on) ? GOLD : INK;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       var lines = labels[i];
@@ -978,19 +908,8 @@
     ctx.globalAlpha = 1;
   }
 
-  function drawGrid(ctx, w, h) {
-    var step = 32;
-    ctx.fillStyle = "rgba(0, 255, 204, 0.02)";
-    var x;
-    var y;
-    for (y = step; y < h; y += step) {
-      for (x = step; x < w; x += step) ctx.fillRect(x, y, 1, 1);
-    }
-  }
-
   function drawRules(ctx, L) {
-    ctx.strokeStyle = "rgba(255,215,0,0.45)";
-    setGlow(ctx, GOLD);
+    ctx.strokeStyle = "#2c3548";
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(12, L.a1);
@@ -1068,7 +987,7 @@
     ctx.translate(p.x, p.y);
     ctx.rotate(p.rot);
     ctx.fillStyle = p.color;
-    setGlow(ctx, p.color);
+    ctx.shadowBlur = 0;
     if (p.kind === 0) ctx.fillRect(-2.2, -2.2, 4.4, 4.4);
     else if (p.kind === 1) {
       ctx.beginPath();
@@ -1125,7 +1044,6 @@
     ui.hits.length = 0;
     var bg = ensurePlate(w, h, !!game.settings.performanceMode, dpr);
     ctx.drawImage(bg, 0, 0, w, h);
-    drawGrid(ctx, w, h);
     var L = layout(w, h);
     ui.L = L;
     drawLog(ctx, game, ui, L, now);
