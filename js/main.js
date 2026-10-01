@@ -227,8 +227,8 @@
     if (e.key === "Escape") { ui.menu = null; return; }
     if (e.key === "1") toggleMenu("job");
     else if (e.key === "2") toggleMenu("edu");
-    else if (e.key === "3") toggleMenu("lab");
-    else if (e.key === "4") toggleMenu("scout");
+    else if (e.key === "3") toggleMenu("scout");
+    else if (e.key === "4") toggleMenu("lab");
     else if (ui.selected != null && e.key >= "0" && e.key <= "9") {
       if (ui.offer.length < 5) ui.offer += e.key;
     } else if (ui.selected != null && e.key === "Backspace") {
