@@ -155,14 +155,42 @@
       g.fillStyle = wash;
       g.fillRect(0, 0, w, h);
     }
+    var si;
+    g.fillStyle = "#f4efe4";
+    for (si = 0; si < 42; si++) {
+      var sx = ((si * 97) % 1000) / 1000 * w;
+      var sy = ((si * 53) % 520) / 520 * h * 0.42;
+      g.globalAlpha = 0.28 + (si % 5) * 0.1;
+      g.beginPath();
+      g.arc(sx, sy, (si % 3) + 1, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.globalAlpha = 1;
+    var moon = Math.min(w, h) * 0.05;
+    g.fillStyle = "#f6e7b8";
+    g.beginPath();
+    g.arc(w * 0.78, h * 0.1, moon, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = NAVY;
+    g.beginPath();
+    g.arc(w * 0.78 + moon * 0.45, h * 0.09, moon * 0.82, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = "#171c30";
+    g.fillRect(0, h * 0.78, w, h * 0.22);
+    g.fillStyle = "#222844";
+    g.fillRect(w * 0.06, h * 0.64, w * 0.12, h * 0.16);
+    g.fillStyle = GOLD;
+    g.fillRect(w * 0.08, h * 0.68, w * 0.03, h * 0.04);
+    g.fillStyle = "#2a3358";
+    g.fillRect(w * 0.82, h * 0.6, w * 0.1, h * 0.2);
     plate = c;
     plateKey = key;
     return plate;
   }
 
   function layout(w, h) {
-    var header = h < 620 ? 96 : 112;
-    var tabH = h < 620 ? 68 : 76;
+    var header = h < 620 ? 118 : 134;
+    var tabH = h < 620 ? 82 : 92;
     var storyBot = h - tabH;
     return {
       w: w,
@@ -180,6 +208,151 @@
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(x, y, w, h, r);
     else ctx.rect(x, y, w, h);
+  }
+
+  function icon(ctx, kind, cx, cy, s, color) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.fillStyle = color;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(1.6, s * 0.1);
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    var u = s * 0.46;
+    if (kind === "coin") {
+      ctx.beginPath();
+      ctx.arc(0, 0, u, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#3a2a08";
+      ctx.font = "700 " + Math.max(10, s * 0.5) + "px " + MONO;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("$", 0, 1);
+    } else if (kind === "brain") {
+      ctx.beginPath();
+      ctx.arc(-u * 0.32, 0, u * 0.62, 0, Math.PI * 2);
+      ctx.arc(u * 0.32, -u * 0.06, u * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(12,16,32,0.35)";
+      ctx.fillRect(-u * 0.08, -u * 0.7, u * 0.16, u * 1.4);
+    } else if (kind === "flame") {
+      ctx.beginPath();
+      ctx.moveTo(0, -u);
+      ctx.bezierCurveTo(u * 0.95, -u * 0.15, u * 0.85, u * 0.55, 0, u);
+      ctx.bezierCurveTo(-u * 0.85, u * 0.55, -u * 0.95, -u * 0.15, 0, -u);
+      ctx.fill();
+      ctx.fillStyle = "#fff3c4";
+      ctx.beginPath();
+      ctx.moveTo(0, -u * 0.15);
+      ctx.bezierCurveTo(u * 0.35, u * 0.15, u * 0.28, u * 0.55, 0, u * 0.72);
+      ctx.bezierCurveTo(-u * 0.28, u * 0.55, -u * 0.35, u * 0.15, 0, -u * 0.15);
+      ctx.fill();
+    } else if (kind === "star") {
+      var i;
+      var a;
+      ctx.beginPath();
+      for (i = 0; i < 5; i++) {
+        a = -Math.PI / 2 + i * Math.PI * 2 / 5;
+        var px = Math.cos(a) * u;
+        var py = Math.sin(a) * u;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+        a += Math.PI / 5;
+        ctx.lineTo(Math.cos(a) * u * 0.42, Math.sin(a) * u * 0.42);
+      }
+      ctx.closePath();
+      ctx.fill();
+    } else if (kind === "shop") {
+      ctx.beginPath();
+      ctx.moveTo(-u * 1.05, -u * 0.05);
+      ctx.lineTo(0, -u);
+      ctx.lineTo(u * 1.05, -u * 0.05);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillRect(-u * 0.82, -u * 0.05, u * 1.64, u * 1.05);
+      ctx.fillStyle = "#fffdf8";
+      ctx.fillRect(-u * 0.22, u * 0.22, u * 0.44, u * 0.78);
+    } else if (kind === "cap") {
+      ctx.beginPath();
+      ctx.moveTo(-u * 0.85, u * 0.05);
+      ctx.lineTo(0, -u * 0.85);
+      ctx.lineTo(u * 0.85, u * 0.05);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillRect(-u * 1.15, u * 0.05, u * 2.3, u * 0.28);
+      ctx.beginPath();
+      ctx.moveTo(u * 0.7, -u * 0.15);
+      ctx.lineTo(u * 1.15, u * 0.35);
+      ctx.lineTo(u * 0.55, u * 0.15);
+      ctx.fill();
+    } else if (kind === "people") {
+      ctx.beginPath();
+      ctx.arc(-u * 0.32, -u * 0.35, u * 0.38, 0, Math.PI * 2);
+      ctx.arc(u * 0.38, -u * 0.22, u * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(-u * 0.32, u * 0.55, u * 0.62, Math.PI, 0);
+      ctx.arc(u * 0.42, u * 0.62, u * 0.5, Math.PI, 0);
+      ctx.fill();
+    } else if (kind === "box") {
+      ctx.fillRect(-u * 0.85, -u * 0.15, u * 1.7, u * 1.05);
+      ctx.fillRect(-u * 0.95, -u * 0.55, u * 1.9, u * 0.38);
+      ctx.fillStyle = "#fffdf8";
+      ctx.fillRect(-u * 0.12, -u * 0.55, u * 0.24, u * 0.38);
+    } else if (kind === "book") {
+      ctx.fillRect(-u * 0.8, -u * 0.7, u * 1.55, u * 1.45);
+      ctx.fillStyle = "#fffdf8";
+      ctx.fillRect(-u * 0.08, -u * 0.55, u * 0.12, u * 1.15);
+    } else if (kind === "gear") {
+      var t;
+      var a0;
+      ctx.beginPath();
+      for (t = 0; t < 8; t++) {
+        a0 = t * Math.PI / 4 - 0.2;
+        ctx.lineTo(Math.cos(a0) * u * 0.55, Math.sin(a0) * u * 0.55);
+        ctx.lineTo(Math.cos(a0 + 0.22) * u, Math.sin(a0 + 0.22) * u);
+        ctx.lineTo(Math.cos(a0 + 0.5) * u, Math.sin(a0 + 0.5) * u);
+        ctx.lineTo(Math.cos(a0 + 0.72) * u * 0.55, Math.sin(a0 + 0.72) * u * 0.55);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.beginPath();
+      ctx.arc(0, 0, u * 0.22, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+    } else if (kind === "alert") {
+      ctx.beginPath();
+      ctx.moveTo(0, -u);
+      ctx.lineTo(u * 0.95, u * 0.8);
+      ctx.lineTo(-u * 0.95, u * 0.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#fffdf8";
+      ctx.fillRect(-u * 0.1, -u * 0.35, u * 0.2, u * 0.55);
+      ctx.beginPath();
+      ctx.arc(0, u * 0.42, u * 0.12, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (kind === "rest") {
+      ctx.fillRect(-u * 0.55, -u * 0.15, u * 1.15, u * 0.85);
+      ctx.strokeRect(-u * 0.55, -u * 0.15, u * 1.15, u * 0.85);
+      ctx.beginPath();
+      ctx.arc(u * 0.55, -u * 0.35, u * 0.28, Math.PI, 0);
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(0, 0, u * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function badge(ctx, kind, cx, cy, d, bg, fg) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, d * 0.5, 0, Math.PI * 2);
+    ctx.fillStyle = bg;
+    ctx.fill();
+    icon(ctx, kind, cx, cy, d * 0.62, fg);
   }
 
   function pushHit(ui, id, x, y, w, h) {
@@ -248,16 +421,50 @@
     return { y: screen, h: h, on: on };
   }
 
+  function sectionIcon(text) {
+    var map = {
+      "WORK": "shop",
+      "SCHOOL": "cap",
+      "STUFF": "box",
+      "PEOPLE": "people",
+      "THE BOOK": "book",
+      "SETTINGS": "gear",
+      "YOUR SHOPS": "shop",
+      "RIGHT NOW": "flame",
+      "JOBS YOU CAN OPEN": "shop",
+      "WHO'S ASKING": "people",
+      "HOW SHARP YOU ARE": "brain",
+      "CLASSES": "cap",
+      "BUY STUFF": "coin",
+      "POINTS": "star",
+      "CLOUT": "star",
+      "MACHINES": "gear",
+      "MIX STUFF": "box",
+      "SEND SOMEONE": "people",
+      "OUT RIGHT NOW": "people",
+      "WHAT YOU BUILT": "box",
+      "HOW IT RUNS": "gear",
+      "START OVER": "alert"
+    };
+    return map[text] || "";
+  }
+
   function section(flow, text) {
-    var r = row(flow, 26);
+    var r = row(flow, 30);
     if (!r.on) return;
     var ctx = flow.ctx;
+    var kind = sectionIcon(text);
+    var tx = flow.x;
+    if (kind) {
+      badge(ctx, kind, flow.x + 11, r.y + 15, 22, paperOn ? "#fffdf8" : "#241c10", paperOn ? "#8a5a12" : GOLD);
+      tx += 28;
+    }
     var f = font(12, false);
     ctx.font = f;
     ctx.fillStyle = paperOn ? "#8a5a12" : GOLD;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(text, flow.x, r.y + 13);
+    ctx.fillText(text, tx, r.y + 15);
     clearGlow(ctx);
   }
 
@@ -994,10 +1201,47 @@
     ctx.fillStyle = DARK;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(clipText(ctx, f, label, w - 20), cx, cy);
+    var kind = actionIcon(id);
+    var shift = w > 160 ? 16 : 0;
+    if (shift) icon(ctx, kind, x + 28, cy, h < 48 ? 18 : 22, DARK);
+    ctx.fillText(clipText(ctx, f, label, w - 24 - shift), cx + shift * 0.35, cy);
     ctx.restore();
     ctx.textAlign = "left";
     pushHit(ui, id, x, y, w, h);
+  }
+
+  function actionIcon(id) {
+    if (!id) return "coin";
+    if (id === "shift") return "shop";
+    if (id === "rest") return "rest";
+    if (id.indexOf("stock:") === 0) return "box";
+    if (id.indexOf("job") >= 0 || id === "applicants") return "people";
+    if (id.indexOf("edu") >= 0) return "cap";
+    if (id.indexOf("scout") >= 0) return "people";
+    if (id.indexOf("lab") >= 0 || id.indexOf("journal") >= 0) return "book";
+    if (id === "synth" || id.indexOf("craft") === 0) return "box";
+    return "coin";
+  }
+
+  function beatIcon(beat) {
+    if (!beat) return "coin";
+    if (beat.action === "stock:0") return "box";
+    if (beat.action === "rest") return "rest";
+    if (beat.action && beat.action.indexOf("edu") >= 0) return "cap";
+    if (beat.action && beat.action.indexOf("scout") >= 0) return "people";
+    if (beat.action && beat.action.indexOf("job") >= 0) return "people";
+    if (beat.action && (beat.action.indexOf("lab") >= 0 || beat.action.indexOf("journal") >= 0)) return "book";
+    if (beat.rail === CRIMSON) return "alert";
+    if (beat.rail === CYAN) return "star";
+    return "coin";
+  }
+
+  function beatStamp(beat) {
+    if (!beat) return "RUSH";
+    if (beat.action === "stock:0") return "RESTOCK";
+    if (beat.rail === CRIMSON) return "TROUBLE";
+    if (beat.rail === CYAN) return "MOMENT";
+    return "RUSH";
   }
 
   function drawFace(ctx, cx, cy, r, mood) {
@@ -1088,26 +1332,30 @@
     return "Year " + game.player.level + "  ·  " + (names[phase.id] || phase.name);
   }
 
-  function statTick(ctx, x, y, w, label, value, fill, color) {
+  function statTick(ctx, x, y, w, label, value, fill, color, kind) {
     if (fill < 0) fill = 0;
     if (fill > 1) fill = 1;
-    var f = font(11, false);
+    badge(ctx, kind, x + 11, y + 11, 22, "#241c10", color);
+    var f = font(12, false);
     ctx.font = f;
-    ctx.fillStyle = "#b7c0d0";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillText(label, x, y);
-    ctx.textAlign = "right";
     ctx.fillStyle = INK;
-    ctx.fillText(String(Math.round(value)), x + w, y);
     ctx.textAlign = "left";
-    round(ctx, x, y + 14, w, 7, 3);
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, x + 26, y + 11);
+    ctx.textAlign = "right";
+    ctx.fillStyle = color;
+    ctx.fillText(String(Math.round(value)), x + w, y + 11);
+    ctx.textAlign = "left";
+    round(ctx, x, y + 24, w, 8, 4);
     ctx.fillStyle = "#1a2030";
     ctx.fill();
     var fw = w * fill;
     if (fw > 2) {
-      round(ctx, x, y + 14, fw, 7, 3);
+      round(ctx, x, y + 24, fw, 8, 4);
       ctx.fillStyle = color;
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.28)";
+      round(ctx, x, y + 25, fw, 3, 2);
       ctx.fill();
     }
   }
@@ -1134,7 +1382,7 @@
     var strips = 0;
     if (newest >= 1 && bot - top > 280) strips = 1;
     if (newest >= 2 && bot - top > 360) strips = 2;
-    var stripH = 34;
+    var stripH = 40;
     var gap = 8;
     var sy = top;
     var s;
@@ -1144,13 +1392,12 @@
       round(ctx, x, sy, w, stripH, 12);
       ctx.fillStyle = s === 2 ? "#d9d0c0" : "#efe6d4";
       ctx.fill();
-      ctx.fillStyle = oldBeat.rail;
-      ctx.fillRect(x + 8, sy + 8, 5, stripH - 16);
+      badge(ctx, beatIcon(oldBeat), x + 18, sy + stripH * 0.5, 22, oldBeat.rail, "#fffdf8");
       ctx.font = font(14, false);
       ctx.fillStyle = DARK;
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
-      ctx.fillText(clipText(ctx, font(14, false), oldBeat.line, w - 36), x + 22, sy + stripH * 0.5);
+      ctx.fillText(clipText(ctx, font(14, false), oldBeat.line, w - 52), x + 36, sy + stripH * 0.5);
       sy += stripH + gap;
     }
     ctx.globalAlpha = 1;
@@ -1167,6 +1414,7 @@
     var sx = cx - sw * 0.5;
     var scy = cy - sh * 0.5;
     var hero = storyBeat(newest >= 0 ? (S.logLine(game, newest) || "") : "", game);
+    var band = Math.min(76, Math.max(58, sh * 0.18));
     ctx.save();
     clearGlow(ctx);
     round(ctx, sx, scy, sw, sh, 22);
@@ -1176,17 +1424,26 @@
     round(ctx, sx, scy, sw, sh, 22);
     ctx.clip();
     ctx.fillStyle = hero.rail;
-    ctx.fillRect(sx, scy, 8, sh);
+    ctx.fillRect(sx, scy, sw, band);
+    ctx.fillStyle = "rgba(255,255,255,0.16)";
+    ctx.fillRect(sx, scy, sw, band * 0.42);
     ctx.restore();
+    var stampInk = hero.rail === GOLD ? DARK : "#fffdf8";
+    badge(ctx, beatIcon(hero), sx + 40, scy + band * 0.5, 46, "#fffdf8", hero.rail);
+    ctx.font = font(L.w < 720 ? 18 : 22, false);
+    ctx.fillStyle = stampInk;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(beatStamp(hero), sx + 72, scy + band * 0.5);
     var textX = sx + 24;
     var textW = sw - 40;
     var f = font(L.w < 720 ? 22 : 28, false);
-    var lines = wrapLines(ctx, f, hero.line, textW, 4);
+    var lines = wrapLines(ctx, f, hero.line, textW, 3);
     ctx.font = f;
     ctx.fillStyle = DARK;
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
-    var ly = scy + 28;
+    var ly = scy + band + 18;
     var li;
     for (li = 0; li < lines.length; li++) {
       ctx.fillText(lines[li], textX, ly);
@@ -1201,6 +1458,34 @@
     ctx.fillStyle = "#6b6258";
     ctx.fillText(clipText(ctx, sceneFont, scene, textW), textX, ly + 6);
     ly += 28;
+    if (sh > 250 && slot0) {
+      var chipW = (textW - 16) / 3;
+      var chipY = ly + 4;
+      var whoShort = slot0.employee ? slot0.employee.name.split(" ")[0] : "Solo";
+      var stressN = Math.round(game.player.stress);
+      var chips = [
+        ["box", "Stock " + slot0.stock, "#e08a3c"],
+        ["people", whoShort, "#e2569a"],
+        ["flame", "Stress " + stressN, stressN > 50 ? CRIMSON : "#c47a4a"]
+      ];
+      var ci;
+      for (ci = 0; ci < chips.length; ci++) {
+        var chx = textX + ci * (chipW + 8);
+        round(ctx, chx, chipY, chipW, 32, 16);
+        ctx.fillStyle = "#fffdf8";
+        ctx.fill();
+        ctx.strokeStyle = chips[ci][2];
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        icon(ctx, chips[ci][0], chx + 16, chipY + 16, 16, chips[ci][2]);
+        ctx.font = font(12, false);
+        ctx.fillStyle = DARK;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText(clipText(ctx, font(12, false), chips[ci][1], chipW - 36), chx + 30, chipY + 16);
+      }
+      ly = chipY + 40;
+    }
     var showAlt = hero.alt && sh > 210;
     var bh = sh < 200 ? 46 : 54;
     var by = scy + sh - 18 - bh;
@@ -1286,78 +1571,95 @@
   }
 
   function drawHeader(ctx, game, ui, L, now) {
-    var r = L.header < 104 ? 22 : 26;
-    var faceX = 16 + r;
-    var faceY = 10 + r;
+    var r = L.w < 520 ? 24 : 28;
+    var faceX = 18 + r;
+    var faceY = 8 + r;
     var mood = 0;
     if (now < smileUntil) mood = 1;
     else if (game.player.stress > 50) mood = 2;
+    ctx.beginPath();
+    ctx.arc(faceX, faceY, r + 4, 0, Math.PI * 2);
+    ctx.fillStyle = GOLD;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(faceX, faceY, r + 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#2a2416";
+    ctx.fill();
     drawFace(ctx, faceX, faceY, r, mood);
-    var textX = faceX + r + 12;
+    if (mood === 1) badge(ctx, "coin", faceX + r * 0.7, faceY + r * 0.65, 16, GOLD, DARK);
+    else if (mood === 2) badge(ctx, "flame", faceX + r * 0.7, faceY + r * 0.65, 16, CRIMSON, "#fffdf8");
+    var textX = faceX + r + 14;
     var cash = S.money(game.player.capital);
-    var cashSize = L.w < 520 ? 26 : 34;
+    var cashSize = L.w < 520 ? 22 : 28;
     var cashFont = font(cashSize, true);
     var cashW = measure(ctx, cashFont, cash);
-    var gear = 36;
+    var gear = 40;
     var bookX = L.w - 16 - gear - 8 - gear;
-    var cashX = bookX - 12 - cashW;
-    if (cashX < textX + 70) cashX = textX;
+    var pillW = cashW + 52;
+    var pillH = 40;
+    var pillX = bookX - 12 - pillW;
+    if (pillX < textX + 80) pillX = textX;
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
     ctx.font = font(L.w < 720 ? 20 : 24, false);
     ctx.fillStyle = INK;
-    ctx.fillText("You", textX, 8);
+    ctx.fillText("You", textX, 10);
     var yearFont = font(13, false);
     ctx.font = yearFont;
-    ctx.fillStyle = "#b7c0d0";
-    var yearMax = Math.max(48, cashX - textX - 8);
-    ctx.fillText(clipText(ctx, yearFont, yearBlurb(game, now), yearMax), textX, L.header < 104 ? 32 : 36);
+    ctx.fillStyle = "#d5deea";
+    var yearMax = Math.max(48, pillX - textX - 8);
+    ctx.fillText(clipText(ctx, yearFont, yearBlurb(game, now), yearMax), textX, 36);
+    var pillY = faceY - pillH * 0.5;
+    clearGlow(ctx);
+    round(ctx, pillX, pillY, pillW, pillH, 20);
+    ctx.fillStyle = "#2a2416";
+    ctx.fill();
+    ctx.strokeStyle = GOLD;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    icon(ctx, "coin", pillX + 20, faceY, 22, GOLD);
     ctx.font = cashFont;
     ctx.fillStyle = GOLD;
     ctx.textBaseline = "middle";
-    ctx.fillText(cash, cashX, faceY);
-    noteCash(game, now, cashX + cashW * 0.5, faceY);
-    if (cashX > textX + 120) {
-      ctx.font = font(11, false);
-      ctx.fillStyle = "#8b93a7";
-      ctx.textAlign = "right";
-      ctx.textBaseline = "top";
-      ctx.fillText(String(Math.round(ui.fps || 0)), cashX - 8, 6);
-    }
-    var tickY = L.header - 28;
-    var gap = 8;
-    var tickW = Math.min(120, (bookX - 16 - gap * 2) / 3);
+    ctx.textAlign = "left";
+    ctx.fillText(cash, pillX + 36, faceY);
+    noteCash(game, now, pillX + pillW * 0.55, faceY);
+    ctx.font = font(11, false);
+    ctx.fillStyle = "#8b93a7";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "top";
+    ctx.fillText(String(Math.round(ui.fps || 0)), pillX - 6, 8);
+    var tickY = L.header - 40;
+    var gap = 10;
+    var tickW = Math.min(160, (L.w - 32 - gap * 2) / 3);
     var stressN = game.player.stress;
-    statTick(ctx, 16, tickY, tickW, "Brain", game.player.intelligence, game.player.intelligence / 100, CYAN);
-    statTick(ctx, 16 + tickW + gap, tickY, tickW, "Stress", stressN, stressN / 100, stressN > 50 ? CRIMSON : "#c47a4a");
-    statTick(ctx, 16 + (tickW + gap) * 2, tickY, tickW, "Clout", game.player.visibility, game.player.visibility / 100, CYAN);
-    roundButton(ctx, ui, "hdr:journal", bookX, 8, gear, "Book", ui.menu === "journal");
-    roundButton(ctx, ui, "hdr:settings", L.w - 16 - gear, 8, gear, "Set", ui.menu === "settings");
+    statTick(ctx, 16, tickY, tickW, "Brain", game.player.intelligence, game.player.intelligence / 100, CYAN, "brain");
+    statTick(ctx, 16 + tickW + gap, tickY, tickW, "Stress", stressN, stressN / 100, stressN > 50 ? CRIMSON : "#e08a3c", "flame");
+    statTick(ctx, 16 + (tickW + gap) * 2, tickY, tickW, "Clout", game.player.visibility, game.player.visibility / 100, "#7ec8e3", "star");
+    roundButton(ctx, ui, "hdr:journal", bookX, 8, gear, "book", ui.menu === "journal");
+    roundButton(ctx, ui, "hdr:settings", L.w - 16 - gear, 8, gear, "gear", ui.menu === "settings");
     ctx.textAlign = "left";
   }
 
-  function roundButton(ctx, ui, id, x, y, s, label, on) {
+  function roundButton(ctx, ui, id, x, y, s, kind, on) {
     var hover = ui.hover === id;
     clearGlow(ctx);
     ctx.beginPath();
     ctx.arc(x + s * 0.5, y + s * 0.5, s * 0.5, 0, Math.PI * 2);
     ctx.fillStyle = on ? GOLD : hover ? "#243044" : "#171b28";
     ctx.fill();
-    ctx.strokeStyle = (on || hover) ? GOLD : "#2c3548";
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = (on || hover) ? GOLD : "#3a4460";
+    ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.font = font(11, false);
-    ctx.fillStyle = on ? DARK : INK;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(label, x + s * 0.5, y + s * 0.5);
+    icon(ctx, kind, x + s * 0.5, y + s * 0.5, s * 0.58, on ? DARK : GOLD);
     pushHit(ui, id, x, y, s, s);
-    ctx.textAlign = "left";
   }
 
   function drawDock(ctx, game, ui, L) {
     var labels = ["Work", "School", "People", "Stuff"];
     var ids = ["job", "edu", "scout", "lab"];
+    var kinds = ["shop", "cap", "people", "box"];
+    var colors = [GOLD, "#7ec8e3", "#ff7ab6", "#e08a3c"];
     var gap = 8;
     var bw = (L.w - 32 - gap * 3) / 4;
     var i;
@@ -1386,11 +1688,12 @@
       ctx.globalAlpha = 1;
       ctx.lineWidth = on ? 0 : 1;
       if (!on) ctx.stroke();
-      ctx.font = font(L.w < 860 ? 14 : 16, false);
+      icon(ctx, kinds[i], cx, cy - 11, 22, on ? DARK : colors[i]);
+      ctx.font = font(L.w < 860 ? 13 : 14, false);
       ctx.fillStyle = on ? DARK : INK;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(labels[i], cx, cy);
+      ctx.fillText(labels[i], cx, cy + 12);
       clearGlow(ctx);
       ctx.restore();
       pushHit(ui, id, x, ty, tw, th);
