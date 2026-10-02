@@ -2246,22 +2246,22 @@
     var upFoot = y + h * 0.3;
     if (spec.rewind === 2) {
       ctx.fillStyle = PAPER;
-      ctx.fillRect(x + w * 0.3, y + h * 0.66, 64, 22);
+      ctx.fillRect(x + w * 0.52, y + h * 0.46, 72, 22);
       ctx.strokeStyle = INK;
-      ctx.strokeRect(x + w * 0.3, y + h * 0.66, 64, 22);
+      ctx.strokeRect(x + w * 0.52, y + h * 0.46, 72, 22);
       ctx.fillStyle = BRICK;
       ctx.font = font(12, false, 700, true);
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("SHORT", x + w * 0.3 + 32, y + h * 0.66 + 11);
+      ctx.fillText("SHORT", x + w * 0.52 + 36, y + h * 0.46 + 11);
       ctx.textAlign = "left";
     }
     if (spec.rewind === 1) {
       var slide = ((now || 0) / 280) % 1;
       var i;
       for (i = 0; i < 3; i++) {
-        var px = x + w * (0.42 + slide * 0.28) + i * 16;
-        drawFigure(ctx, px, y + h * 0.78, h * 0.1, "walker");
+        var px = x + w * (0.62 + slide * 0.18) + i * 18;
+        drawFigure(ctx, px, y + h * 0.58, h * 0.12, "walker");
       }
     }
     if (places.sera === "counter" && who !== "sera") drawFigure(ctx, counterX, counterFoot, h * 0.16, "sera");
