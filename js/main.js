@@ -75,6 +75,9 @@
     if (id === "close") { ui.menu = null; return; }
     if (id === "shift") { S.workShift(game, now); return; }
     if (id === "hobby") { S.workHobby(game, now); return; }
+    if (id.indexOf("hobby:") === 0) { S.workHobby(game, now, id.substring(6)); return; }
+    if (id === "room") { S.buyRoom(game); return; }
+    if (id.indexOf("upgrade:") === 0) { S.upgradeRoom(game, id.substring(8)); return; }
     if (id === "skim") { S.skim(game, now); return; }
     if (id === "score") { S.score(game, now); return; }
     if (id === "rest") { S.rest(game, now); return; }

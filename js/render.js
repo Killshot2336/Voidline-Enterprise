@@ -438,6 +438,8 @@
       "THE BOOK": "book",
       "SETTINGS": "gear",
       "YOUR SHOPS": "shop",
+      "YOUR CORNER": "shop",
+      "HOBBIES": "star",
       "RIGHT NOW": "flame",
       "JOBS YOU CAN OPEN": "shop",
       "WHO'S ASKING": "people",
@@ -518,6 +520,36 @@
   }
 
   function drawOccupation(flow, game, ui) {
+    var skills = game.player.skills || { work: 0, mind: 0, hustle: 0, clout: 0 };
+    section(flow, "YOUR CORNER");
+    para(flow, "Work " + skills.work + " · Mind " + skills.mind + " · Hustle " + skills.hustle + " · Clout " + skills.clout);
+    var place = game.player.place || { owned: false, lights: 0, sign: 0, counter: 0 };
+    if (!place.owned) {
+      para(flow, "A bare corner rents for " + S.money(D.ROOM.rent) + ".");
+      var rentRow = row(flow, 40);
+      if (rentRow.on) button(flow.ctx, ui, "room", flow.x, rentRow.y, flow.w, 32, "Rent the corner", false, game.player.capital < D.ROOM.rent);
+    } else {
+      para(flow, (place.lights ? "Warm lights" : "Bare bulb") + " · " + (place.sign ? "sign up" : "no sign") + " · " + (place.counter ? "real counter" : "folding table") + ".");
+      var parts = [["lights", "Warm lights"], ["sign", "Paint a sign"], ["counter", "Real counter"]];
+      var pi;
+      for (pi = 0; pi < parts.length; pi++) {
+        var part = parts[pi][0];
+        var done = !!place[part];
+        var ur = row(flow, 36);
+        if (!ur.on) continue;
+        button(flow.ctx, ui, "upgrade:" + part, flow.x, ur.y, flow.w, 30, done ? parts[pi][1] + "  in" : parts[pi][1] + "  " + S.money(D.ROOM[part]), done, done || game.player.capital < D.ROOM[part]);
+      }
+    }
+    section(flow, "HOBBIES");
+    var hi;
+    for (hi = 0; hi < D.HOBBIES.length; hi++) {
+      var hobby = D.HOBBIES[hi];
+      var openH = S.hobbyOpen(game, hobby);
+      var hr = row(flow, 36);
+      if (!hr.on) continue;
+      button(flow.ctx, ui, "hobby:" + hobby.id, flow.x, hr.y, flow.w, 30, hobby.name + (openH ? "  " + S.money(hobby.pay) : "  needs " + hobby.needSkill + " " + hobby.need), false, !openH);
+    }
+
     section(flow, "YOUR SHOPS");
     para(flow, "A shift turns stock into cash. A shady hire can walk off with the shelf.");
     var i;
@@ -583,7 +615,9 @@
       flow.ctx.font = font(13, false);
       flow.ctx.textAlign = "left";
       flow.ctx.textBaseline = "middle";
-      var need = "Year " + spec.level + (spec.node ? " · " + D.nodeById[spec.node].name : "");
+      var need = "Year " + spec.level;
+      if (spec.skill) need += " · " + spec.skill + " " + spec.skillNeed;
+      else if (spec.node) need += " · " + D.nodeById[spec.node].name;
       flow.ctx.fillStyle = open ? titleInk() : "#8a8478";
       flow.ctx.fillText(clipText(flow.ctx, font(13, false), spec.name + "  ·  " + need, flow.w - 120), flow.x, jr.y + 16);
       button(flow.ctx, ui, "apply:" + (ui.focusSlot || 0) + ":" + spec.id, flow.x + flow.w - 108, jr.y + 2, 108, 28, current ? "Active" : "Apply", current, !open || current);
@@ -1017,6 +1051,37 @@
       beat.stamp = "RAISE";
       return beat;
     }
+    if (low.indexOf("hobby open:") >= 0) {
+      var hid = raw.match(/hobby open:\s*([a-z_]+)/i);
+      beat.line = "Something you know just opened a new way to get paid.";
+      beat.rail = CYAN;
+      beat.action = hid ? "hobby:" + hid[1] : "hobby";
+      beat.label = "Try it";
+      beat.alt = "shift";
+      beat.altLabel = "Keep working";
+      beat.stamp = "HOBBY";
+      return beat;
+    }
+    if (low.indexOf("job open:") >= 0) {
+      beat.line = "A better chair is open. Your shifts earned it.";
+      beat.rail = CYAN;
+      beat.action = "tab:job";
+      beat.label = "See the job";
+      beat.alt = "shift";
+      beat.altLabel = "Keep working";
+      beat.stamp = "RAISE";
+      return beat;
+    }
+    if (low.indexOf("rented the corner") >= 0 || low.indexOf("warm lights") >= 0 || low.indexOf("a sign") >= 0 || low.indexOf("real counter") >= 0) {
+      beat.line = body;
+      beat.rail = GOLD;
+      beat.action = "tab:job";
+      beat.label = "Change the room";
+      beat.alt = "shift";
+      beat.altLabel = "Work it";
+      beat.stamp = "ROOM";
+      return beat;
+    }
     if (low.indexOf("out of stock") >= 0) {
       beat.line = "The register is empty. People are still in line.";
       beat.rail = CRIMSON;
@@ -1303,6 +1368,7 @@
   function beatIcon(beat) {
     if (!beat) return "coin";
     if (beat.stamp === "HEAT") return "alert";
+    if (beat.stamp === "ROOM") return "shop";
     if (beat.stamp === "HOBBY" || beat.stamp === "RAISE") return "star";
     if (beat.action === "stock:0") return "box";
     if (beat.action === "rest") return "rest";
@@ -1454,6 +1520,49 @@
     return { tag: "LAB", color: CYAN, bg: "#143038" };
   }
 
+  function decorateOffer(game, hero) {
+    if (!hero) return hero;
+    if (hero.stamp === "HEAT" || hero.stamp === "DAY ONE" || hero.action === "stock:0") return hero;
+    if (hero.alt === "skim" || hero.alt === "score") return hero;
+    var place = game.player.place;
+    if (place && !place.owned && game.player.capital >= D.ROOM.rent) {
+      hero.alt = "room";
+      hero.altLabel = "Rent the corner";
+      return hero;
+    }
+    if (!place || !place.owned || hero.alt) return hero;
+    var next = !place.lights ? "lights" : (!place.sign ? "sign" : (!place.counter ? "counter" : null));
+    if (!next || game.player.capital < D.ROOM[next]) return hero;
+    var labels = { lights: "Warm lights", sign: "Paint a sign", counter: "Real counter" };
+    hero.alt = "upgrade:" + next;
+    hero.altLabel = labels[next];
+    return hero;
+  }
+
+  function drawStorefront(ctx, x, y, w, h, place) {
+    var owned = !!(place && place.owned);
+    clearGlow(ctx);
+    round(ctx, x, y, w, h, 12);
+    ctx.fillStyle = owned ? "#2c2418" : "#1c1814";
+    ctx.fill();
+    var win = owned && place.lights ? GOLD : "#3a342c";
+    var ww = Math.min(36, (w - 40) / 3);
+    var wi;
+    for (wi = 0; wi < 3; wi++) {
+      round(ctx, x + 12 + wi * (ww + 8), y + 10, ww, h * 0.42, 4);
+      ctx.fillStyle = win;
+      ctx.fill();
+    }
+    if (owned && place.sign) {
+      round(ctx, x + w * 0.58, y + 8, Math.min(110, w * 0.28), 16, 4);
+      ctx.fillStyle = GOLD;
+      ctx.fill();
+    }
+    round(ctx, x + 10, y + h - 16, w - 20, 8, 3);
+    ctx.fillStyle = owned && place.counter ? "#c4a574" : "#4a4036";
+    ctx.fill();
+  }
+
   function drawStory(ctx, game, ui, L, now) {
     var x = 16;
     var top = L.header + 10;
@@ -1518,6 +1627,8 @@
         altLabel: null,
         stamp: "HEAT"
       };
+    } else if (game.flags && game.flags.chosen) {
+      hero = decorateOffer(game, hero);
     }
     var band = Math.min(76, Math.max(58, sh * 0.18));
     ctx.save();
@@ -1560,12 +1671,20 @@
     var scene = (job0 ? job0.name : "The counter") + ". " + who;
     if ((game.player.shifts || 0) < 1 && game.player.capital < 20 && !(game.flags && game.flags.shady)) {
       scene = "No shop of your own yet. Just a way to get the first dollar.";
+    } else {
+      var placeBit = game.player.place;
+      var roomBit = !placeBit || !placeBit.owned ? "Bare corner." : ((placeBit.lights ? "Warm lights" : "Bare bulb") + (placeBit.sign ? ", sign up" : "") + (placeBit.counter ? ", real counter" : "") + ".");
+      scene = roomBit + " " + scene;
     }
     var sceneFont = font(15, false);
     ctx.font = sceneFont;
     ctx.fillStyle = "#6b6258";
     ctx.fillText(clipText(ctx, sceneFont, scene, textW), textX, ly + 6);
     ly += 28;
+    if (sh > 340 && ly + 78 < scy + sh - 80) {
+      drawStorefront(ctx, textX, ly, textW, 58, game.player.place);
+      ly += 66;
+    }
     if (sh > 250 && slot0) {
       var chipW = (textW - 16) / 3;
       var chipY = ly + 4;

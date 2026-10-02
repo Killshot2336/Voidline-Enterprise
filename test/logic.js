@@ -322,5 +322,28 @@ function lastLog(game) {
   assert(!bust.ok && bust.reason === "busted", "skim can bust");
 })();
 
+(function roomAndSkills() {
+  var now = Date.now();
+  var game = S.fresh(now);
+  assert(!S.jobUnlocked(game, D.jobById.counter_lead), "lead sealed");
+  assert(!S.buyRoom(game).ok, "rent needs cash");
+  assert(S.workHobby(game, now, "tutor").ok, "tutor");
+  assert(!S.workHobby(game, now, "stream").ok, "stream sealed");
+  var i;
+  for (i = 0; i < 4; i++) assert(S.workShift(game, now + 1000 * (i + 1)).ok, "shift " + i);
+  assert(game.player.skills.work >= 4, "work skill");
+  assert(S.jobUnlocked(game, D.jobById.counter_lead), "lead earned");
+  game.player.capital = 40;
+  assert(S.buyRoom(game).ok && game.player.place.owned, "corner rented");
+  assert(game.player.capital === 0, "rent spent");
+  game.player.capital = 25;
+  assert(S.upgradeRoom(game, "lights").ok && game.player.place.lights, "lights in");
+  var slow = S.fresh(now);
+  slow.flags.opened = true;
+  slow.slots[0].stock = 6;
+  S.runBusiness(slow, now, 5000, function () { return 0.99; });
+  assert(slow.slots[0].stock === 5, "one sale in five seconds");
+})();
+
 console.log(ok + " passed, " + fails + " failed");
 if (fails) process.exit(1);

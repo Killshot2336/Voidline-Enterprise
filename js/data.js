@@ -78,6 +78,8 @@
 
   var JOBS = [
     { id: "fast_food", name: "Fast Food Kiosk", level: 1, node: null, base: 8, line: "entry" },
+    { id: "counter_lead", name: "Counter Lead", level: 1, node: null, skill: "work", skillNeed: 4, base: 12, line: "entry" },
+    { id: "tutor_desk", name: "Tutor Desk", level: 1, node: null, skill: "mind", skillNeed: 4, base: 11, line: "entry" },
     { id: "marketing", name: "Marketing Desk", level: 2, node: "poster", base: 14, line: "visibility" },
     { id: "automation", name: "Automation Bay", level: 2, node: "timer", base: 13, line: "tech" },
     { id: "scout_lead", name: "Brand Scout Lead", level: 3, node: "charter", base: 15, line: "visibility" },
@@ -99,6 +101,13 @@
     { id: "skim", line: "shady", name: "Skim", cost: 1, requires: "shady_open", text: "A petty take from a drawer. Small cash. Heat moves." },
     { id: "backroom", line: "shady", name: "Back Room", cost: 2, requires: "skim", text: "Shifts pay a quiet extra. Heat ticks up with them." },
     { id: "score", line: "shady", name: "Big Score", cost: 3, requires: "backroom", text: "One card. It can pay, or you sit out the clock." }
+  ];
+
+  var HOBBIES = [
+    { id: "tutor", name: "Tutor", skill: "mind", needSkill: "mind", need: 0, pay: 6, xp: 8, text: "One lesson. A little cash, a little mind." },
+    { id: "flip", name: "Flip a find", skill: "hustle", needSkill: "hustle", need: 0, pay: 5, xp: 6, text: "Resell a scrap. Hustle starts here." },
+    { id: "stream", name: "Late stream", skill: "clout", needSkill: "mind", need: 2, pay: 7, xp: 8, text: "Talk until somebody stays." },
+    { id: "nightclass", name: "Night class", skill: "mind", needSkill: "mind", need: 3, pay: 4, xp: 18, text: "You teach, then you study." }
   ];
 
   var DEGREES = [
@@ -159,6 +168,8 @@
   for (i = 0; i < DEGREES.length; i++) degreeById[DEGREES[i].id] = DEGREES[i];
   var scoutById = {};
   for (i = 0; i < SCOUTS.length; i++) scoutById[SCOUTS[i].id] = SCOUTS[i];
+  var hobbyById = {};
+  for (i = 0; i < HOBBIES.length; i++) hobbyById[HOBBIES[i].id] = HOBBIES[i];
 
   root.VoidData = {
     ITEMS: ITEMS,
@@ -167,6 +178,9 @@
     NODES: NODES,
     DEGREES: DEGREES,
     SCOUTS: SCOUTS,
+    HOBBIES: HOBBIES,
+    hobbyById: hobbyById,
+    ROOM: { rent: 40, lights: 25, sign: 30, counter: 45 },
     TRAITS: TRAITS,
     FIRST: FIRST,
     LAST: LAST,

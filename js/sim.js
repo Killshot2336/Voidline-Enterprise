@@ -227,6 +227,7 @@
     if (game.flags.chosen == null) {
       game.flags.chosen = !!game.flags.opened || (p.skills && p.skills.mind > 0) || (p.capital || 0) > 0;
     }
+    if (!p.place) p.place = { owned: false, lights: 0, sign: 0, counter: 0 };
   }
 
   function isHeld(game, now) {
@@ -314,14 +315,50 @@
   }
 
   function jobUnlocked(game, job) {
+    if (!job) return false;
     if (game.player.level < job.level) return false;
     if (job.node && !game.nodes[job.node]) return false;
+    if (job.skill) {
+      ensureLife(game);
+      var have = game.player.skills[job.skill] || 0;
+      if (have < (job.skillNeed || 1)) return false;
+    }
     return true;
+  }
+
+  function hobbyOpen(game, hobby) {
+    if (!hobby) return false;
+    ensureLife(game);
+    var key = hobby.needSkill || hobby.skill;
+    return (game.player.skills[key] || 0) >= (hobby.need || 0);
+  }
+
+  function noteUnlocks(game) {
+    ensureLife(game);
+    var i;
+    if (D.HOBBIES) {
+      for (i = 0; i < D.HOBBIES.length; i++) {
+        var hobby = D.HOBBIES[i];
+        if (!(hobby.need > 0) || !hobbyOpen(game, hobby)) continue;
+        var hkey = "hob_" + hobby.id;
+        if (game.flags[hkey]) continue;
+        game.flags[hkey] = true;
+        pushLog(game, "+ Hobby open: " + hobby.id + ". " + hobby.name + ".");
+      }
+    }
+    for (i = 0; i < D.JOBS.length; i++) {
+      var job = D.JOBS[i];
+      if (!job.skill || !jobUnlocked(game, job)) continue;
+      var jkey = "job_" + job.id;
+      if (game.flags[jkey]) continue;
+      game.flags[jkey] = true;
+      pushLog(game, "+ Job open: " + job.id + ". " + job.name + " will take you.");
+    }
   }
 
   function cycleSeconds(game) {
     var bonus = recomputeBonus(game);
-    var sec = 1.7;
+    var sec = 4.2;
     if (game.nodes.timer) sec *= 0.8;
     sec /= bonus.cycle;
     if (hasRid(game, 108)) sec /= 1.25;
@@ -397,6 +434,13 @@
     else if (game.player.stress > 70) stressTax = 0.85;
     var covered = ghostCover(game, slot, now) || autoNight;
     var gross = (9 + jobBase(slot) * 0.45) * rush * staffMult(emp || (covered ? { traits: [] } : null), phase) * bonus.revenue * stressTax;
+    if (game.player.place && game.player.place.owned) {
+      var room = 1;
+      if (game.player.place.lights) room += 0.06;
+      if (game.player.place.sign) room += 0.08;
+      if (game.player.place.counter) room += 0.07;
+      gross *= room;
+    }
     if (slot.jobId === "fast_food" && hasRid(game, 105)) gross *= 2;
     if (hasRid(game, 109)) gross *= 2;
     if (hasRid(game, 120)) gross *= 1.5;
@@ -419,11 +463,11 @@
     if (hasRid(game, 114) && schoolHours(now)) vis *= 1.15;
     game.player.visibility = clampStat(game.player.visibility + vis);
     if (game.fx && now < game.fx.visLockUntil) game.player.visibility = 100;
-    if (!quiet) {
+    if (!quiet && (slot.stock <= 1 || net < 0)) {
       var line = (net >= 0 ? "+ " : "! ") + "Slot " + (slot.id + 1) + " cycle " + money(net) + ". Stock " + slot.stock + ".";
       pushLog(game, line);
-      markPulse(game, net);
     }
+    if (!quiet) markPulse(game, net);
   }
 
   function jobBase(slot) {
@@ -802,30 +846,77 @@
     maybeLevel(game);
     pushLog(game, "+ Shift closed. Paid " + money(pay) + ". Academic XP rose.");
     if (gotRaise) pushLog(game, "+ The counter noticed. You got a raise.");
+    noteUnlocks(game);
     game.rev += 1;
     markPulse(game, pay);
     return { ok: true, pay: pay };
   }
 
-  function workHobby(game, now) {
+  function workHobby(game, now, hobbyId) {
     ensureLife(game);
     if (isHeld(game, now)) {
       pushLog(game, "! You're being held. Hobbies wait.");
       return { ok: false, reason: "held" };
     }
+    var hobby = D.hobbyById[hobbyId || "tutor"];
+    if (!hobby) return { ok: false, reason: "missing" };
+    if (!hobbyOpen(game, hobby)) {
+      pushLog(game, hobby.name + " needs more " + (hobby.needSkill || hobby.skill) + ".");
+      return { ok: false, reason: "locked" };
+    }
     game.flags.chosen = true;
     if (now - (game.hobbyAt || 0) < 800) return { ok: false, reason: "cooldown" };
     game.hobbyAt = now;
-    var skill = game.player.skills.mind || 0;
-    var pay = 6 + Math.floor(skill / 2);
+    var key = hobby.skill;
+    var skill = game.player.skills[key] || 0;
+    var pay = hobby.pay + Math.floor(skill / 3);
     game.player.capital += pay;
-    game.player.skills.mind = Math.min(100, skill + 1);
-    game.player.intelligence = clampStat(game.player.intelligence + 0.6);
-    addXp(game, 8);
+    game.player.skills[key] = Math.min(100, skill + 1);
+    if (key === "mind") game.player.intelligence = clampStat(game.player.intelligence + 0.6);
+    if (key === "clout") game.player.visibility = clampStat(game.player.visibility + 0.8);
+    addXp(game, hobby.xp || 8);
     maybeLevel(game);
     pushLog(game, "+ Hobby paid " + money(pay) + ". You know this a little better.");
+    noteUnlocks(game);
     game.rev += 1;
     return { ok: true, pay: pay };
+  }
+
+  function buyRoom(game) {
+    ensureLife(game);
+    if (game.player.place.owned) return { ok: false, reason: "owned" };
+    var cost = D.ROOM.rent;
+    if (game.player.capital < cost) {
+      pushLog(game, "! The corner wants " + money(cost) + ". The drawer is light.");
+      return { ok: false, reason: "capital" };
+    }
+    game.player.capital -= cost;
+    game.player.place.owned = true;
+    pushLog(game, "+ You rented the corner. It's yours to change.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function upgradeRoom(game, part) {
+    ensureLife(game);
+    if (!game.player.place.owned) {
+      pushLog(game, "Rent the corner before you change it.");
+      return { ok: false, reason: "rent" };
+    }
+    if (part !== "lights" && part !== "sign" && part !== "counter") return { ok: false };
+    if (game.player.place[part]) return { ok: false, reason: "owned" };
+    var cost = D.ROOM[part];
+    if (game.player.capital < cost) {
+      pushLog(game, "! That change costs " + money(cost) + ".");
+      return { ok: false, reason: "capital" };
+    }
+    game.player.capital -= cost;
+    game.player.place[part] = 1;
+    if (part === "lights") pushLog(game, "+ Warm lights. The corner looks like a shop.");
+    else if (part === "sign") pushLog(game, "+ A sign. People can find you.");
+    else pushLog(game, "+ A real counter. The folding table is gone.");
+    game.rev += 1;
+    return { ok: true };
   }
 
   function skim(game, now, rng) {
@@ -1565,6 +1656,9 @@
     frame: frame,
     workShift: workShift,
     workHobby: workHobby,
+    hobbyOpen: hobbyOpen,
+    buyRoom: buyRoom,
+    upgradeRoom: upgradeRoom,
     skim: skim,
     score: score,
     rest: rest,
