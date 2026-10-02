@@ -2213,10 +2213,10 @@
     ctx.clip();
     ctx.fillStyle = skyFill(phase, dayOne, district);
     ctx.fillRect(x, y, w, h);
-    var skyH = Math.max(14, Math.min(36, h * 0.12));
-    var streetH = Math.max(28, Math.min(120, h * 0.26));
+    var skyH = Math.max(28, Math.min(64, h * 0.16));
+    var streetH = Math.max(44, Math.min(130, h * 0.24));
     var street = y + h - streetH;
-    var streetInk = dayOne ? "#1c2028" : "#2a3144";
+    var streetInk = dayOne ? "#2c3342" : "#2a3144";
     if (!dayOne && district === "campus") streetInk = "#3d4a34";
     if (!dayOne && district === "night") streetInk = "#12151c";
     ctx.fillStyle = streetInk;
@@ -2270,9 +2270,11 @@
         if (upKind === "tutor") {
           ctx.fillStyle = "#f3c8ae";
           ctx.beginPath();
-          ctx.arc(ux + uw * 0.32, shopTop + 10 + uh * 0.42, Math.max(2, uw * 0.12), 0, Math.PI * 2);
-          ctx.arc(ux + uw * 0.68, shopTop + 10 + uh * 0.48, Math.max(2, uw * 0.1), 0, Math.PI * 2);
+          ctx.arc(ux + uw * 0.3, shopTop + 10 + uh * 0.38, Math.max(3.5, uh * 0.16), 0, Math.PI * 2);
+          ctx.arc(ux + uw * 0.7, shopTop + 10 + uh * 0.42, Math.max(3, uh * 0.14), 0, Math.PI * 2);
           ctx.fill();
+          ctx.fillStyle = "#6b442c";
+          ctx.fillRect(ux + 3, shopTop + 10 + uh * 0.7, uw - 6, 3);
         } else {
           ctx.fillStyle = "#6d88a4";
           ctx.fillRect(ux + 3, shopTop + 10 + uh * 0.62, uw - 6, 3);
@@ -2294,8 +2296,9 @@
       }
     }
     var lit = lights && !closed && !dayOne;
-    var winY = groundTop + 8;
-    var winH = Math.max(18, (shopBot - groundTop) * 0.46);
+    var signBand = signed && !dayOne ? Math.max(26, Math.min(32, h * 0.07)) : 0;
+    var winY = groundTop + 8 + signBand;
+    var winH = Math.max(16, (shopBot - winY) * 0.55);
     var winW = Math.max(18, Math.min(56, (shopW * 0.55) / 3));
     var wi;
     for (wi = 0; wi < 3; wi++) {
@@ -2354,10 +2357,10 @@
       var word = spec.shop || signWord(spec.job, closed);
       var sf = font(Math.max(13, Math.min(22, h * 0.075)), true, 800);
       ctx.font = sf;
-      var boardW = Math.min(shopW * 0.72, Math.max(120, measure(ctx, sf, word) + 28));
-      var boardH = Math.max(24, Math.min(36, h * 0.08));
-      var sgx = shopX + 14;
-      var sgy = Math.max(y + 4, shopTop - boardH * 0.45);
+      var boardW = Math.min(shopW * 0.46, Math.max(108, measure(ctx, sf, word) + 24));
+      var boardH = signBand || 28;
+      var sgx = shopX + 12;
+      var sgy = groundTop + 3;
       round(ctx, sgx, sgy, boardW, boardH, 3);
       ctx.fillStyle = closed ? "#241c16" : GOLD;
       ctx.fill();
@@ -2370,12 +2373,12 @@
       ctx.fillText(clipText(ctx, sf, word, boardW - 12), sgx + boardW * 0.5, sgy + boardH * 0.5);
     } else if (closed && owned && !dayOne) {
       ctx.fillStyle = "#efe4d2";
-      ctx.fillRect(shopX + 12, shopTop + 8, 46, 16);
+      ctx.fillRect(shopX + 12, groundTop + 6, 52, 16);
       ctx.fillStyle = DARK;
       ctx.font = font(11, true, 800);
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("SHUT", shopX + 35, shopTop + 16);
+      ctx.fillText("SHUT", shopX + 38, groundTop + 14);
     }
     var cX = shopX + 12;
     var cRight = doorX - 18;
