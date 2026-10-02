@@ -1694,7 +1694,10 @@
     ctx.fillStyle = stampInk;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(beatStamp(hero), sx + 72, scy + band * 0.5);
+    ctx.fillText(clipText(ctx, font(L.w < 720 ? 18 : 22, false), beatStamp(hero), sw - 220), sx + 72, scy + band * 0.5);
+    if (sw > 420 && game.flags && game.flags.chosen) {
+      drawStorefront(ctx, sx + sw - 124, scy + 8, 108, Math.max(36, band - 16), game.player.place, game.world && game.world.floor, game.world && game.world.rival && game.player.place && !game.player.place.sign);
+    }
     var textX = sx + 24;
     var textW = sw - 40;
     var f = font(L.w < 720 ? 22 : 28, false);
