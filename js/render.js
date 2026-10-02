@@ -1728,9 +1728,9 @@
     ctx.fillStyle = "#6b6258";
     ctx.fillText(clipText(ctx, sceneFont, scene, textW), textX, ly + 6);
     ly += 28;
-    if (sh > 340 && ly + 78 < scy + sh - 80) {
-      drawStorefront(ctx, textX, ly, textW, 58, game.player.place, game.world && game.world.floor, game.world && game.world.rival && game.player.place && !game.player.place.sign);
-      ly += 66;
+    if (sh > 220 && ly + 64 < scy + sh - 64) {
+      drawStorefront(ctx, textX, ly, textW, 52, game.player.place, game.world && game.world.floor, game.world && game.world.rival && game.player.place && !game.player.place.sign);
+      ly += 58;
     }
     if (sh > 250 && slot0) {
       var chipW = (textW - 16) / 3;

@@ -320,7 +320,7 @@
 
   function meetPeople(game, now) {
     ensureLife(game);
-    if (game.player.shifts === 3 && !game.world.regular) {
+    if (game.player.shifts === 2 && !game.world.regular) {
       game.world.regular = { name: D.FIRST[2] + " " + D.LAST[1], visits: 1, mood: 1 };
       game.world.regularDue = true;
     } else if (game.world.regular && game.player.shifts > 0 && game.player.shifts % 4 === 0) {
