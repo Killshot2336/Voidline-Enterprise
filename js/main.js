@@ -74,6 +74,9 @@
     if (id === "hdr:settings") { toggleMenu("settings"); return; }
     if (id === "close") { ui.menu = null; return; }
     if (id === "shift") { S.workShift(game, now); return; }
+    if (id === "hobby") { S.workHobby(game, now); return; }
+    if (id === "skim") { S.skim(game, now); return; }
+    if (id === "score") { S.score(game, now); return; }
     if (id === "rest") { S.rest(game, now); return; }
     if (id === "applicants") { S.rollResume(game); return; }
     if (id.indexOf("stock:") === 0) { S.buyStock(game, Number(id.substring(6))); return; }

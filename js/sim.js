@@ -157,12 +157,15 @@
         level: 1,
         xp: 0,
         vp: 0,
-        capital: 180,
+        capital: 0,
         intelligence: 12,
         stress: 15,
         visibility: 8,
         shifts: 0,
-        rp: 0
+        rp: 0,
+        heat: 0,
+        heldUntil: 0,
+        skills: { work: 0, mind: 0, hustle: 0, clout: 0 }
       },
       settings: { highFX: true, fpsCap: 60, performanceMode: false },
       log: new Array(D.LOG_CAP),
@@ -179,7 +182,7 @@
       crafted: [],
       bonus: null,
       bonusRev: -1,
-      flags: { insight: false },
+      flags: { insight: false, shady: false },
       shiftAt: 0,
       restAt: 0,
       pulse: 0,
@@ -205,10 +208,23 @@
     game.mats.trainee = 1;
     game.mats.chalk = 1;
     game.mats.fryer = 1;
-    pushLog(game, "Voidline Enterprise ledger online.");
-    pushLog(game, "Kiosk stocked. Open Occupation to run a shift.");
     pushLog(game, "Academic rank 1. Levels award 1 Void Point.");
+    pushLog(game, "You're broke. Zero dollars. Pick a shift or a hobby.");
     return game;
+  }
+
+  function ensureLife(game) {
+    var p = game.player;
+    if (!p.skills) p.skills = { work: 0, mind: 0, hustle: 0, clout: 0 };
+    if (p.heat == null) p.heat = 0;
+    if (p.heldUntil == null) p.heldUntil = 0;
+    if (!game.flags) game.flags = { insight: false, shady: false };
+    if (game.flags.shady == null) game.flags.shady = !!(game.nodes && game.nodes.shady_open);
+    if (game.nodes && game.nodes.shady_open) game.flags.shady = true;
+  }
+
+  function isHeld(game, now) {
+    return !!(game.player.heldUntil && now < game.player.heldUntil);
   }
 
   function slotCap(game) {
@@ -597,6 +613,11 @@
       pushLog(game, "Clock phase: " + phase.name + ". Revenue x" + phase.revenue.toFixed(2) + ".");
     }
     game.phaseId = phase.id;
+    ensureLife(game);
+    if (game.player.heat > 0 && now - (game.heatAt || 0) > 5000) {
+      game.heatAt = now;
+      game.player.heat = Math.max(0, game.player.heat - 1);
+    }
     if (game.fx && now < game.fx.visLockUntil) game.player.visibility = 100;
     game.booted = true;
     return phase;
@@ -737,6 +758,11 @@
   }
 
   function workShift(game, now) {
+    ensureLife(game);
+    if (isHeld(game, now)) {
+      pushLog(game, "! You're being held. Shifts wait.");
+      return { ok: false, reason: "held" };
+    }
     if (now - game.shiftAt < 350) return { ok: false, reason: "cooldown" };
     game.shiftAt = now;
     var phase = phaseAt(now);
@@ -748,13 +774,111 @@
     game.player.stress = clampStat(game.player.stress + 4);
     game.player.intelligence = clampStat(game.player.intelligence + 0.4);
     game.player.shifts += 1;
+    game.player.skills.work = Math.min(100, (game.player.skills.work || 0) + 1);
+    var gotRaise = false;
+    if (game.player.skills.work === 8 && !game.flags.raised) {
+      game.flags.raised = true;
+      gotRaise = true;
+      game.player.capital += 2;
+    }
+    if (game.nodes && game.nodes.backroom) {
+      var cut = Math.max(1, Math.round(pay * 0.15));
+      game.player.capital += cut;
+      game.player.heat = Math.min(100, game.player.heat + 2);
+    }
     if (game.player.shifts % 3 === 0) {
       game.player.visibility = clampStat(game.player.visibility + 1.5 * bonus.visibility);
     }
     maybeLevel(game);
     pushLog(game, "+ Shift closed. Paid " + money(pay) + ". Academic XP rose.");
+    if (gotRaise) pushLog(game, "+ The counter noticed. You got a raise.");
     game.rev += 1;
     markPulse(game, pay);
+    return { ok: true, pay: pay };
+  }
+
+  function workHobby(game, now) {
+    ensureLife(game);
+    if (isHeld(game, now)) {
+      pushLog(game, "! You're being held. Hobbies wait.");
+      return { ok: false, reason: "held" };
+    }
+    if (now - (game.hobbyAt || 0) < 800) return { ok: false, reason: "cooldown" };
+    game.hobbyAt = now;
+    var skill = game.player.skills.mind || 0;
+    var pay = 6 + Math.floor(skill / 2);
+    game.player.capital += pay;
+    game.player.skills.mind = Math.min(100, skill + 1);
+    game.player.intelligence = clampStat(game.player.intelligence + 0.6);
+    addXp(game, 8);
+    maybeLevel(game);
+    pushLog(game, "+ Hobby paid " + money(pay) + ". You know this a little better.");
+    game.rev += 1;
+    return { ok: true, pay: pay };
+  }
+
+  function skim(game, now, rng) {
+    ensureLife(game);
+    if (!rng) rng = Math.random;
+    if (!game.nodes.skim) {
+      pushLog(game, "Skim is still locked. It's on the shady tree.");
+      return { ok: false, reason: "locked" };
+    }
+    if (isHeld(game, now)) {
+      pushLog(game, "! You're being held. The drawer can wait.");
+      return { ok: false, reason: "held" };
+    }
+    if (now - (game.skimAt || 0) < 800) return { ok: false, reason: "cooldown" };
+    game.skimAt = now;
+    var bust = 0.22 + game.player.heat / 220;
+    if (rng() < bust) {
+      game.player.heat = Math.min(100, game.player.heat + 16);
+      var fine = 12 + Math.round(game.player.heat * 0.4);
+      game.player.capital = Math.max(0, game.player.capital - fine);
+      if (game.player.heat > 70) {
+        game.player.heldUntil = now + 60000;
+        pushLog(game, "! Busted. You're being held. Lost " + money(fine) + ".");
+      } else {
+        pushLog(game, "! A fine landed. Lost " + money(fine) + ". Heat climbed.");
+      }
+      game.rev += 1;
+      return { ok: false, reason: "busted" };
+    }
+    var pay = 14 + Math.floor((game.player.skills.hustle || 0) / 2);
+    game.player.capital += pay;
+    game.player.skills.hustle = Math.min(100, (game.player.skills.hustle || 0) + 1);
+    game.player.heat = Math.min(100, game.player.heat + 8);
+    pushLog(game, "+ Skimmed " + money(pay) + ". Heat is watching.");
+    game.rev += 1;
+    return { ok: true, pay: pay };
+  }
+
+  function score(game, now, rng) {
+    ensureLife(game);
+    if (!rng) rng = Math.random;
+    if (!game.nodes.score) {
+      pushLog(game, "The big score is still locked on the shady tree.");
+      return { ok: false, reason: "locked" };
+    }
+    if (isHeld(game, now)) {
+      pushLog(game, "! You're being held. Scores wait.");
+      return { ok: false, reason: "held" };
+    }
+    if (now - (game.scoreAt || 0) < 1500) return { ok: false, reason: "cooldown" };
+    game.scoreAt = now;
+    if (rng() < 0.42) {
+      game.player.heat = Math.min(100, game.player.heat + 28);
+      game.player.heldUntil = now + 90000;
+      pushLog(game, "! The score failed. You're being held.");
+      game.rev += 1;
+      return { ok: false, reason: "busted" };
+    }
+    var pay = 70 + game.player.level * 8;
+    game.player.capital += pay;
+    game.player.heat = Math.min(100, game.player.heat + 18);
+    game.player.skills.hustle = Math.min(100, (game.player.skills.hustle || 0) + 2);
+    pushLog(game, "+ The score paid " + money(pay) + ". Heat spiked.");
+    game.rev += 1;
     return { ok: true, pay: pay };
   }
 
@@ -1012,6 +1136,10 @@
     game.player.vp -= node.cost;
     game.nodes[nodeId] = true;
     if (nodeId === "rack") ensureSlots(game);
+    if (node.line === "shady") {
+      ensureLife(game);
+      game.flags.shady = true;
+    }
     pushLog(game, "* Lab unlock: " + node.name + ". " + node.text);
     game.rev += 1;
     return { ok: true };
@@ -1382,6 +1510,7 @@
     game.grad = data.grad || {};
     game.space = data.space || 0;
     if (game.player.rp == null) game.player.rp = 0;
+    ensureLife(game);
     var i;
     var lines = data.log || [];
     for (i = 0; i < lines.length; i++) pushLog(game, lines[i]);
@@ -1424,6 +1553,9 @@
     fresh: fresh,
     frame: frame,
     workShift: workShift,
+    workHobby: workHobby,
+    skim: skim,
+    score: score,
     rest: rest,
     buyStock: buyStock,
     rollResume: rollResume,

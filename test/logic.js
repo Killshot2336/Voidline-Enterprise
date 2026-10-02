@@ -103,6 +103,7 @@ function lastLog(game) {
   slot.employee = { name: "Pix Sticky", salary: 12, traits: ["fingers"], caught: false };
   slot.stock = 5;
   slot.camera = false;
+  game.player.capital = 180;
   var capital = game.player.capital;
   S.resolveCycle(game, slot, S.phaseAt(now), function () { return 0; });
   assert(slot.stock === 4, "theft consumed stock");
@@ -288,6 +289,30 @@ function lastLog(game) {
   var third = S.synthesize(lab, "temp", "license", null, null);
   assert(!third.ok && third.reason === "duplicate", "both pair ids filed");
   assert(lab.mats.temp === 1, "duplicate kept materials");
+})();
+
+(function lifeStart() {
+  var now = Date.now();
+  var game = S.fresh(now);
+  assert(game.player.capital === 0, "start broke");
+  assert(!game.flags.shady, "shady starts off");
+  assert(!S.skim(game, now).ok, "skim locked");
+  assert(S.workHobby(game, now).ok, "hobby pays");
+  assert(game.player.skills.mind === 1, "mind skill");
+  assert(game.player.capital > 0, "hobby cash");
+  var shift = S.workShift(game, now);
+  assert(shift.ok && game.player.skills.work === 1, "work skill");
+  game.player.vp = 4;
+  assert(S.unlockNode(game, "shady_open").ok, "street sense");
+  assert(game.flags.shady, "shady wakes");
+  assert(!S.score(game, now).ok, "score still locked");
+  assert(S.unlockNode(game, "skim").ok, "skim node");
+  var before = game.player.capital;
+  var paid = S.skim(game, now, function () { return 0.99; });
+  assert(paid.ok && game.player.capital > before, "skim pays");
+  assert(game.player.heat > 0, "heat climbs");
+  var bust = S.skim(game, now + 1000, function () { return 0; });
+  assert(!bust.ok && bust.reason === "busted", "skim can bust");
 })();
 
 console.log(ok + " passed, " + fails + " failed");

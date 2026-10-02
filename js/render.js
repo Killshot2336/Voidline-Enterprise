@@ -11,6 +11,7 @@
   var cacheN = 0;
 
   var GOLD = "#f5c542";
+  var VIOLET = "#b44ac0";
   var CYAN = "#3ec8d8";
   var CRIMSON = "#e23d3d";
   var NAVY = "#0c1020";
@@ -445,6 +446,8 @@
       "BUY STUFF": "coin",
       "POINTS": "star",
       "CLOUT": "star",
+      "SHADY": "alert",
+      "STREET": "flame",
       "MACHINES": "gear",
       "MIX STUFF": "box",
       "SEND SOMEONE": "people",
@@ -468,7 +471,7 @@
     }
     var f = font(12, false);
     ctx.font = f;
-    ctx.fillStyle = paperOn ? "#8a5a12" : GOLD;
+    ctx.fillStyle = text === "SHADY" || text === "STREET" ? VIOLET : (paperOn ? "#8a5a12" : GOLD);
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillText(text, tx, r.y + 15);
@@ -720,7 +723,7 @@
       var node = D.NODES[i];
       if (node.line !== lineName) {
         lineName = node.line;
-        section(flow, lineName === "visibility" ? "CLOUT" : "MACHINES");
+        section(flow, lineName === "visibility" ? "CLOUT" : (lineName === "shady" ? "SHADY" : "MACHINES"));
       }
       var owned = !!game.nodes[node.id];
       var nr = row(flow, 44);
@@ -734,6 +737,16 @@
       flow.ctx.fillStyle = muteInk();
       flow.ctx.fillText(clipText(flow.ctx, font(11, false), node.text, flow.w - 100), flow.x, nr.y + 30);
       button(flow.ctx, ui, "node:" + node.id, flow.x + flow.w - 88, nr.y + 6, 88, 28, owned ? "Open" : node.cost + " VP", owned, owned);
+    }
+
+    if (game.nodes.skim || game.nodes.score) {
+      section(flow, "STREET");
+      para(flow, "Heat is " + Math.round(game.player.heat || 0) + ". A bust takes cash. High heat makes you sit.");
+      var street = row(flow, 40);
+      if (street.on) {
+        if (game.nodes.skim) button(flow.ctx, ui, "skim", flow.x, street.y, game.nodes.score ? (flow.w - 8) * 0.48 : flow.w, 32, "Skim", false, false);
+        if (game.nodes.score) button(flow.ctx, ui, "score", flow.x + (game.nodes.skim ? (flow.w - 8) * 0.52 : 0), street.y, game.nodes.skim ? (flow.w - 8) * 0.48 : flow.w, 32, "Big score", false, false);
+      }
     }
 
     section(flow, "MIX STUFF");
@@ -956,9 +969,52 @@
       alt: stressed ? "rest" : (stockOut ? "stock:0" : null),
       altLabel: stressed ? "Take a break" : (stockOut ? "Restock" : null)
     };
-    if (!raw) {
-      beat.line = "First day. The fryer is cold and the drawer has cash.";
-      beat.label = "Open up";
+    if (!raw || low.indexOf("you're broke") >= 0 || low.indexOf("zero dollars") >= 0) {
+      beat.line = "Zero dollars. A shift pays tonight. A hobby pays less and teaches you.";
+      beat.label = "Take a shift";
+      beat.alt = "hobby";
+      beat.altLabel = "Start a hobby";
+      beat.stamp = "DAY ONE";
+      return beat;
+    }
+    if (low.indexOf("hobby paid") >= 0) {
+      beat.line = body;
+      beat.rail = CYAN;
+      beat.action = "hobby";
+      beat.label = "Keep going";
+      beat.alt = "shift";
+      beat.altLabel = "Take a shift";
+      beat.stamp = "HOBBY";
+      return beat;
+    }
+    if (low.indexOf("shady tree") >= 0 || low.indexOf("heat starts counting") >= 0) {
+      beat.line = "The other tree is on. Petty scores can pay. Heat climbs if you get sloppy.";
+      beat.rail = VIOLET;
+      beat.action = "tab:lab";
+      beat.label = "Open the tree";
+      beat.alt = "shift";
+      beat.altLabel = "Stay legit";
+      beat.stamp = "HEAT";
+      return beat;
+    }
+    if (low.indexOf("skimmed") >= 0 || low.indexOf("a fine landed") >= 0 || low.indexOf("the score paid") >= 0 || low.indexOf("the score failed") >= 0 || low.indexOf("you're being held") >= 0) {
+      beat.line = body;
+      beat.rail = VIOLET;
+      beat.action = game.nodes && game.nodes.skim ? "skim" : "rest";
+      beat.label = game.nodes && game.nodes.skim ? "Try again" : "Wait";
+      beat.alt = "shift";
+      beat.altLabel = "Stay legit";
+      beat.stamp = "HEAT";
+      return beat;
+    }
+    if (low.indexOf("you got a raise") >= 0) {
+      beat.line = "They pay you more now. The work is starting to show.";
+      beat.rail = CYAN;
+      beat.action = "shift";
+      beat.label = "Work it";
+      beat.alt = "rest";
+      beat.altLabel = "Take a break";
+      beat.stamp = "RAISE";
       return beat;
     }
     if (low.indexOf("out of stock") >= 0) {
@@ -1031,6 +1087,10 @@
       beat.line = paid ? "Rush over. " + paid[0] + " hits the drawer." : "Rush over. The drawer is heavier.";
       beat.rail = GOLD;
       beat.label = "Work another";
+      if (game.flags && game.flags.shady && game.nodes && game.nodes.skim) {
+        beat.alt = "skim";
+        beat.altLabel = "Skim the drawer";
+      }
       return beat;
     }
     if (low.indexOf("rest cycle") >= 0) {
@@ -1135,6 +1195,14 @@
       return beat;
     }
     if (low.indexOf("clock phase") >= 0) {
+      if ((game.player.shifts || 0) < 1 && game.player.capital < 1 && !(game.flags && game.flags.shady)) {
+        beat.line = "Zero dollars. A shift pays tonight. A hobby pays less and teaches you.";
+        beat.label = "Take a shift";
+        beat.alt = "hobby";
+        beat.altLabel = "Start a hobby";
+        beat.stamp = "DAY ONE";
+        return beat;
+      }
       var phase = S.phaseAt(game.lastReal || Date.now());
       var say = {
         morning: "Morning rush. Everyone wants food and nobody has patience.",
@@ -1234,6 +1302,8 @@
 
   function beatIcon(beat) {
     if (!beat) return "coin";
+    if (beat.stamp === "HEAT") return "alert";
+    if (beat.stamp === "HOBBY" || beat.stamp === "RAISE") return "star";
     if (beat.action === "stock:0") return "box";
     if (beat.action === "rest") return "rest";
     if (beat.action && beat.action.indexOf("edu") >= 0) return "cap";
@@ -1247,6 +1317,7 @@
 
   function beatStamp(beat) {
     if (!beat) return "RUSH";
+    if (beat.stamp) return beat.stamp;
     if (beat.action === "stock:0") return "RESTOCK";
     if (beat.rail === CRIMSON) return "TROUBLE";
     if (beat.rail === CYAN) return "MOMENT";
@@ -1338,7 +1409,9 @@
       night: "Late night",
       standard: "Slow hour"
     };
-    return "Year " + game.player.level + "  ·  " + (names[phase.id] || phase.name);
+    var blur = "Year " + game.player.level + "  ·  " + (names[phase.id] || phase.name);
+    if (game.flags && game.flags.shady) blur += "  ·  Heat " + Math.round(game.player.heat || 0);
+    return blur;
   }
 
   function statTick(ctx, x, y, w, label, value, fill, color, kind) {
@@ -1423,6 +1496,18 @@
     var sx = cx - sw * 0.5;
     var scy = cy - sh * 0.5;
     var hero = storyBeat(newest >= 0 ? (S.logLine(game, newest) || "") : "", game);
+    if (game.player.heldUntil && now < game.player.heldUntil) {
+      var left = Math.max(1, Math.ceil((game.player.heldUntil - now) / 1000));
+      hero = {
+        line: "You're sitting this out. " + left + "s left on the clock.",
+        rail: VIOLET,
+        action: "rest",
+        label: "Wait it out",
+        alt: null,
+        altLabel: null,
+        stamp: "HEAT"
+      };
+    }
     var band = Math.min(76, Math.max(58, sh * 0.18));
     ctx.save();
     clearGlow(ctx);
@@ -1461,7 +1546,10 @@
     var slot0 = game.slots && game.slots[0];
     var job0 = slot0 ? D.jobById[slot0.jobId] : null;
     var who = slot0 && slot0.employee ? slot0.employee.name + " is on the register." : "You're working it alone.";
-    var scene = (job0 ? job0.name : "The shop") + ". " + who;
+    var scene = (job0 ? job0.name : "The counter") + ". " + who;
+    if ((game.player.shifts || 0) < 1 && game.player.capital < 20 && !(game.flags && game.flags.shady)) {
+      scene = "No shop of your own yet. Just a way to get the first dollar.";
+    }
     var sceneFont = font(15, false);
     ctx.font = sceneFont;
     ctx.fillStyle = "#6b6258";
@@ -1475,7 +1563,7 @@
       var chips = [
         ["box", "Stock " + slot0.stock, "#e08a3c"],
         ["people", whoShort, "#e2569a"],
-        ["flame", "Stress " + stressN, stressN > 50 ? CRIMSON : "#c47a4a"]
+        ["flame", (game.flags && game.flags.shady) ? ("Heat " + Math.round(game.player.heat || 0)) : ("Stress " + stressN), (game.flags && game.flags.shady) ? ((game.player.heat || 0) > 40 ? CRIMSON : VIOLET) : (stressN > 50 ? CRIMSON : "#c47a4a")]
       ];
       var ci;
       for (ci = 0; ci < chips.length; ci++) {
@@ -1585,7 +1673,7 @@
     var faceY = 8 + r;
     var mood = 0;
     if (now < smileUntil) mood = 1;
-    else if (game.player.stress > 50) mood = 2;
+    else if ((game.flags && game.flags.shady && (game.player.heat || 0) > 40) || game.player.stress > 50) mood = 2;
     ctx.beginPath();
     ctx.arc(faceX, faceY, r + 4, 0, Math.PI * 2);
     ctx.fillStyle = GOLD;

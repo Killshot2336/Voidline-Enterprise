@@ -94,7 +94,11 @@
     { id: "timer", line: "tech", name: "Fryer Timer", cost: 1, requires: null, text: "Customer cycles run 20% faster." },
     { id: "camera", line: "tech", name: "Camera Schematic", cost: 2, requires: "timer", text: "Invent a Security Camera Module for a venture slot." },
     { id: "rack", line: "tech", name: "Server Rack", cost: 2, requires: "camera", text: "Unlocks Server Ops, a second slot, and +10 stock cap." },
-    { id: "core", line: "tech", name: "Voidline Core", cost: 3, requires: "rack", text: "Unlocks Voidline Engineer." }
+    { id: "core", line: "tech", name: "Voidline Core", cost: 3, requires: "rack", text: "Unlocks Voidline Engineer." },
+    { id: "shady_open", line: "shady", name: "Street Sense", cost: 1, requires: null, text: "Opens the shady tree. Heat starts counting." },
+    { id: "skim", line: "shady", name: "Skim", cost: 1, requires: "shady_open", text: "A petty take from a drawer. Small cash. Heat moves." },
+    { id: "backroom", line: "shady", name: "Back Room", cost: 2, requires: "skim", text: "Shifts pay a quiet extra. Heat ticks up with them." },
+    { id: "score", line: "shady", name: "Big Score", cost: 3, requires: "backroom", text: "One card. It can pay, or you sit out the clock." }
   ];
 
   var DEGREES = [
