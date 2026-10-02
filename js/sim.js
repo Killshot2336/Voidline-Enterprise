@@ -182,7 +182,7 @@
       crafted: [],
       bonus: null,
       bonusRev: -1,
-      flags: { insight: false, shady: false, opened: false },
+      flags: { insight: false, shady: false, opened: false, chosen: false },
       shiftAt: 0,
       restAt: 0,
       pulse: 0,
@@ -222,7 +222,10 @@
     if (game.flags.shady == null) game.flags.shady = !!(game.nodes && game.nodes.shady_open);
     if (game.nodes && game.nodes.shady_open) game.flags.shady = true;
     if (game.flags.opened == null) {
-      game.flags.opened = (p.shifts || 0) > 0 || (p.capital || 0) > 0;
+      game.flags.opened = (p.shifts || 0) > 0;
+    }
+    if (game.flags.chosen == null) {
+      game.flags.chosen = !!game.flags.opened || (p.skills && p.skills.mind > 0) || (p.capital || 0) > 0;
     }
   }
 
@@ -769,6 +772,7 @@
       return { ok: false, reason: "held" };
     }
     game.flags.opened = true;
+    game.flags.chosen = true;
     if (now - game.shiftAt < 350) return { ok: false, reason: "cooldown" };
     game.shiftAt = now;
     var phase = phaseAt(now);
@@ -809,7 +813,7 @@
       pushLog(game, "! You're being held. Hobbies wait.");
       return { ok: false, reason: "held" };
     }
-    game.flags.opened = true;
+    game.flags.chosen = true;
     if (now - (game.hobbyAt || 0) < 800) return { ok: false, reason: "cooldown" };
     game.hobbyAt = now;
     var skill = game.player.skills.mind || 0;

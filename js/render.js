@@ -1496,7 +1496,7 @@
     var sx = cx - sw * 0.5;
     var scy = cy - sh * 0.5;
     var hero = storyBeat(newest >= 0 ? (S.logLine(game, newest) || "") : "", game);
-    if (!game.flags || game.flags.opened === false) {
+    if (!game.flags || game.flags.chosen === false) {
       hero = {
         line: "Zero dollars. A shift pays tonight. A hobby pays less and teaches you.",
         rail: GOLD,

@@ -303,6 +303,10 @@ function lastLog(game) {
   assert(S.workHobby(game, now).ok, "hobby pays");
   assert(game.player.skills.mind === 1, "mind skill");
   assert(game.player.capital > 0, "hobby cash");
+  assert(game.flags.opened === false, "hobby leaves the counter closed");
+  var hobbyCash = game.player.capital;
+  S.frame(game, now + 16000);
+  assert(game.player.capital === hobbyCash, "no sales after a hobby");
   var shift = S.workShift(game, now);
   assert(shift.ok && game.player.skills.work === 1, "work skill");
   game.player.vp = 4;
