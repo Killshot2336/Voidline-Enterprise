@@ -234,10 +234,10 @@
     var hit = R.hitTest(ui, p.x, p.y);
     if (hit) {
       act(hit.id);
-      var col = "#00ffcc";
-      if (hit.id.indexOf("stock:") === 0 || hit.id.indexOf("buy:") === 0) col = "#FFD700";
-      if (hit.id === "synth" || hit.id.indexOf("craft:") === 0) col = "#FFD700";
-      if (hit.id.indexOf("fire:") === 0 || hit.id === "reset:yes") col = "#ff3366";
+      var col = "#f0c36a";
+      if (hit.id.indexOf("stock:") === 0 || hit.id.indexOf("buy:") === 0) col = "#8c4a32";
+      if (hit.id === "synth" || hit.id.indexOf("craft:") === 0) col = "#f0c36a";
+      if (hit.id.indexOf("fire:") === 0 || hit.id === "reset:yes") col = "#6a3424";
       R.burst(p.x, p.y, col, game);
     }
   });
@@ -295,9 +295,9 @@
 
   function paintError(err) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = "#0c1020";
+    ctx.fillStyle = "#1c1612";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#e06a5c";
+    ctx.fillStyle = "#efe6d4";
     ctx.font = "16px sans-serif";
     ctx.fillText(String(err && err.message ? err.message : err), 24, 40);
   }
