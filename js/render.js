@@ -1491,17 +1491,17 @@
     var look = ui.menu === "scout" ? (ui.look || "sera") : "";
     var rect = { x: 0, y: 0, w: ui.w || 1, h: ui.h || 1 };
     var boxes = sceneBoxes(rect, shopArtKey(spec || {}));
-    if (look === "juniper") return boxCenter(boxes.juniper, rect, 1.55);
-    if (look === "landlord") return boxCenter(boxes.door, rect, 1.75);
+    if (look === "juniper") return boxCenter(boxes.juniper, rect, 1.04);
+    if (look === "landlord") return boxCenter(boxes.door, rect, 1.04);
     if (look === "hire") {
-      if (spec && spec.places && spec.places.hire === "upstairs") return boxCenter(boxes.up, rect, 1.9);
-      return boxCenter(boxes.window, rect, 1.6);
+      if (spec && spec.places && spec.places.hire === "upstairs") return boxCenter(boxes.up, rect, 1.04);
+      return boxCenter(boxes.window, rect, 1.04);
     }
-    if (look === "sera") return boxCenter(boxes.window, rect, 1.62);
-    if (ui.menu === "job") return { x: 0.36, y: 0.62, z: 1.16 };
-    if (ui.menu === "lab") return { x: 0.52, y: 0.66, z: 1.12 };
-    if (ui.menu === "edu") return { x: 0.4, y: 0.5, z: 1.05 };
-    if (spec && spec.opened && spec.hours !== "closed") return { x: 0.3, y: 0.56, z: 1.12 };
+    if (look === "sera") return boxCenter(boxes.window, rect, 1.04);
+    if (ui.menu === "job") return { x: 0.42, y: 0.54, z: 1.02 };
+    if (ui.menu === "lab") return { x: 0.48, y: 0.56, z: 1.02 };
+    if (ui.menu === "edu") return { x: 0.4, y: 0.5, z: 1 };
+    if (spec && spec.opened && spec.hours !== "closed") return { x: 0.42, y: 0.52, z: 1 };
     return { x: 0.42, y: 0.5, z: 1 };
   }
 
@@ -1719,7 +1719,7 @@
     var look = ui && ui.menu === "scout" ? (ui.look || "") : "";
     ctx.save();
     ctx.shadowBlur = 0;
-    if (!spec.dayOne) {
+    if (!spec.dayOne && !painted(shopArtKey(spec))) {
       paintSwungDoor(ctx, boxes.door, spec.doorOpen || 0);
       var trading = !!(spec.opened && spec.hours !== "closed");
       if (spec.lights && trading) {
@@ -1765,9 +1765,13 @@
       if (!ui.menu || ui.menu === "scout") pushWorld(ui, "look:" + id, box.x, box.y, box.w, box.h);
     }
     var win = boxes.window;
-    var seraBox = look === "sera" ? win : { x: win.x + 2, y: win.y + win.h * 0.06, w: win.w * 0.5, h: win.h * 0.92 };
+    var doorBox = boxes.door;
+    var fore = { x: rect.x + rect.w * 0.06, y: rect.y + rect.h * 0.16, w: rect.w * 0.28, h: rect.h * 0.74 };
+    var seraBox = look === "sera" ? fore : { x: win.x + 2, y: win.y + win.h * 0.06, w: win.w * 0.5, h: win.h * 0.92 };
     var hireBox = (spec.places && spec.places.hire === "upstairs") ? boxes.up : { x: win.x + win.w * 0.48, y: win.y + win.h * 0.08, w: win.w * 0.48, h: win.h * 0.9 };
-    if (look === "hire" && !(spec.places && spec.places.hire === "upstairs")) hireBox = win;
+    if (look === "hire") hireBox = fore;
+    if (look === "landlord") boxes = Object.assign({}, boxes, { door: fore });
+    if (look === "juniper") boxes = Object.assign({}, boxes, { juniper: { x: rect.x + rect.w * 0.62, y: rect.y + rect.h * 0.16, w: rect.w * 0.28, h: rect.h * 0.74 } });
     castOne("juniper", boxes.juniper);
     castOne("sera", seraBox);
     castOne("hire", hireBox);
@@ -1776,9 +1780,9 @@
       paintEmptyStool(ctx, win.x + win.w * 0.2, win.y + win.h * 0.8);
     }
     if (!spec.dayOne && spec.rentDue) {
-      var nx = boxes.door.x + boxes.door.w * 0.12;
-      var ny = boxes.door.y + 8;
-      var nw = Math.max(36, boxes.door.w * 0.76);
+      var nx = doorBox.x + doorBox.w * 0.12;
+      var ny = doorBox.y + 8;
+      var nw = Math.max(36, doorBox.w * 0.76);
       ctx.fillStyle = PAPER;
       ctx.fillRect(nx, ny, nw, 36);
       ctx.strokeStyle = INK;
@@ -1852,15 +1856,11 @@
   }
 
   function pageCurl(ctx, rect, flip) {
-    if (!(flip > 0) || flip >= 1) return;
-    var t = flip;
-    if (t < 0) t = 0;
-    if (t > 1) t = 1;
-    var e = t * t * (3 - 2 * t);
-    var sx = Math.cos(e * Math.PI);
-    ctx.translate(rect.x + rect.w, rect.y + rect.h * 0.5);
-    ctx.scale(Math.max(0.04, Math.abs(sx)), 1);
-    ctx.translate(-(rect.x + rect.w), -(rect.y + rect.h * 0.5));
+    if (!(flip > 0) || flip >= 1 || !rect) return;
+    var t = flip < 0.5 ? (1 - flip * 2) : ((flip - 0.5) * 2);
+    ctx.beginPath();
+    ctx.rect(rect.x, rect.y, Math.max(1, rect.w * t), rect.h);
+    ctx.clip();
   }
 
   function drawScreenSlip(ctx, ui, w, line, plan) {
@@ -3380,25 +3380,27 @@
     }
     ctx.save();
     ctx.shadowBlur = 0;
-    if (spec.lights && spec.hours !== "closed") {
-      ctx.fillStyle = "rgba(240,195,106,0.14)";
-      ctx.fillRect(x + w * 0.14, y + h * 0.4, w * 0.36, h * 0.22);
-    } else if (spec.owned) {
-      ctx.fillStyle = "rgba(20,16,14,0.12)";
-      ctx.fillRect(x + w * 0.14, y + h * 0.4, w * 0.36, h * 0.22);
+    if (!painted(shopArtKey(spec))) {
+      if (spec.lights && spec.hours !== "closed") {
+        ctx.fillStyle = "rgba(240,195,106,0.14)";
+        ctx.fillRect(x + w * 0.14, y + h * 0.4, w * 0.36, h * 0.22);
+      } else if (spec.owned) {
+        ctx.fillStyle = "rgba(20,16,14,0.12)";
+        ctx.fillRect(x + w * 0.14, y + h * 0.4, w * 0.36, h * 0.22);
+      }
+      if (spec.district === "campus") {
+        ctx.fillStyle = "rgba(190,214,170,0.16)";
+        ctx.fillRect(x, y, w, h * 0.34);
+      } else if (spec.district === "night") {
+        ctx.fillStyle = "rgba(16,20,40,0.16)";
+        ctx.fillRect(x, y, w, h);
+      }
+      if (spec.upstairs === "tutor" || spec.upstairs === "office") {
+        ctx.fillStyle = spec.upstairs === "office" ? "rgba(240,195,106,0.34)" : "rgba(62,200,216,0.22)";
+        ctx.fillRect(x + w * 0.16, y + h * 0.16, w * 0.26, h * 0.1);
+      }
+      paintOtherShops(ctx, x, y, w, h, spec);
     }
-    if (spec.district === "campus") {
-      ctx.fillStyle = "rgba(190,214,170,0.16)";
-      ctx.fillRect(x, y, w, h * 0.34);
-    } else if (spec.district === "night") {
-      ctx.fillStyle = "rgba(16,20,40,0.16)";
-      ctx.fillRect(x, y, w, h);
-    }
-    if (spec.upstairs === "tutor" || spec.upstairs === "office") {
-      ctx.fillStyle = spec.upstairs === "office" ? "rgba(240,195,106,0.34)" : "rgba(62,200,216,0.22)";
-      ctx.fillRect(x + w * 0.16, y + h * 0.16, w * 0.26, h * 0.1);
-    }
-    paintOtherShops(ctx, x, y, w, h, spec);
     if (spec.award) paintAwardPlaque(ctx, x + w * 0.5, y + h * 0.12, spec.award);
     var places = spec.places || {};
     var counterX = x + w * (who ? 0.56 : 0.4);
@@ -4376,11 +4378,11 @@
       ctx.restore();
     }
     var dim = spec.dim != null ? spec.dim : (dayOne ? 1 : 0);
-    if (dim > 0.02) {
+    if (dim > 0.02 && !painted(key)) {
       ctx.fillStyle = "rgba(20,16,14," + (0.62 * dim).toFixed(3) + ")";
       ctx.fillRect(x, y, w, h);
     }
-    if (spec.phase === "night") {
+    if (spec.phase === "night" && !painted(key)) {
       if (closed && !dayOne) {
         ctx.fillStyle = "rgba(16,22,40,0.22)";
         ctx.fillRect(x, y, w, h);
@@ -4398,45 +4400,14 @@
         ctx.stroke();
       }
     }
-    if (!dayOne && spec.district && spec.district !== "downtown") {
+    if (!dayOne && spec.district && spec.district !== "downtown" && !painted(key)) {
       var nk = spec.district === "campus" ? "campus" : "night";
       blitContain(ctx, nk, x + w * 0.78, y + h * 0.3, w * 0.16, h * 0.2);
     }
-    if (spec.rival && !dayOne && who !== "juniper") {
+    if (spec.rival && !dayOne && who !== "juniper" && !painted(key)) {
       blitContain(ctx, spec.phase === "night" ? "shopNight" : "shopNoon", x + w * 0.64, y + h * 0.26, w * 0.12, h * 0.16);
     }
-    var signBox = SIGN_BOX[key] || SIGN_BOX.shopNoon;
-    var boxesNow = sceneBoxes({ x: x, y: y, w: w, h: h }, key);
-    if (spec.cash != null) {
-      var cash = S.money(spec.cash);
-      var cf = font(16, false, 700, true);
-      ctx.font = cf;
-      var tw = measure(ctx, cf, cash);
-      var rx = boxesNow.window.x + 10;
-      if (rx < x + 8) rx = x + 8;
-      var ry = boxesNow.window.y + boxesNow.window.h * 0.42 + (spec.cashBump || 0);
-      ctx.fillStyle = "rgba(239,230,212,0.92)";
-      ctx.fillRect(rx, ry, tw + 12, 22);
-      ctx.fillStyle = INK;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
-      ctx.fillText(cash, rx + 6, ry + 11);
-    }
-    if (!dayOne && spec.level != null) {
-      var cx = x + w * 0.05;
-      var cy = y + h * 0.08;
-      ctx.fillStyle = PAPER;
-      ctx.fillRect(cx, cy, 48, 40);
-      ctx.fillStyle = BRICK;
-      ctx.fillRect(cx, cy, 48, 8);
-      ctx.fillStyle = INK;
-      ctx.font = font(16, false, 700, true);
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(String(spec.level), cx + 24, cy + 26);
-    }
     paintLiving(ctx, { x: x, y: y, w: w, h: h }, spec, who, ui, now);
-    var portraitW = 0;
     if (!(ui && ui.screenSlip)) {
     var line = slipWords(hero, spec);
     var slipChoice = plan.slip;
@@ -4483,26 +4454,24 @@
     }
     ctx.restore();
     }
-    if (plan.door && !(ui && ui.menu)) {
-      var doorW = Math.max(72, Math.min(108, w * 0.1));
-      var doorH = 32;
-      var doorX = boxesNow.door.x + 4;
-      var doorY = boxesNow.door.y + boxesNow.door.h * 0.35;
+    if (plan.door && !(ui && ui.menu) && !(ui && ui.screenSlip)) {
+      var doorW = Math.min(168, Math.max(96, w * 0.16));
+      var doorH = 36;
+      var doorX = x + w * 0.34;
+      var doorY = y + h - (ui && ui.L && ui.L.dock ? ui.L.dock : 102) - doorH - 16;
+      if (doorY < y + 8) doorY = y + 8;
       geo.door = { x: doorX, y: doorY, w: doorW, h: doorH };
       paintWords(ctx, doorX, doorY, doorW, doorH, shortChoice(plan.door.label), ui.hover === plan.door.id);
     }
     if (!dayOne && spec.sign && spec.shop) {
-      var nameX = x + w * signBox.x;
-      var nameW = w * signBox.w;
-      if (portraitW && nameX < x + portraitW) {
-        var cut = x + portraitW - nameX;
-        nameX += cut;
-        nameW -= cut;
-      }
+      var nameW = Math.min(240, w * 0.32);
+      var nameH = 32;
+      var nameX = x + (w - nameW) * 0.5;
+      var nameY = y + 18;
       if (spec.rewind === 0) {
         ctx.fillStyle = "rgba(20,16,14,0.78)";
-        ctx.fillRect(nameX, y + h * signBox.y, nameW, h * signBox.h);
-      } else if (nameW > 40) paintShopName(ctx, spec.shop, nameX, y + h * signBox.y, nameW, h * signBox.h);
+        ctx.fillRect(nameX, nameY, nameW, nameH);
+      } else paintShopName(ctx, spec.shop, nameX, nameY, nameW, nameH);
     }
     ctx.restore();
     ctx.textAlign = "left";
@@ -4965,7 +4934,7 @@
     var geo = drawStreet(ctx, { x: 0, y: top, w: w, h: cardH }, spec, who, plan, hero, ui, now);
     ctx.restore();
     ctx.globalAlpha = 1;
-    var slip = drawScreenSlip(ctx, ui, w, slipWords(hero, spec), plan);
+    var slip = ui.menu ? null : drawScreenSlip(ctx, ui, w, slipWords(hero, spec), plan);
     if (slip && plan.slip) pushHit(ui, plan.slip.id, slip.x, slip.y, slip.w, slip.h);
     if (slip) pushHit(ui, "hdr:settings", slip.x, slip.y, 22, 22);
     if (!ui.menu && plan.door && geo.door) {
@@ -5267,7 +5236,7 @@
       var backW = 84;
       var backH = 32;
       var backX = 16;
-      var backY = h - (L.dock || 96) - 46;
+      var backY = 16;
       drawTag(ctx, backX, backY, backW, backH, "Back", ui.hover === "close");
       pushHit(ui, "close", backX, backY, backW, backH);
     }
