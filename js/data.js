@@ -105,17 +105,20 @@
   ];
 
   var LIFE = [
-    { id: "landlord", kicker: "RENT", rail: "#e23d3d", line: "The landlord is in the doorway. Rent is {rent}.", a: "rentpay", aLabel: "Pay {rent}", b: "rentstall", bLabel: "Stall" },
+    { id: "landlord", kicker: "RENT", rail: "#e23d3d", line: "{landlord} Rent is {rent}.", a: "rentpay", aLabel: "Pay {rent}", b: "rentstall", bLabel: "Stall" },
     { id: "heat", kicker: "HEAT", rail: "#b44ac0", line: "Heat is {heat}. The room feels watched.", a: "laylow", aLabel: "Lay low", b: "fine", bLabel: "Pay a fine" },
     { id: "rival", kicker: "RIVAL", rail: "#e23d3d", line: "{rival} opened across the street. Lunch is thinner until you have a sign.", a: "upgrade:sign", aLabel: "Paint a sign", b: "shift", bLabel: "Work anyway" },
     { id: "regular", kicker: "REGULAR", rail: "#3ec8d8", line: "{name} came back. Visit {visits}.", a: "comp", aLabel: "Comp a meal", b: "greet", bLabel: "Charge full" },
+    { id: "sera_dark", kicker: "SERA", rail: "#3ec8d8", line: "{name} almost didn't come. The lights were off.", a: "upgrade:lights", aLabel: "Warm lights", b: "greet", bLabel: "Walk her in" },
+    { id: "rival_flip", kicker: "RIVAL", rail: "#e23d3d", line: "{rival} copied the sign. The line across the street got thinner.", a: "shift", aLabel: "Work lunch", b: "truce", bLabel: "Call a truce" },
+    { id: "hire_want", kicker: "HIRE", rail: "#f5c542", line: "{hire} wants the {want} hour. Mood {hireMood}.", a: "shift", aLabel: "Work their hour", b: "sendup", bLabel: "Send upstairs" },
     { id: "floor", kicker: "UPSTAIRS", rail: "#f5c542", line: "The floor above is empty. {floor} takes it.", a: "floor", aLabel: "Buy the floor", b: "shift", bLabel: "Not this year" },
     { id: "thin", kicker: "RESTOCK", rail: "#e23d3d", line: "The shelf is almost bare. People are still in line.", a: "stock:0", aLabel: "Restock", b: "shift", bLabel: "Work anyway" },
     { id: "morn_line", when: "morning", once: true, kicker: "MORNING", rail: "#f5c542", line: "Morning rush. Year {year}. Everyone wants food.", a: "shift", aLabel: "Work the rush", b: "rest", bLabel: "Breathe" },
     { id: "lunch_line", when: "lunch", once: true, kicker: "LUNCH", rail: "#f5c542", line: "Lunch rush. The line is out the door.", a: "shift", aLabel: "Work the rush", b: "stock:0", bLabel: "Check stock" },
     { id: "eve_line", when: "evening", once: true, kicker: "EVENING", rail: "#3ec8d8", line: "After school. The shop fills with people killing time.", a: "shift", aLabel: "Work it", b: "hobby", bLabel: "Tutor instead" },
-    { id: "night_line", when: "night", once: true, kicker: "NIGHT", rail: "#3ec8d8", line: "Late night. Regulars and weirdos, that's the crowd.", a: "shift", aLabel: "Stay open", b: "rest", bLabel: "Lock up" },
-    { id: "slow_line", when: "standard", once: true, kicker: "SLOW", rail: "#3ec8d8", line: "Slow hour. You can hear the fryer.", a: "hobby", aLabel: "Do a hobby", b: "shift", bLabel: "Work anyway" },
+    { id: "night_line", when: "night", once: true, kicker: "NIGHT", rail: "#3ec8d8", line: "Late night. Regulars and weirdos, that's the crowd.", a: "hours:open", aLabel: "Stay open", b: "hours:close", bLabel: "Lock up" },
+    { id: "slow_line", when: "standard", once: true, kicker: "SLOW", rail: "#3ec8d8", line: "Slow hour. The shop can close, or you can stay open.", a: "hours:close", aLabel: "Close up", b: "hours:open", bLabel: "Stay open" },
     { id: "work_hands", when: "any", workMin: 2, once: true, kicker: "WORK", rail: "#f5c542", line: "Your hands know the counter. Year {year}.", a: "shift", aLabel: "Work it", b: "tab:job", bLabel: "See jobs" },
     { id: "mind_spark", when: "any", mindMin: 3, once: true, kicker: "HOBBY", rail: "#3ec8d8", line: "What you taught is starting to stick.", a: "hobby:nightclass", aLabel: "Night class", b: "hobby", bLabel: "Tutor again" },
     { id: "sign_holds", when: "any", sign: true, rival: true, once: true, kicker: "SIGN", rail: "#f5c542", line: "The sign is doing the talking. {rival}'s line looks thinner.", a: "shift", aLabel: "Work the rush", b: "rest", bLabel: "Enjoy it" },

@@ -1717,6 +1717,11 @@
       ctx.arc(cx - r * 0.28, cy, r * 0.18, 0, Math.PI * 2);
       ctx.arc(cx + r * 0.28, cy, r * 0.18, 0, Math.PI * 2);
       ctx.stroke();
+    } else if (who === "hire") {
+      ctx.fillStyle = "#e7c56a";
+      ctx.fillRect(cx - r * 0.72, cy - r * 0.95, r * 1.44, r * 0.28);
+      ctx.fillStyle = "#1c2430";
+      ctx.fillRect(cx - r * 0.55, cy - r * 0.22, r * 1.1, r * 0.16);
     } else if (who === "juniper") {
       ctx.fillStyle = "#6a1d3a";
       ctx.beginPath();
@@ -1733,7 +1738,7 @@
       ctx.fillStyle = CYAN;
       ctx.fillRect(cx - r * 0.08, cy - r * 0.95, r * 0.14, r * 0.32);
     }
-    ctx.fillStyle = who === "juniper" ? "#4a2030" : who === "landlord" ? "#3a342c" : "#245060";
+    ctx.fillStyle = who === "juniper" ? "#4a2030" : who === "landlord" ? "#3a342c" : who === "hire" ? "#1e3a5f" : "#245060";
     round(ctx, cx - r * 0.75, cy + r * 0.72, r * 1.5, r * 0.7, 3);
     ctx.fill();
     ctx.fillStyle = DARK;
@@ -1810,8 +1815,10 @@
     return map[job.id] || "OPEN";
   }
 
-  function skyFill(phase, dayOne) {
+  function skyFill(phase, dayOne, district) {
     if (dayOne) return "#1a1e2a";
+    if (district === "night") return phase === "morning" ? "#3a4258" : "#141722";
+    if (district === "campus" && (phase === "morning" || phase === "standard")) return "#d5e6c8";
     if (phase === "morning") return "#f0b56a";
     if (phase === "lunch") return "#9fd4ea";
     if (phase === "evening") return "#e07a4a";
@@ -1852,7 +1859,15 @@
       degree: heldDegree(game),
       heat: (game.player && game.player.heat) || 0,
       shady: !!(game.flags && game.flags.shady),
-      hands: !!hands
+      hands: !!hands,
+      shop: (game.player && game.player.shop) || "",
+      bill: chosen ? (world.bill || 0) : 0,
+      upstairs: world.floor && chosen ? (world.upstairs || "none") : "",
+      upstairsStaff: chosen ? (world.upstairsStaff || "") : "",
+      district: world.district || "downtown",
+      regulars: chosen && world.regulars ? world.regulars : [],
+      hours: chosen ? (world.hours || "") : "",
+      onClock: !!(chosen && slot && slot.employee && world.hours !== "closed")
     };
   }
 
@@ -2151,6 +2166,15 @@
     return { tag: "LAB", color: CYAN, bg: "#143038" };
   }
 
+  function offerHours(game, hero) {
+    if (!hero || hero.alt || !game.flags || !game.flags.chosen || !game.world) return hero;
+    if (game.world.hours === "closed") {
+      hero.alt = "hours:open";
+      hero.altLabel = "Stay open";
+    }
+    return hero;
+  }
+
   function decorateOffer(game, hero) {
     if (!hero) return hero;
     if (hero.stamp === "HEAT" || hero.stamp === "DAY ONE" || hero.stamp === "RENT" || hero.stamp === "RIVAL" || hero.stamp === "REGULAR" || hero.stamp === "UPSTAIRS" || hero.action === "stock:0") return hero;
@@ -2179,22 +2203,44 @@
     var counter = !!spec.counter;
     var floor = !!spec.floor && h >= 96;
     var dayOne = !!spec.dayOne;
-    var closed = (spec.stock || 0) <= 0;
+    var closed = (spec.stock || 0) <= 0 || spec.hours === "closed";
     var phase = spec.phase || "night";
     var now = spec.now || 0;
+    var district = spec.district || "downtown";
     ctx.save();
     clearGlow(ctx);
     round(ctx, x, y, w, h, 12);
     ctx.clip();
-    ctx.fillStyle = skyFill(phase, dayOne);
+    ctx.fillStyle = skyFill(phase, dayOne, district);
     ctx.fillRect(x, y, w, h);
-    var skyH = Math.max(12, Math.min(26, h * 0.16));
-    var streetH = Math.max(16, Math.min(32, h * 0.2));
+    var skyH = Math.max(14, Math.min(36, h * 0.12));
+    var streetH = Math.max(28, Math.min(120, h * 0.26));
     var street = y + h - streetH;
-    ctx.fillStyle = dayOne ? "#1c2028" : "#2a3144";
+    var streetInk = dayOne ? "#1c2028" : "#2a3144";
+    if (!dayOne && district === "campus") streetInk = "#3d4a34";
+    if (!dayOne && district === "night") streetInk = "#12151c";
+    ctx.fillStyle = streetInk;
     ctx.fillRect(x, street, w, streetH);
-    ctx.fillStyle = dayOne ? "#343b48" : "#5a6478";
+    ctx.fillStyle = dayOne ? "#343b48" : (district === "campus" ? "#6a7a48" : "#5a6478");
     ctx.fillRect(x, street, w, 5);
+    if (!dayOne && district === "downtown") {
+      ctx.fillStyle = "#d8deea";
+      var walk;
+      for (walk = 0; walk < 4; walk++) ctx.fillRect(x + w * 0.42 + walk * 14, street + 10, 8, 4);
+    }
+    if (!dayOne && district === "campus") {
+      ctx.fillStyle = "#2f6b4f";
+      ctx.beginPath();
+      ctx.moveTo(x + 18, y + 8);
+      ctx.lineTo(x + 18, y + 28);
+      ctx.lineTo(x + 40, y + 16);
+      ctx.closePath();
+      ctx.fill();
+    }
+    if (!dayOne && district === "night") {
+      ctx.fillStyle = "#7a4ea3";
+      ctx.fillRect(x + 10, street - 3, w * 0.22, 3);
+    }
     var rivalW = spec.rival ? Math.max(64, Math.min(160, w * 0.2)) : 0;
     var shopX = x + 8;
     var shopW = w - 16 - (rivalW ? rivalW + 16 : 0);
@@ -2208,15 +2254,32 @@
     if (floor) {
       var upH = (shopBot - shopTop) * 0.36;
       groundTop = shopTop + upH;
-      var uw = Math.max(16, Math.min(34, shopW * 0.1));
+      var uw = Math.max(16, Math.min(40, shopW * 0.12));
+      var upKind = spec.upstairs || "none";
+      var upFill = upKind === "tutor" ? "#ffe08a" : (upKind === "office" ? "#b7d4ea" : "#14110e");
+      var uh = Math.max(12, upH - 18);
       var ui2;
       for (ui2 = 0; ui2 < 3; ui2++) {
         var ux = shopX + 14 + ui2 * (uw + 12);
         if (ux + uw > shopX + shopW - 36) break;
-        ctx.fillStyle = lights && !closed && !dayOne ? "#ffe08a" : "#1a1612";
-        ctx.fillRect(ux, shopTop + 10, uw, Math.max(10, upH - 18));
+        ctx.fillStyle = dayOne ? "#1a1612" : upFill;
+        ctx.fillRect(ux, shopTop + 10, uw, uh);
         ctx.strokeStyle = "#2a2118";
-        ctx.strokeRect(ux, shopTop + 10, uw, Math.max(10, upH - 18));
+        ctx.strokeRect(ux, shopTop + 10, uw, uh);
+        if (dayOne || upKind === "none") continue;
+        if (upKind === "tutor") {
+          ctx.fillStyle = "#f3c8ae";
+          ctx.beginPath();
+          ctx.arc(ux + uw * 0.32, shopTop + 10 + uh * 0.42, Math.max(2, uw * 0.12), 0, Math.PI * 2);
+          ctx.arc(ux + uw * 0.68, shopTop + 10 + uh * 0.48, Math.max(2, uw * 0.1), 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.fillStyle = "#6d88a4";
+          ctx.fillRect(ux + 3, shopTop + 10 + uh * 0.62, uw - 6, 3);
+          if (spec.upstairsStaff && ui2 === 1) {
+            drawNpc(ctx, ux + uw * 0.5, shopTop + 10 + uh * 0.55, Math.max(6, uh * 0.28), "hire");
+          }
+        }
       }
       if (spec.degree) {
         var fx = shopX + shopW - 30;
@@ -2269,35 +2332,43 @@
     ctx.strokeStyle = "#1a140c";
     ctx.strokeRect(doorX, winY, doorW, doorH);
     if (owned && !dayOne) icon(ctx, "key", doorX - 14, winY + 18, 16, GOLD);
-    if (spec.rentDue > 0 && owned) {
-      ctx.fillStyle = "#fffdf8";
-      ctx.fillRect(doorX + 3, winY + 8, doorW - 6, 18);
-      ctx.strokeStyle = CRIMSON;
-      ctx.strokeRect(doorX + 3, winY + 8, doorW - 6, 18);
-      ctx.fillStyle = CRIMSON;
-      ctx.font = font(8, true, 800);
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("RENT", doorX + doorW * 0.5, winY + 17);
+    if (owned && !dayOne && (spec.rentDue > 0 || spec.bill > 0)) {
+      var notes = [];
+      if (spec.rentDue > 0) notes.push("RENT");
+      if (spec.bill > 0) notes.push("BILL");
+      var ni;
+      for (ni = 0; ni < notes.length; ni++) {
+        var ny = winY + 6 + ni * 16;
+        ctx.fillStyle = "#fffdf8";
+        ctx.fillRect(doorX + 2, ny, doorW - 4, 14);
+        ctx.strokeStyle = CRIMSON;
+        ctx.strokeRect(doorX + 2, ny, doorW - 4, 14);
+        ctx.fillStyle = CRIMSON;
+        ctx.font = font(8, true, 800);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(notes[ni], doorX + doorW * 0.5, ny + 7);
+      }
     }
     if (signed && !dayOne) {
-      var word = signWord(spec.job, closed);
-      var sf = font(Math.max(12, Math.min(16, h * 0.11)), true, 800);
+      var word = spec.shop || signWord(spec.job, closed);
+      var sf = font(Math.max(13, Math.min(22, h * 0.075)), true, 800);
       ctx.font = sf;
-      var tw = measure(ctx, sf, word) + 16;
-      var sgx = shopX + 12;
-      var sgy = shopTop + 7;
-      round(ctx, sgx, sgy, Math.min(tw, shopW * 0.4), 18, 3);
+      var boardW = Math.min(shopW * 0.72, Math.max(120, measure(ctx, sf, word) + 28));
+      var boardH = Math.max(24, Math.min(36, h * 0.08));
+      var sgx = shopX + 14;
+      var sgy = Math.max(y + 4, shopTop - boardH * 0.45);
+      round(ctx, sgx, sgy, boardW, boardH, 3);
       ctx.fillStyle = closed ? "#241c16" : GOLD;
       ctx.fill();
       ctx.strokeStyle = DARK;
-      ctx.lineWidth = 1.4;
+      ctx.lineWidth = 1.6;
       ctx.stroke();
       ctx.fillStyle = closed ? "#f4efe4" : DARK;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(word, sgx + Math.min(tw, shopW * 0.4) * 0.5, sgy + 9);
-    } else if (closed && owned) {
+      ctx.fillText(clipText(ctx, sf, word, boardW - 12), sgx + boardW * 0.5, sgy + boardH * 0.5);
+    } else if (closed && owned && !dayOne) {
       ctx.fillStyle = "#efe4d2";
       ctx.fillRect(shopX + 12, shopTop + 8, 46, 16);
       ctx.fillStyle = DARK;
@@ -2339,19 +2410,26 @@
       var bw = Math.min(14, (cW - 8) / 6);
       var bi;
       for (bi = 0; bi < boxN; bi++) icon(ctx, "box", cX + 12 + bi * (bw + 4), cY - 14, bw + 8, "#e08a3c");
-      if (spec.employee) {
-        var ex = cX + cW - 10;
-        var ey = cY - 18;
+      if (spec.employee && spec.onClock) {
+        var ex = cX + cW - 16;
+        var ey = cY - 8;
+        drawNpc(ctx, ex, ey, Math.max(11, Math.min(18, winH * 0.28)), "hire");
         if (spec.employee.caught) {
-          ctx.fillStyle = "rgba(255,246,214,0.8)";
+          ctx.fillStyle = CRIMSON;
           ctx.beginPath();
-          ctx.moveTo(ex, ey - 20);
-          ctx.lineTo(ex - 12, ey + 8);
-          ctx.lineTo(ex + 12, ey + 8);
-          ctx.closePath();
+          ctx.arc(ex + 10, ey - 12, 3.2, 0, Math.PI * 2);
           ctx.fill();
         }
-        badge(ctx, "people", ex, ey, 18, spec.employee.caught ? CRIMSON : "#fffdf8", spec.employee.caught ? "#fffdf8" : DARK);
+      }
+      if (spec.regular && !dayOne) {
+        drawNpc(ctx, cX + 22, cY - 6, Math.max(11, Math.min(18, winH * 0.28)), "sera");
+        if (spec.regularDue) {
+          var dueOn = ((now / 460) | 0) % 2 === 0;
+          ctx.fillStyle = dueOn ? CYAN : "#145058";
+          ctx.beginPath();
+          ctx.arc(cX + 34, cY - 22, 3.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
       if (spec.hands) icon(ctx, "hand", cX + Math.min(cW * 0.4, 70), cY - 2, 18, "#f0c7a0");
     }
@@ -2368,23 +2446,21 @@
       ctx.arc(shopX + shopW - 10, shopTop + 10, 3.2, 0, Math.PI * 2);
       ctx.fill();
     }
-    var foot = y + h - 1;
-    var body = Math.max(18, Math.min(34, streetH + 8));
-    if (spec.regular) {
-      drawNpc(ctx, shopX + 18, foot - 12, Math.max(9, body * 0.34), "sera");
-      if (spec.regularDue) {
-        var dueOn = ((now / 460) | 0) % 2 === 0;
-        ctx.fillStyle = dueOn ? CYAN : "#145058";
-        ctx.beginPath();
-        ctx.arc(shopX + 30, foot - 26, 3.2, 0, Math.PI * 2);
-        ctx.fill();
-      }
+    var foot = street + 8;
+    var body = Math.max(16, Math.min(30, streetH * 0.42));
+    if (spec.rentDue > 0 && owned && !dayOne) drawNpc(ctx, doorX + doorW * 0.5, foot - 4, Math.max(9, body * 0.42), "landlord");
+    var extras = spec.regulars || [];
+    var extraN = 0;
+    var ei;
+    for (ei = 0; ei < extras.length && extraN < 3; ei++) {
+      if (!extras[ei] || (spec.regular && extras[ei].name === spec.regular.name)) continue;
+      drawNpc(ctx, shopX + 28 + extraN * 22, foot - 2, Math.max(7, body * 0.28), "sera");
+      extraN += 1;
     }
-    if (spec.rentDue > 0 && owned) drawNpc(ctx, doorX + doorW * 0.5, foot - 11, Math.max(9, body * 0.34), "landlord");
-    var rush = phase === "morning" || phase === "lunch" || phase === "evening";
-    var crowd = dayOne ? 0 : rush ? 3 : (phase === "night" ? 1 : 0);
+    var openRush = !dayOne && spec.hours !== "closed" && (phase === "morning" || phase === "lunch" || phase === "evening");
+    var crowd = dayOne ? 0 : (spec.hours === "closed" ? 0 : (openRush ? 3 : (phase === "night" ? 1 : 1)));
     var ci;
-    for (ci = 0; ci < crowd; ci++) drawPerson(ctx, shopX + 46 + ci * 26, foot, body, ci % 2 ? "#12161e" : "#1c2636");
+    for (ci = 0; ci < crowd; ci++) drawPerson(ctx, shopX + shopW * 0.42 + ci * 18, foot, body * 0.72, ci % 2 ? "#12161e" : "#1c2636");
     if (spec.rival && rivalW > 24) {
       var rx = x + w - rivalW - 8;
       var ry = shopTop + (shopBot - shopTop) * 0.18;
@@ -2402,14 +2478,15 @@
       ctx.fillStyle = lit && signed ? "#c4a060" : "#120e12";
       ctx.fillRect(rx + 8, ry + 10, Math.max(10, rivalW * 0.28), Math.max(10, rh * 0.32));
       ctx.globalAlpha = 1;
-      drawNpc(ctx, rx + rivalW * 0.55, foot - 12, Math.max(9, body * 0.32), "juniper");
-      if (!signed) {
-        var wk;
-        for (wk = 0; wk < 3; wk++) {
-          var t = ((now / 1600) + wk * 0.33) % 1;
-          drawPerson(ctx, shopX + shopW + 8 + t * Math.max(12, rx - shopX - shopW - 10), foot, body * 0.8, "#10141c");
-        }
+      drawNpc(ctx, rx + rivalW * 0.55, foot - 2, Math.max(9, body * 0.38), "juniper");
+      var lineN = signed ? 1 : 3;
+      var wk;
+      ctx.globalAlpha = signed ? 0.4 : 1;
+      for (wk = 0; wk < lineN; wk++) {
+        var t = ((now / 1600) + wk * 0.33) % 1;
+        drawPerson(ctx, shopX + shopW + 8 + t * Math.max(12, rx - shopX - shopW - 10), foot, body * (signed ? 0.48 : 0.72), "#10141c");
       }
+      ctx.globalAlpha = 1;
     }
     ctx.restore();
   }
@@ -2422,8 +2499,7 @@
     if (bot - top < 80 || w < 40) return;
     var newest = game.logN - 1;
     var strips = 0;
-    if (newest >= 1 && bot - top > 320) strips = 1;
-    if (newest >= 2 && bot - top > 560) strips = 2;
+    if (newest >= 1 && bot - top > 760) strips = 1;
     var stripH = 40;
     var gap = 8;
     var sy = top;
@@ -2480,16 +2556,21 @@
         stamp: "HEAT"
       };
     } else if (game.flags && game.flags.chosen) {
-      hero = decorateOffer(game, hero);
+      var frontId = game.world && game.world.spine && game.world.spine[0];
+      var showId = frontId || (game.world && game.world.showing);
+      var lived = showId && S.lifeBeat ? S.lifeBeat(game, showId) : null;
+      if (lived) hero = lived;
+      else hero = offerHours(game, decorateOffer(game, hero));
     }
     var handsOn = hero.action === "shift";
     var spec = storySpec(game, now, handsOn);
-    var band = Math.min(68, Math.max(52, sh * 0.16));
-    var showAlt = !!(hero.alt && sh > 188);
-    var bh = sh < 210 ? 44 : 52;
-    var btnBlock = bh + (showAlt ? bh + 8 : 0);
-    var btnTop = scy + sh - 14 - btnBlock;
-    if (btnTop < scy + band + 36) btnTop = scy + band + 36;
+    var band = Math.min(46, Math.max(34, sh * 0.09));
+    var bh = sh < 240 ? 42 : 48;
+    var showAlt = !!(hero.alt && sh > 150);
+    var sideBy = !!(showAlt && sw >= 560);
+    var btnBlock = sideBy || !showAlt ? bh : bh * 2 + 8;
+    var btnTop = scy + sh - 12 - btnBlock;
+    if (btnTop < scy + band + 28) btnTop = scy + band + 28;
     ctx.save();
     clearGlow(ctx);
     if (deal < 0.995) {
@@ -2521,34 +2602,12 @@
     ctx.textBaseline = "middle";
     ctx.fillText(clipText(ctx, titleFont, beatStamp(hero), sw > 520 ? sw - 250 : sw - 150), sx + 64, scy + band * 0.5);
     if (sw > 280) drawVpStamps(ctx, sx + sw - (sw > 560 ? 200 : 118), scy + band * 0.5, game.player.vp || 0);
-    var textX = sx + 22;
-    var textW = sw - 44;
+    var textX = sx + 16;
+    var textW = sw - 32;
     var cursor = scy + band + 8;
-    var limit = btnTop - 8;
-    if (limit - cursor > 26) {
-      drawPhotoChip(ctx, textX, cursor, Math.min(220, textW * 0.58), game);
-      if (sw > 200) drawYearStamp(ctx, sx + sw - 46, cursor + 10, game.player.level);
-      cursor += 26;
-    }
-    var slot0 = game.slots && game.slots[0];
-    var job0 = slot0 ? D.jobById[slot0.jobId] : null;
-    var who = slot0 && slot0.employee ? slot0.employee.name + " is on the register." : "You're working it alone.";
-    var scene = (job0 ? job0.name : "The counter") + ". " + who;
-    if ((game.player.shifts || 0) < 1 && game.player.capital < 20 && !(game.flags && game.flags.shady)) {
-      scene = "No shop of your own yet. Just a way to get the first dollar.";
-    } else {
-      var placeBit = game.player.place;
-      var roomBit = !placeBit || !placeBit.owned ? "Bare corner." : ((placeBit.lights ? "Warm lights" : "Bare bulb") + (placeBit.sign ? ", sign up" : "") + (placeBit.counter ? ", real counter" : "") + ".");
-      scene = roomBit + " " + scene;
-      if (game.world && game.world.regular) scene += " " + game.world.regular.name.split(" ")[0] + " keeps coming back.";
-      if (game.world && game.world.rival && game.player.place && !game.player.place.sign) scene += " " + game.world.rival.split(" ")[0] + " is across the street.";
-      if (game.world && game.world.floor) scene += " Upstairs is yours.";
-    }
-    var lineH = L.w < 720 ? 22 : 26;
-    var roomForArt = limit - cursor;
-    var maxLines = roomForArt > 220 ? 2 : 1;
-    var bodyFont = font(L.w < 720 ? 18 : 22, false, 500);
-    var lines = wrapLines(ctx, bodyFont, hero.line, textW, maxLines);
+    var lineH = L.w < 720 ? 20 : 22;
+    var bodyFont = font(L.w < 720 ? 16 : 18, false, 600);
+    var lines = wrapLines(ctx, bodyFont, hero.line, textW, sh > 280 ? 2 : 1);
     ctx.font = bodyFont;
     ctx.fillStyle = DARK;
     ctx.textAlign = "left";
@@ -2558,44 +2617,24 @@
       ctx.fillText(lines[li], textX, cursor);
       cursor += lineH;
     }
-    var chipRoom = limit - cursor > 150 ? 34 : 0;
-    var storeH = limit - cursor - chipRoom - 6;
-    if (storeH > 168) storeH = 168;
-    if (storeH >= 48) {
-      var storeW = Math.min(textW, Math.max(260, storeH * 3.05));
-      var storeX = textX + (textW - storeW) * 0.5;
-      drawStorefront(ctx, storeX, cursor, storeW, storeH, spec);
-      cursor += storeH + 6;
-    }
-    if (chipRoom && slot0 && cursor + 28 <= limit + 4) {
-      var chipW = (textW - 16) / 3;
-      var whoShort = slot0.employee ? slot0.employee.name.split(" ")[0] : "Solo";
-      var stressN = Math.round(game.player.stress);
-      var chips = [
-        ["box", "Stock " + slot0.stock, "#e08a3c"],
-        ["people", whoShort, "#e2569a"],
-        ["flame", (game.flags && game.flags.shady) ? ("Heat " + Math.round(game.player.heat || 0)) : ("Stress " + stressN), (game.flags && game.flags.shady) ? ((game.player.heat || 0) > 40 ? CRIMSON : VIOLET) : (stressN > 50 ? CRIMSON : "#c47a4a")]
-      ];
-      var ci;
-      for (ci = 0; ci < chips.length; ci++) {
-        var chx = textX + ci * (chipW + 8);
-        round(ctx, chx, cursor, chipW, 30, 15);
-        ctx.fillStyle = "#fffdf8";
-        ctx.fill();
-        ctx.strokeStyle = chips[ci][2];
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        icon(ctx, chips[ci][0], chx + 16, cursor + 15, 15, chips[ci][2]);
-        ctx.font = font(12, false, 600);
-        ctx.fillStyle = DARK;
-        ctx.textAlign = "left";
-        ctx.textBaseline = "middle";
-        ctx.fillText(clipText(ctx, font(12, false, 600), chips[ci][1], chipW - 36), chx + 28, cursor + 15);
-      }
+    var storeY = cursor + 6;
+    var storeH = scy + sh - 10 - storeY;
+    if (storeH >= 72) {
+      drawStorefront(ctx, textX, storeY, textW, storeH, spec);
     }
     if (!ui.menu) {
-      fatButton(ctx, ui, hero.action, textX, btnTop, textW, bh, hero.label, false);
-      if (showAlt) fatButton(ctx, ui, hero.alt, textX, btnTop + bh + 8, textW, bh, hero.altLabel, true);
+      var clipWas = ui.clip;
+      ui.clip = { x: sx, y: scy, w: sw, h: sh };
+      if (sideBy) {
+        var gap = 8;
+        var bw = (textW - gap) / 2;
+        fatButton(ctx, ui, hero.action, textX, btnTop, bw, bh, hero.label, false);
+        fatButton(ctx, ui, hero.alt, textX + bw + gap, btnTop, bw, bh, hero.altLabel, true);
+      } else {
+        fatButton(ctx, ui, hero.action, textX, btnTop, textW, bh, hero.label, false);
+        if (showAlt) fatButton(ctx, ui, hero.alt, textX, btnTop + bh + 8, textW, bh, hero.altLabel, true);
+      }
+      ui.clip = clipWas;
     }
     ctx.restore();
     ctx.globalAlpha = 1;

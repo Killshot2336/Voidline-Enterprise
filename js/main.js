@@ -91,6 +91,9 @@
       return;
     }
     if (id.indexOf("up:") === 0) { S.setUpstairs(game, id.substring(3)); return; }
+    if (id === "sendup") { S.sendUpstairs(game); return; }
+    if (id === "hours:open") { S.setHours(game, "open", now); return; }
+    if (id === "hours:close") { S.setHours(game, "closed", now); return; }
     if (id === "truce") { S.makeTruce(game); return; }
     if (id === "class") { S.takeClass(game); return; }
     if (id === "lot") { S.claimLot(game); return; }

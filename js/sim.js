@@ -302,6 +302,19 @@
     if (w.craftShiftLogged == null) w.craftShiftLogged = false;
     if (w.catchNamed == null) w.catchNamed = false;
     if (w.councilYear == null) w.councilYear = 0;
+    if (!w.spine) w.spine = [];
+    if (w.landlordMood == null) w.landlordMood = 2;
+    if (w.rivalMemory == null) w.rivalMemory = "";
+    if (w.hours == null) w.hours = "";
+    if (w.hoursHold == null) w.hoursHold = false;
+    if (w.hoursPhase == null) w.hoursPhase = "";
+    if (w.upstairsStaff == null) w.upstairsStaff = "";
+    if (w.tutorPhase == null) w.tutorPhase = "";
+    if (w.rivalFlip == null) w.rivalFlip = false;
+    if (!w.wants) w.wants = {};
+    if (!w.wants.sera) w.wants.sera = "lights";
+    if (!w.wants.juniper) w.wants.juniper = "lunch";
+    if (!w.wants.landlord) w.wants.landlord = "building";
     w.season = seasonOf(p.level);
     ensureEmployees(game);
   }
@@ -357,7 +370,40 @@
       .replace(/\{speaker\}/g, money(D.ROOM.speaker || 0))
       .replace(/\{plant\}/g, money(D.ROOM.plant || 0))
       .replace(/\{neon\}/g, money(D.ROOM.neon || 0))
-      .replace(/\{insure\}/g, money(30));
+      .replace(/\{insure\}/g, money(30))
+      .replace(/\{landlord\}/g, landlordTone(w))
+      .replace(/\{hire\}/g, hireName(game))
+      .replace(/\{want\}/g, hireWant(game))
+      .replace(/\{hireMood\}/g, String(hireMood(game)));
+  }
+
+  function landlordTone(w) {
+    var m = w.landlordMood == null ? 2 : w.landlordMood;
+    if (m <= 1) return "The landlord is done waiting.";
+    if (m >= 4) return "The landlord likes the building.";
+    return "The landlord is in the doorway.";
+  }
+
+  function slotEmployee(game) {
+    var slot = game.slots && game.slots[0];
+    return slot && slot.employee ? slot.employee : null;
+  }
+
+  function hireName(game) {
+    var emp = slotEmployee(game);
+    return emp && emp.name ? emp.name : "Your hire";
+  }
+
+  function hireWant(game) {
+    var emp = slotEmployee(game);
+    if (!emp) return "shift";
+    return emp.want || emp.pref || "shift";
+  }
+
+  function hireMood(game) {
+    var emp = slotEmployee(game);
+    if (!emp || emp.mood == null) return 2;
+    return emp.mood;
   }
 
   function templateOk(game, card) {
@@ -382,6 +428,7 @@
     if (card.partner && w.partner) return false;
     if (card.quiet && (!(game.flags && game.flags.shady) || !place.owned || w.quietRoom)) return false;
     if (card.favor && (!(w.regular && (w.regular.mood || 0) >= 3) || w.favorYear === game.player.level)) return false;
+    if (card.favor && !(game.player.place && game.player.place.lights)) return false;
     if (card.market && ((game.player.visibility || 0) < 40 || w.nightMarket)) return false;
     if (card.lot && (!game.degrees || !game.degrees.bach || w.secondLot)) return false;
     if (card.retire && w.retired) return false;
@@ -406,14 +453,106 @@
     return pool[n].id;
   }
 
+  function seraWantId(game) {
+    ensureLife(game);
+    var reg = game.world.regular;
+    if (!reg) return "";
+    var lights = !!(game.player.place && game.player.place.lights);
+    if (!lights) return "sera_dark";
+    if ((reg.mood || 0) >= 3 && game.world.favorYear !== game.player.level) return "favor_card";
+    return "";
+  }
+
+  function personCard(game) {
+    var w = game.world;
+    var place = game.player.place || {};
+    var lights = !!place.lights;
+    if (w.regular && !lights && (w.regularDue || place.owned)) return "sera_dark";
+    if (seraWantId(game) === "favor_card") return "favor_card";
+    if (w.rival && place.owned && !place.sign) return "rival";
+    if (w.rivalFlip) return "rival_flip";
+    var emp = slotEmployee(game);
+    if (emp && (emp.mood || 0) <= 1) return "hire_want";
+    return "";
+  }
+
+  function hourCard(game, now) {
+    var phase = phaseAt(now).id;
+    var map = { morning: "morn_line", lunch: "lunch_line", evening: "eve_line", night: "night_line", standard: "slow_line" };
+    var id = map[phase] || "";
+    var card = id && D.lifeById[id];
+    if (card && !(card.once && game.world.seen[id] === game.player.level)) return id;
+    if (game.world.seen.year_open !== game.player.level) return "year_open";
+    return "";
+  }
+
+  function pushSpine(list, id) {
+    if (id && list.indexOf(id) < 0) list.push(id);
+  }
+
+  function fillYearSpine(game, now) {
+    ensureLife(game);
+    var w = game.world;
+    var list = [];
+    if (w.rentDue > 0) pushSpine(list, "landlord");
+    if (w.bill > 0) pushSpine(list, "bill");
+    pushSpine(list, personCard(game));
+    pushSpine(list, hourCard(game, now));
+    w.spine = list;
+  }
+
+  function enqueuePhaseDue(game, now) {
+    ensureLife(game);
+    var w = game.world;
+    if (!w.spine) w.spine = [];
+    if (w.spine.length) return;
+    var id = "";
+    if (w.rentDue > 0) id = "landlord";
+    else if (w.bill > 0) id = "bill";
+    else id = personCard(game) || "";
+    if (id) w.spine.push(id);
+  }
+
+  function spineOpen(game) {
+    var w = game.world;
+    return !!(w && w.spine && w.spine.length && w.showing === w.spine[0]);
+  }
+
+  function actionResolves(cardId, actionId) {
+    var card = D.lifeById[cardId];
+    if (!card || !actionId) return false;
+    return card.a === actionId || card.b === actionId;
+  }
+
+  function finishCard(game, actionId) {
+    var w = game.world;
+    if (!w) return;
+    var front = w.spine && w.spine[0];
+    if (front && actionResolves(front, actionId)) {
+      w.spine.shift();
+      if (w.showing === front) w.showing = "";
+      if (front === "rival_flip") w.rivalFlip = false;
+      return;
+    }
+    if (w.showing && actionResolves(w.showing, actionId)) {
+      if (w.showing === "rival_flip") w.rivalFlip = false;
+      w.showing = "";
+    }
+  }
+
   function currentLifeId(game, now) {
     ensureLife(game);
     var w = game.world;
     var place = game.player.place || {};
+    if (w.spine && w.spine.length) return w.spine[0];
     if (w.rentDue > 0) return "landlord";
     if (game.flags && game.flags.shady && (game.player.heat || 0) >= 45) return "heat";
     if (w.rival && place.owned && !place.sign) return "rival";
-    if (w.regular && w.regularDue) return "regular";
+    if (w.regular && w.regularDue) {
+      if (place.owned && !place.lights) return "sera_dark";
+      return "regular";
+    }
+    if (w.rivalFlip) return "rival_flip";
     if (place.owned && !w.floor && game.player.capital >= D.ROOM.floor) return "floor";
     var slot = game.slots && game.slots[0];
     if (slot && slot.stock > 0 && slot.stock <= 2) return "thin";
@@ -427,6 +566,7 @@
   function offerLife(game, now) {
     ensureLife(game);
     if (!game.flags || !game.flags.opened) return false;
+    if (spineOpen(game)) return false;
     tenantTick(game, phaseAt(now).id);
     var id = currentLifeId(game, now);
     if (!id || id === game.world.showing) return false;
@@ -491,6 +631,7 @@
     if (shifts > 0 && shifts % 4 === 0) markLightRegulars(game);
     if (shifts === 6 && game.player.place && game.player.place.owned && !w.rival) {
       w.rival = "Juniper Pike";
+      if (!w.rivalMemory) w.rivalMemory = "thin";
       syncRivalSign(game);
     }
     offerLife(game, now);
@@ -560,11 +701,14 @@
       pushLog(game, awardsLine(game));
       guard += 1;
     }
-    if (leveled && game.player.place && game.player.place.owned) {
+    if (leveled) {
       ensureLife(game);
-      game.world.rentDue = rentAmount(game);
-      game.world.showing = "";
-      offerLife(game, game.lastReal || 0);
+      if (game.player.place && game.player.place.owned) game.world.rentDue = rentAmount(game);
+      fillYearSpine(game, game.lastReal || 0);
+      if (game.player.place && game.player.place.owned) {
+        game.world.showing = "";
+        offerLife(game, game.lastReal || 0);
+      }
     }
     return leveled;
   }
@@ -907,10 +1051,23 @@
     return true;
   }
 
+  function upstairsTick(game, now) {
+    var w = game.world;
+    if (!w || !w.floor || w.upstairs !== "tutor") return 0;
+    if (w.hours === "closed") return 0;
+    var phase = phaseAt(now || game.lastReal || 0).id;
+    if (w.tutorPhase === phase) return 0;
+    w.tutorPhase = phase;
+    var pay = 4;
+    game.player.capital += pay;
+    return pay;
+  }
+
   function runBusiness(game, now, ms, rng) {
     var phase = phaseAt(now);
     var i;
     ensureSlots(game);
+    upstairsTick(game, now);
     for (i = 0; i < game.slots.length; i++) {
       var slot = game.slots[i];
       slot.bucket += ms / 1000;
@@ -931,6 +1088,9 @@
     if (now < game.lastReal) game.lastReal = now;
     var wall = now - game.lastReal;
     ensureLife(game);
+    var phase = phaseAt(now);
+    var phaseChanged = !game.booted || phase.id !== game.phaseId;
+    if (phaseChanged) syncHours(game, phase.id);
     if (wall > 0) {
       applyWall(game, game.lastReal, now);
       if (game.flags.opened) {
@@ -946,28 +1106,32 @@
           }
           pushLog(game, catchLine);
         }
-        if (biz > 20000) bulkBusiness(game, now, biz, rng);
-        else runBusiness(game, now, biz, rng);
+        if (shopOpen(game)) {
+          if (biz > 20000) bulkBusiness(game, now, biz, rng);
+          else runBusiness(game, now, biz, rng);
+        }
         serviceEngines(game, now, wall);
       }
       game.lastReal = now;
     }
-    var phase = phaseAt(now);
     if (game.flags.opened && !game.world.welcomed) {
       game.world.welcomed = true;
       offerLife(game, now);
     }
-    if (game.flags.opened && (!game.booted || phase.id !== game.phaseId)) {
-      if (game.world.rival && game.world.notePhase !== phase.id) {
+    if (game.flags.opened && phaseChanged) {
+      var blocked = spineOpen(game);
+      if (!blocked && game.world.rival && game.world.notePhase !== phase.id) {
         game.world.notePhase = phase.id;
         pushLog(game, "City note: " + game.world.rival + " is still across the street.");
       }
       tenantTick(game, phase.id);
-      if (!offerLife(game, now) && !game.world.showing) {
+      enqueuePhaseDue(game, now);
+      if (!blocked && !offerLife(game, now) && !game.world.showing) {
         pushLog(game, "Clock phase: " + phase.name + ". Revenue x" + phase.revenue.toFixed(2) + ".");
       }
     }
     game.phaseId = phase.id;
+    tickHireMood(game, phase.id);
     spoilTick(game, now);
     checkQuits(game);
     checkHints(game);
@@ -1134,7 +1298,10 @@
     var pay = Math.round((14 + game.player.level * 2) * phase.revenue * bonus.revenue);
     if (game.fx && now < game.fx.sugarUntil) pay *= 2;
     if ((game.player.skills.work || 0) + 1 >= 8) pay += 2;
-    if (game.world.upstairs === "office" && game.world.floor) pay += 3;
+    if (game.world.upstairs === "office" && game.world.floor) {
+      pay += 3;
+      if (game.world.upstairsStaff) pay += 2;
+    }
     game.player.capital += pay;
     if (game.world.partner) {
       var split = Math.max(1, Math.round(pay * 0.1));
@@ -1169,6 +1336,7 @@
     if (place && place.plant) game.player.stress = clampStat(game.player.stress - 1);
     if (place && place.neon) game.player.visibility = clampStat(game.player.visibility + 0.4);
     if (game.player.shifts % 4 === 0) postBill(game);
+    finishCard(game, "shift");
     if (game.crafted && game.crafted.length && !game.world.craftShiftLogged) {
       game.world.craftShiftLogged = true;
       pushLog(game, "A crafted plate is on the counter.");
@@ -1261,6 +1429,7 @@
     else if (part === "speaker") pushLog(game, "+ A speaker. The room has a little more clout.");
     else if (part === "plant") pushLog(game, "+ A plant. The shift feels less sharp.");
     else pushLog(game, "+ Neon. Mostly for show.");
+    finishCard(game, "upgrade:" + part);
     game.rev += 1;
     return { ok: true };
   }
@@ -1277,6 +1446,8 @@
     game.world.rentDue = 0;
     game.world.behind = 0;
     game.world.locked = 0;
+    game.world.landlordMood = Math.min(5, (game.world.landlordMood == null ? 2 : game.world.landlordMood) + 1);
+    finishCard(game, "rentpay");
     game.world.showing = "";
     advanceLease(game, "rent");
     pushLog(game, "+ You paid the landlord " + money(due) + ". The year is yours.");
@@ -1289,6 +1460,8 @@
     if (!(game.world.rentDue > 0)) return { ok: false, reason: "none" };
     game.world.behind += 1;
     game.player.stress = clampStat(game.player.stress + 8);
+    game.world.landlordMood = Math.max(0, (game.world.landlordMood == null ? 2 : game.world.landlordMood) - 1);
+    finishCard(game, "rentstall");
     game.world.showing = "";
     if (game.world.behind >= 3 && game.player.place) {
       game.player.place.lights = 0;
@@ -1316,6 +1489,11 @@
     game.player.capital -= cost;
     game.world.floor = 1;
     game.world.upstairs = "none";
+    game.world.upstairsStaff = "";
+    if (!game.world.spine) game.world.spine = [];
+    if (game.world.rentDue > 0) {
+      if (game.world.spine.indexOf("upstairs_pick") < 0) game.world.spine.push("upstairs_pick");
+    } else game.world.spine = ["upstairs_pick"];
     game.world.showing = "";
     advanceLease(game, "floor");
     if (!game.world.milestones.floor) {
@@ -1340,6 +1518,7 @@
     reg.mood = Math.min(5, (reg.mood || 0) + 1);
     reg.visits = (reg.visits || 1) + 1;
     game.world.regularDue = false;
+    finishCard(game, "comp");
     game.world.showing = "";
     pushLog(game, "+ " + reg.name + " grins. You comped the meal.");
     game.rev += 1;
@@ -1353,6 +1532,7 @@
     reg.visits = (reg.visits || 1) + 1;
     reg.mood = Math.max(0, (reg.mood || 0) - 1);
     game.world.regularDue = false;
+    finishCard(game, "greet");
     game.world.showing = "";
     game.player.capital += 3;
     pushLog(game, "+ " + reg.name + " paid full price and went quiet.");
@@ -1517,7 +1697,9 @@
       salary: salary,
       traits: card.traits.slice(),
       caught: false,
-      pref: prefFor(card.name)
+      pref: prefFor(card.name),
+      want: prefFor(card.name),
+      mood: 2
     };
     checkGoals(game);
     var idx = game.resumes.indexOf(card);
@@ -2015,6 +2197,8 @@
     for (i = 0; i < slots.length; i++) {
       var emp = slots[i].employee;
       if (emp && !emp.pref) emp.pref = prefFor(emp.name);
+    if (emp && !emp.want) emp.want = emp.pref;
+    if (emp && emp.mood == null) emp.mood = 2;
     }
   }
 
@@ -2050,11 +2234,21 @@
     return 1;
   }
 
-  function syncRivalSign(game) {
+  function noteRivalMemory(game) {
     var w = game.world;
     var place = game.player.place;
-    if (!w || w.truce) return;
-    if (w.rival && place && place.sign) w.rivalSign = true;
+    if (!w || !w.rival || w.truce) return;
+    if (place && place.sign) {
+      if (w.rivalMemory !== "copied") {
+        if (w.rivalMemory === "thin") w.rivalFlip = true;
+        w.rivalMemory = "copied";
+      }
+      w.rivalSign = true;
+    } else if (!w.rivalMemory) w.rivalMemory = "thin";
+  }
+
+  function syncRivalSign(game) {
+    noteRivalMemory(game);
   }
 
   function rivalLunchMult(game) {
@@ -2062,10 +2256,13 @@
     if (!w || !w.rival || w.truce) return 1;
     var place = game.player.place;
     if (place && place.sign) {
-      w.rivalSign = true;
+      noteRivalMemory(game);
       return 0.93;
     }
-    if (place && !place.sign) return 0.82;
+    if (place && !place.sign) {
+      noteRivalMemory(game);
+      return 0.82;
+    }
     return 1;
   }
 
@@ -2279,16 +2476,82 @@
     if (!game.world.floor) return { ok: false, reason: "floor" };
     if (kind !== "tutor" && kind !== "office") return { ok: false, reason: "kind" };
     game.world.upstairs = kind;
+    if (kind !== "office") game.world.upstairsStaff = "";
+    finishCard(game, "up:" + kind);
     game.world.showing = "";
     pushLog(game, "+ Upstairs is a " + kind + ".");
     game.rev += 1;
     return { ok: true };
   }
 
+  function sendUpstairs(game) {
+    ensureLife(game);
+    if (!game.world.floor || game.world.upstairs !== "office") return { ok: false, reason: "office" };
+    var emp = slotEmployee(game);
+    if (!emp) return { ok: false, reason: "hire" };
+    game.world.upstairsStaff = emp.name;
+    finishCard(game, "sendup");
+    game.world.showing = "";
+    pushLog(game, "+ " + emp.name + " went upstairs.");
+    game.rev += 1;
+    return { ok: true, name: emp.name };
+  }
+
+  function setHours(game, mode, now) {
+    ensureLife(game);
+    if (mode !== "open" && mode !== "closed") return { ok: false, reason: "mode" };
+    var phase = phaseAt(now || game.lastReal || 0).id;
+    game.world.hours = mode;
+    game.world.hoursHold = true;
+    game.world.hoursPhase = phase;
+    finishCard(game, mode === "open" ? "hours:open" : "hours:close");
+    game.world.showing = "";
+    pushLog(game, mode === "open" ? "+ Staying open." : "+ The shop is closed.");
+    game.rev += 1;
+    return { ok: true, hours: mode };
+  }
+
+  function syncHours(game, phaseId) {
+    var w = game.world;
+    if (!w) return;
+    if (w.hoursHold) {
+      if (w.hoursPhase && w.hoursPhase !== phaseId) w.hoursHold = false;
+      else {
+        w.hoursPhase = w.hoursPhase || phaseId;
+        if (w.hours !== "open" && w.hours !== "closed") w.hours = "open";
+        return;
+      }
+    }
+    w.hoursPhase = phaseId;
+    w.hours = (phaseId === "night" || phaseId === "standard") ? "closed" : "open";
+  }
+
+  function shopOpen(game) {
+    return !game.world || game.world.hours !== "closed";
+  }
+
+  function tickHireMood(game, phaseId) {
+    var slots = game.slots || [];
+    var i;
+    for (i = 0; i < slots.length; i++) {
+      var emp = slots[i].employee;
+      if (!emp) continue;
+      if (!emp.pref) emp.pref = prefFor(emp.name);
+      if (!emp.want) emp.want = emp.pref;
+      if (emp.mood == null) emp.mood = 2;
+      if (emp.moodPhase === phaseId) continue;
+      emp.moodPhase = phaseId;
+      if (emp.pref === phaseId) emp.mood = Math.min(5, emp.mood + 1);
+      else emp.mood = Math.max(0, emp.mood - 1);
+    }
+  }
+
   function makeTruce(game) {
     ensureLife(game);
     if (!game.world.rival) return { ok: false, reason: "none" };
     game.world.truce = true;
+    game.world.rivalFlip = false;
+    finishCard(game, "truce");
     game.world.showing = "";
     pushLog(game, "+ A truce. Lunch is just lunch.");
     game.rev += 1;
@@ -2329,6 +2592,7 @@
     if (game.player.capital < due) return { ok: false, reason: "capital" };
     game.player.capital -= due;
     game.world.bill = 0;
+    finishCard(game, "billpay");
     game.world.showing = "";
     pushLog(game, "+ Weekly bill paid. " + money(due) + ".");
     game.rev += 1;
@@ -2682,6 +2946,7 @@
     compRegular: compRegular,
     greetRegular: greetRegular,
     currentLifeId: currentLifeId,
+    seraWantId: seraWantId,
     lifeBeat: lifeBeat,
     skim: skim,
     score: score,
@@ -2722,6 +2987,8 @@
     setShop: setShop,
     cycleShop: cycleShop,
     setUpstairs: setUpstairs,
+    sendUpstairs: sendUpstairs,
+    setHours: setHours,
     makeTruce: makeTruce,
     takeClass: takeClass,
     claimLot: claimLot,

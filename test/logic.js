@@ -871,5 +871,118 @@ function memStorage() {
   assert(tenant.player.capital === 3, "tenant once per phase");
 })();
 
+(function streetYear() {
+  var now = 1_750_000_000_000;
+  var spine = S.fresh(now);
+  spine.player.capital = 80;
+  assert(S.buyRoom(spine).ok, "spine room");
+  spine.world.bill = 7;
+  spine.player.xp = S.xpNeed(1) - 1;
+  assert(S.workShift(spine, now).ok, "spine year");
+  assert(allLogs(spine).indexOf("Next XP threshold") >= 0, "rank log kept");
+  assert(spine.world.rentDue > 0 && spine.world.bill > 0, "rent and bill both due");
+  assert(spine.world.spine[0] === "landlord", "rent is first");
+  assert(spine.world.spine.indexOf("bill") > spine.world.spine.indexOf("landlord"), "bill waits behind rent");
+  assert(S.currentLifeId(spine, now) === "landlord", "life id is rent");
+  var lifeLogs = countText(spine, "* Life:");
+  spine.phaseId = "nope";
+  S.frame(spine, now + 400);
+  assert(countText(spine, "* Life:") === lifeLogs, "unresolved spine blocks a new life log");
+  spine.player.capital = 80;
+  assert(S.payRent(spine).ok, "spine rent paid");
+  assert(spine.world.spine[0] === "bill", "bill surfaces after rent");
+  assert(S.currentLifeId(spine, now) === "bill", "life id is the bill");
+
+  var sera = S.fresh(now);
+  sera.player.place = { owned: true, lights: 0, sign: 0, counter: 0 };
+  sera.world = { regular: { name: "Sera Keel", mood: 3, visits: 4 }, regularDue: true, seen: {}, favorYear: 0 };
+  assert(S.seraWantId(sera) === "sera_dark", "sera wants lights");
+  assert(S.currentLifeId(sera, now) === "sera_dark", "sera dark card");
+  assert(S.lifeBeat(sera, "sera_dark").line.indexOf("almost didn't") >= 0, "sera dark copy");
+  sera.player.place.lights = 1;
+  assert(S.seraWantId(sera) === "favor_card", "sera favor when lights are on");
+
+  var land = S.fresh(now);
+  land.player.capital = 40;
+  assert(S.buyRoom(land).ok, "landlord room");
+  land.world.rentDue = 5;
+  land.player.capital = 30;
+  var mood = land.world.landlordMood;
+  assert(S.stallRent(land).ok, "stall once");
+  assert(land.world.landlordMood === mood - 1, "mood down on stall");
+  var grim = S.lifeBeat(land, "landlord").line;
+  assert(S.payRent(land).ok, "pay after stall");
+  assert(land.world.landlordMood === mood, "mood up on pay");
+  land.world.landlordMood = 4;
+  var warm = S.lifeBeat(land, "landlord").line;
+  assert(grim.indexOf("done waiting") >= 0 && warm.indexOf("likes the building") >= 0, "landlord line follows mood");
+
+  var jun = S.fresh(now);
+  jun.player.place = { owned: true, lights: 0, sign: 0, counter: 0 };
+  jun.world = { rival: "Juniper Pike", rivalMemory: "thin", rivalSign: false, truce: false, seen: {} };
+  jun.player.place.sign = 1;
+  var copied = S.rivalLunchMult(jun);
+  assert(copied > 0.82 && copied < 1, "copied penalty stays smaller");
+  assert(jun.world.rivalMemory === "copied", "rival memory flips");
+  assert(S.currentLifeId(jun, now) === "rival_flip", "rival flip card");
+
+  var tutorBiz = S.fresh(now);
+  tutorBiz.world = { floor: 1, upstairs: "tutor", hours: "", tutorPhase: "", seen: {} };
+  tutorBiz.slots[0].stock = 0;
+  tutorBiz.player.capital = 10;
+  S.runBusiness(tutorBiz, now, 5000, function () { return 0.99; });
+  assert(tutorBiz.player.capital === 14, "tutor class adds cash");
+  S.runBusiness(tutorBiz, now, 5000, function () { return 0.99; });
+  assert(tutorBiz.player.capital === 14, "tutor class once per phase");
+
+  var officeBase = S.fresh(now);
+  var officeBoost = S.fresh(now);
+  officeBoost.world = { floor: 1, upstairs: "office", upstairsStaff: "Ada", seen: {} };
+  var basePay = S.workShift(officeBase, now).pay;
+  var boostPay = S.workShift(officeBoost, now).pay;
+  assert(boostPay === basePay + 5, "office staff boosts shift pay");
+  officeBoost.slots[0].employee = { name: "Ada", salary: 8, traits: ["loyal"], caught: false, pref: "lunch", want: "lunch", mood: 2 };
+  assert(S.sendUpstairs(officeBoost).ok && officeBoost.world.upstairsStaff === "Ada", "send hire upstairs");
+
+  var shut = S.fresh(now);
+  shut.flags.opened = true;
+  shut.flags.chosen = true;
+  shut.lastReal = now;
+  shut.slots[0].stock = 6;
+  shut.world = { hours: "closed", hoursHold: true, seen: {}, spine: [] };
+  S.frame(shut, now + 8000);
+  assert(shut.slots[0].stock === 6, "closed frame does not sell");
+  assert(S.setHours(shut, "open", now).ok && shut.world.hours === "open" && shut.world.hoursHold, "stay open");
+
+  var crew = S.fresh(now);
+  crew.lastReal = now;
+  crew.slots[0].employee = { name: "Ada", salary: 8, traits: ["loyal"], caught: false, pref: "night", want: "night", mood: 2 };
+  var phaseId = S.phaseAt(now).id;
+  S.frame(crew, now);
+  var moodAfter = crew.slots[0].employee.mood;
+  S.frame(crew, now + 500);
+  assert(crew.slots[0].employee.mood === moodAfter, "hire mood once per phase");
+  assert(moodAfter === (phaseId === "night" ? 3 : 1), "hire mood follows the shift they want");
+
+  var store = memStorage();
+  var saved = S.fresh(now);
+  saved.world = {
+    landlordMood: 4,
+    rivalMemory: "thin",
+    spine: ["bill", "landlord"],
+    hours: "closed",
+    upstairsStaff: "Ada",
+    wants: { sera: "lights", juniper: "lunch", landlord: "building" },
+    seen: {}
+  };
+  S.save(saved, store);
+  var loaded = S.load(now + 20, store);
+  assert(loaded.world.landlordMood === 4, "landlord mood saved");
+  assert(loaded.world.rivalMemory === "thin", "rival memory saved");
+  assert(loaded.world.spine[0] === "bill" && loaded.world.spine[1] === "landlord", "spine saved");
+  assert(loaded.world.hours === "closed" && loaded.world.upstairsStaff === "Ada", "hours and upstairs staff saved");
+  assert(loaded.world.wants.sera === "lights", "wants saved");
+})();
+
 console.log(ok + " passed, " + fails + " failed");
 if (fails) process.exit(1);
