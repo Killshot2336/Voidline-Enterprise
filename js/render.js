@@ -2132,17 +2132,23 @@
     if (spec.winning) jBright = Math.min(0.92, jBright + 0.28);
     if (spec.truce) jBright = Math.max(0.08, jBright - 0.35);
     var jx = x + w * 0.66;
-    var jy = y + h * 0.3;
-    var jw = Math.max(36, w * 0.14);
-    var jh = Math.max(28, h * 0.16);
+    var jy = y + h * 0.28;
+    var jw = Math.max(48, w * 0.16);
+    var jh = Math.max(36, h * 0.18);
     if (spec.rival) {
-      ctx.fillStyle = "rgba(28,22,18,0.28)";
+      if (!blitContain(ctx, j.hours === "closed" ? "shopClosed" : "shopNoon", jx, jy, jw, jh)) {
+        ctx.fillStyle = "#6a4034";
+        ctx.fillRect(jx, jy, jw, jh);
+      }
+      var dim = spec.winning ? 0.05 : (spec.truce ? 0.55 : 0.28);
+      if (j.hours === "closed") dim = 0.62;
+      ctx.fillStyle = "rgba(20,16,14," + dim.toFixed(3) + ")";
       ctx.fillRect(jx, jy, jw, jh);
-      paintWindowGlow(ctx, jx + jw * 0.1, jy + jh * 0.16, jw * 0.32, jh * 0.34, jBright);
-      paintWindowGlow(ctx, jx + jw * 0.52, jy + jh * 0.16, jw * 0.32, jh * 0.34, jBright * 0.85);
+      paintWindowGlow(ctx, jx + jw * 0.12, jy + jh * 0.2, jw * 0.28, jh * 0.28, jBright);
+      paintWindowGlow(ctx, jx + jw * 0.52, jy + jh * 0.2, jw * 0.28, jh * 0.28, jBright * 0.9);
       var crowd = spec.truce ? Math.min(1, j.busy || 0) : Math.min(5, j.busy || 0);
       if (spec.winning) crowd = Math.max(crowd, Math.min(5, (j.busy || 1)));
-      paintCrowd(ctx, jx, jy + jh + h * 0.06, crowd, h);
+      paintCrowd(ctx, jx, jy + jh + 2, crowd, h);
     }
     var cx = x + w * 0.78;
     var cy = y + h * 0.22;
@@ -2264,17 +2270,14 @@
     if (places.juniper === "across" && who !== "juniper") drawFigure(ctx, acrossX, acrossFoot, h * 0.14, "juniper");
     if (places.hire === "counter" && who !== "hire") drawFigure(ctx, counterX + 28, counterFoot, h * 0.15, "hire");
     if (places.hire === "upstairs") drawFigure(ctx, upX, upFoot, h * 0.1, "hire");
-    var markX = x + w * 0.58;
-    var markY = y + h * 0.7;
-    if (spec.spot === "door") { markX = doorX; markY = doorFoot - h * 0.12; }
-    if (spec.spot === "upstairs") { markX = upX; markY = upFoot - 8; }
+    var markX = x + w * 0.55;
+    var markY = y + h * 0.68;
+    if (spec.spot === "door") { markX = x + w * 0.68; markY = y + h * 0.64; }
+    if (spec.spot === "upstairs") { markX = x + w * 0.52; markY = y + h * 0.22; }
     paintPresence(ctx, markX, markY);
     if (ui && !ui.menu) {
-      pushHit(ui, "stand:register", x + w * 0.26, y + h * 0.58, Math.max(36, w * 0.12), Math.max(28, h * 0.12));
-      pushHit(ui, "stand:door", doorX - 18, doorFoot - h * 0.16, Math.max(36, w * 0.1), Math.max(28, h * 0.14));
-      if (spec.floor) pushHit(ui, "stand:upstairs", x + w * 0.16, y + h * 0.14, Math.max(40, w * 0.16), Math.max(24, h * 0.12));
       if (spec.thinLine) {
-        var rx = x + 10;
+        var rx = x + w - 78;
         var ry = y + 8;
         ctx.fillStyle = ui.rewind ? LAMP : PAPER;
         ctx.fillRect(rx, ry, 64, 22);
@@ -3820,6 +3823,16 @@
       if (plan.slip && geo.slip) pushHit(ui, plan.slip.id, geo.slip.x, geo.slip.y, geo.slip.w, geo.slip.h);
       if (plan.door && geo.door) pushHit(ui, plan.door.id, geo.door.x, geo.door.y, geo.door.w, geo.door.h);
       if (plan.person && geo.person) pushHit(ui, plan.person.id, geo.person.x, geo.person.y, geo.person.w, geo.person.h);
+      var sx = 0;
+      var sy = top;
+      var sw = w;
+      var sh = cardH;
+      if (!spec.dayOne) {
+        pushHit(ui, "stand:register", sx + sw * 0.5, sy + sh * 0.62, Math.max(44, sw * 0.1), Math.max(36, sh * 0.1));
+        pushHit(ui, "stand:door", sx + sw * 0.64, sy + sh * 0.58, Math.max(44, sw * 0.09), Math.max(40, sh * 0.14));
+        if (spec.floor) pushHit(ui, "stand:upstairs", sx + sw * 0.48, sy + sh * 0.15, Math.max(48, sw * 0.12), Math.max(32, sh * 0.1));
+      }
+      if (spec.thinLine) pushHit(ui, "rewind", sx + sw - 78, sy + 8, 64, 22);
       ui.clip = clipWas;
     }
     ctx.textAlign = "left";
