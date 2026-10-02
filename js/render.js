@@ -388,11 +388,10 @@
       ctx.arc(0, u * 0.42, u * 0.12, 0, Math.PI * 2);
       ctx.fill();
     } else if (kind === "rest") {
-      ctx.fillRect(-u * 0.55, -u * 0.15, u * 1.15, u * 0.85);
-      ctx.strokeRect(-u * 0.55, -u * 0.15, u * 1.15, u * 0.85);
-      ctx.beginPath();
-      ctx.arc(u * 0.55, -u * 0.35, u * 0.28, Math.PI, 0);
-      ctx.stroke();
+      ctx.fillRect(-u * 0.95, -u * 0.2, u * 1.7, u * 0.22);
+      ctx.fillRect(-u * 0.7, -u * 0.72, u * 1.15, u * 0.18);
+      ctx.fillRect(-u * 0.72, -u * 0.2, u * 0.16, u * 0.72);
+      ctx.fillRect(u * 0.42, -u * 0.2, u * 0.16, u * 0.72);
     } else if (kind === "key") {
       ctx.beginPath();
       ctx.arc(-u * 0.32, -u * 0.12, u * 0.36, 0, Math.PI * 2);
@@ -1598,9 +1597,6 @@
     var job = o.job || "";
     var broke = !!o.broke;
     ctx.save();
-    ctx.fillStyle = broke ? "#3a342c" : (job === "tutor_desk" || job === "server" ? "#2d4a68" : job === "marketing" || job === "pr" || job === "scout_lead" ? "#f4efe4" : "#6b2d3c");
-    round(ctx, cx - r * 0.9, cy + r * 0.62, r * 1.8, r * 0.55, r * 0.2);
-    ctx.fill();
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fillStyle = stress > 75 ? "#e0ae90" : "#f0c7a0";
@@ -2175,13 +2171,13 @@
   }
 
   function drawStorefront(ctx, x, y, w, h, spec) {
-    if (w < 48 || h < 40) return;
+    if (w < 48 || h < 44) return;
     spec = spec || {};
     var owned = !!spec.owned;
     var lights = !!spec.lights;
     var signed = !!spec.sign;
     var counter = !!spec.counter;
-    var floor = !!spec.floor && h >= 78;
+    var floor = !!spec.floor && h >= 96;
     var dayOne = !!spec.dayOne;
     var closed = (spec.stock || 0) <= 0;
     var phase = spec.phase || "night";
@@ -2192,228 +2188,228 @@
     ctx.clip();
     ctx.fillStyle = skyFill(phase, dayOne);
     ctx.fillRect(x, y, w, h);
-    if (phase === "lunch" && !dayOne) {
-      ctx.fillStyle = "rgba(255,255,255,0.2)";
-      ctx.fillRect(x, y + h * 0.16, w, 3);
-      ctx.fillRect(x, y + h * 0.26, w, 2);
-    }
-    if (phase === "night" && !dayOne) {
-      ctx.strokeStyle = "rgba(180,200,230,0.4)";
-      ctx.lineWidth = 1;
-      var ri;
-      for (ri = 0; ri < 7; ri++) {
-        var rx = x + ((ri * 53) % Math.max(1, w | 0));
-        var ry = y + ((ri * 17) % Math.max(8, (h * 0.28) | 0));
-        ctx.beginPath();
-        ctx.moveTo(rx, ry);
-        ctx.lineTo(rx - 2, ry + 6);
-        ctx.stroke();
-      }
-    }
-    var street = y + h * 0.78;
-    ctx.fillStyle = dayOne ? "#17191f" : "#2c3348";
-    ctx.fillRect(x, street, w, y + h - street);
-    ctx.fillStyle = dayOne ? "#22252c" : "#3e4658";
-    ctx.fillRect(x, street, w, Math.max(3, h * 0.045));
-    var shopW = spec.rival ? Math.max(56, w * 0.62) : w - 16;
+    var skyH = Math.max(12, Math.min(26, h * 0.16));
+    var streetH = Math.max(16, Math.min(32, h * 0.2));
+    var street = y + h - streetH;
+    ctx.fillStyle = dayOne ? "#1c2028" : "#2a3144";
+    ctx.fillRect(x, street, w, streetH);
+    ctx.fillStyle = dayOne ? "#343b48" : "#5a6478";
+    ctx.fillRect(x, street, w, 5);
+    var rivalW = spec.rival ? Math.max(64, Math.min(160, w * 0.2)) : 0;
     var shopX = x + 8;
-    var shopBot = street + 1;
-    var shopTop = y + (floor ? h * 0.05 : h * 0.2);
-    if (shopBot - shopTop < 22) shopTop = shopBot - 22;
-    ctx.fillStyle = dayOne ? "#241f1b" : owned ? "#7a5340" : "#4a4038";
+    var shopW = w - 16 - (rivalW ? rivalW + 16 : 0);
+    var shopTop = y + skyH;
+    var shopBot = street + 2;
+    ctx.fillStyle = dayOne ? "#4a4036" : owned ? "#8d5e40" : "#6a5548";
     ctx.fillRect(shopX, shopTop, shopW, shopBot - shopTop);
-    ctx.fillStyle = dayOne ? "#161310" : "#3a2418";
-    ctx.fillRect(shopX - 2, shopTop, shopW + 4, Math.max(3, h * 0.03));
+    ctx.fillStyle = dayOne ? "#2a221c" : "#3a2418";
+    ctx.fillRect(shopX - 4, shopTop, shopW + 8, Math.max(5, h * 0.04));
+    var groundTop = shopTop + Math.max(5, h * 0.04);
     if (floor) {
       var upH = (shopBot - shopTop) * 0.36;
-      var uw = Math.min(16, shopW * 0.16);
+      groundTop = shopTop + upH;
+      var uw = Math.max(16, Math.min(34, shopW * 0.1));
       var ui2;
-      for (ui2 = 0; ui2 < 2; ui2++) {
-        var ux = shopX + 8 + ui2 * (uw + 8);
-        ctx.fillStyle = lights && !closed && !dayOne ? "#ffe08a" : "#221e1a";
-        ctx.fillRect(ux, shopTop + 7, uw, Math.max(6, upH - 14));
+      for (ui2 = 0; ui2 < 3; ui2++) {
+        var ux = shopX + 14 + ui2 * (uw + 12);
+        if (ux + uw > shopX + shopW - 36) break;
+        ctx.fillStyle = lights && !closed && !dayOne ? "#ffe08a" : "#1a1612";
+        ctx.fillRect(ux, shopTop + 10, uw, Math.max(10, upH - 18));
+        ctx.strokeStyle = "#2a2118";
+        ctx.strokeRect(ux, shopTop + 10, uw, Math.max(10, upH - 18));
       }
       if (spec.degree) {
+        var fx = shopX + shopW - 30;
+        var fy = shopTop + 10;
         ctx.strokeStyle = GOLD;
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(shopX + shopW - 22, shopTop + 6, 14, 11);
+        ctx.lineWidth = 2;
+        ctx.strokeRect(fx, fy, 18, 14);
         ctx.beginPath();
-        ctx.moveTo(shopX + shopW - 22, shopTop + 11);
-        ctx.lineTo(shopX + shopW - 8, shopTop + 11);
+        ctx.moveTo(fx, fy + 7);
+        ctx.lineTo(fx + 18, fy + 7);
         ctx.stroke();
       }
     }
-    var winY = shopTop + (floor ? (shopBot - shopTop) * 0.42 : (shopBot - shopTop) * 0.14);
-    var winH = Math.max(8, (shopBot - shopTop) * (floor ? 0.2 : 0.28));
-    var winW = Math.min(28, (shopW - 40) / 3);
     var lit = lights && !closed && !dayOne;
+    var winY = groundTop + 8;
+    var winH = Math.max(18, (shopBot - groundTop) * 0.46);
+    var winW = Math.max(18, Math.min(56, (shopW * 0.55) / 3));
     var wi;
     for (wi = 0; wi < 3; wi++) {
-      var wx = shopX + 8 + wi * (winW + 5);
-      if (wx + winW > shopX + shopW - 6) break;
-      ctx.fillStyle = lit ? "#ffe08a" : "#1c1916";
+      var wx = shopX + 12 + wi * (winW + 8);
+      if (wx + winW > shopX + shopW * 0.62) break;
+      ctx.fillStyle = lit ? "#ffe08a" : "#14110e";
       ctx.fillRect(wx, winY, winW, winH);
+      ctx.strokeStyle = "#241c14";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(wx, winY, winW, winH);
       if (closed) {
-        ctx.fillStyle = "#c9bba6";
-        ctx.fillRect(wx, winY + winH * 0.46, winW, 2);
+        ctx.fillStyle = "#efe4d2";
+        ctx.fillRect(wx + 2, winY + winH * 0.4, winW - 4, 3);
       } else if (lit) {
-        ctx.fillStyle = "rgba(255,255,255,0.4)";
-        ctx.fillRect(wx + 2, winY + 2, Math.max(2, winW * 0.28), Math.max(2, winH * 0.22));
+        ctx.fillStyle = "rgba(255,255,255,0.5)";
+        ctx.fillRect(wx + 3, winY + 3, Math.max(4, winW * 0.22), Math.max(4, winH * 0.18));
       }
     }
     if (owned && !lights && !dayOne) {
-      var bulbX = shopX + shopW * 0.38;
-      ctx.strokeStyle = "#c9bba6";
-      ctx.lineWidth = 1;
+      var bulbX = shopX + 12 + winW * 0.5;
+      ctx.strokeStyle = "#efe4d2";
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.moveTo(bulbX, shopTop + 4);
-      ctx.lineTo(bulbX, winY);
+      ctx.moveTo(bulbX, groundTop + 2);
+      ctx.lineTo(bulbX, winY + 2);
       ctx.stroke();
-      icon(ctx, "bulb", bulbX, winY + 6, 12, "#f5c542");
+      icon(ctx, "bulb", bulbX, winY + Math.min(16, winH * 0.45), Math.min(20, winH), "#f5c542");
     }
-    var doorW = Math.min(18, shopW * 0.14);
-    var doorH = Math.max(14, shopBot - (winY + winH) - 1);
-    var doorX = shopX + 6;
-    var doorY = shopBot - doorH;
-    ctx.fillStyle = closed || dayOne || !owned ? "#161310" : "#5c3a28";
-    ctx.fillRect(doorX, doorY, doorW, doorH);
-    if (closed) {
-      ctx.fillStyle = "#3a342c";
-      ctx.fillRect(doorX, doorY + doorH * 0.45, doorW, 2);
-    }
-    if (owned && !dayOne) icon(ctx, "key", doorX + doorW + 9, doorY + doorH * 0.4, 11, GOLD);
+    var doorW = Math.max(18, Math.min(32, shopW * 0.09));
+    var doorX = shopX + shopW - doorW - 8;
+    var doorH = shopBot - winY;
+    ctx.fillStyle = closed || dayOne || !owned ? "#16130f" : "#6b4030";
+    ctx.fillRect(doorX, winY, doorW, doorH);
+    ctx.strokeStyle = "#1a140c";
+    ctx.strokeRect(doorX, winY, doorW, doorH);
+    if (owned && !dayOne) icon(ctx, "key", doorX - 14, winY + 18, 16, GOLD);
     if (spec.rentDue > 0 && owned) {
-      var noteH = Math.min(14, doorH * 0.5);
       ctx.fillStyle = "#fffdf8";
-      ctx.fillRect(doorX + 1, doorY + 2, doorW - 2, noteH);
+      ctx.fillRect(doorX + 3, winY + 8, doorW - 6, 18);
+      ctx.strokeStyle = CRIMSON;
+      ctx.strokeRect(doorX + 3, winY + 8, doorW - 6, 18);
       ctx.fillStyle = CRIMSON;
-      ctx.font = font(doorW > 16 ? 7 : 6, true, 800);
+      ctx.font = font(8, true, 800);
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("RENT", doorX + doorW * 0.5, doorY + 2 + noteH * 0.5);
+      ctx.fillText("RENT", doorX + doorW * 0.5, winY + 17);
     }
     if (signed && !dayOne) {
       var word = signWord(spec.job, closed);
-      var sf = font(Math.max(8, Math.min(12, h * 0.11)), true, 800);
+      var sf = font(Math.max(12, Math.min(16, h * 0.11)), true, 800);
       ctx.font = sf;
-      var tw = measure(ctx, sf, word) + 8;
-      var sgx = shopX + shopW - tw - 4;
-      var sgy = shopTop + 5;
-      round(ctx, sgx, sgy, tw, 13, 2);
-      ctx.fillStyle = closed ? "#2a2622" : GOLD;
+      var tw = measure(ctx, sf, word) + 16;
+      var sgx = shopX + 12;
+      var sgy = shopTop + 7;
+      round(ctx, sgx, sgy, Math.min(tw, shopW * 0.4), 18, 3);
+      ctx.fillStyle = closed ? "#241c16" : GOLD;
       ctx.fill();
+      ctx.strokeStyle = DARK;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
       ctx.fillStyle = closed ? "#f4efe4" : DARK;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(word, sgx + tw * 0.5, sgy + 6);
+      ctx.fillText(word, sgx + Math.min(tw, shopW * 0.4) * 0.5, sgy + 9);
+    } else if (closed && owned) {
+      ctx.fillStyle = "#efe4d2";
+      ctx.fillRect(shopX + 12, shopTop + 8, 46, 16);
+      ctx.fillStyle = DARK;
+      ctx.font = font(11, true, 800);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("SHUT", shopX + 35, shopTop + 16);
     }
-    var cY = shopBot - Math.max(7, h * 0.08);
-    var cX = doorX + doorW + 8;
-    var cW = shopX + shopW - 6 - cX;
-    if (cW > 16) {
+    var cX = shopX + 12;
+    var cRight = doorX - 18;
+    var cW = cRight - cX;
+    var cY = winY + winH - 6;
+    if (cW > 24) {
       if (counter && owned && !dayOne) {
-        ctx.fillStyle = "#8a6240";
-        ctx.fillRect(cX, cY + 1, cW, 5);
-        ctx.fillStyle = "#c4a574";
-        ctx.fillRect(cX, cY - 4, cW, 6);
+        ctx.fillStyle = "#6b442c";
+        ctx.fillRect(cX, cY, cW, Math.max(6, winH * 0.16));
+        ctx.fillStyle = "#e7c98a";
+        ctx.fillRect(cX, cY - 7, cW, 8);
         ctx.fillStyle = GOLD;
-        ctx.fillRect(cX, cY - 5, cW, 2);
+        ctx.fillRect(cX, cY - 9, cW, 3);
       } else {
-        ctx.strokeStyle = dayOne ? "#3a4048" : "#8a9098";
-        ctx.lineWidth = 1.4;
+        ctx.strokeStyle = dayOne ? "#8a8074" : "#d5dbe4";
+        ctx.lineWidth = 1.7;
         ctx.beginPath();
         ctx.moveTo(cX, cY);
         ctx.lineTo(cX + cW, cY);
-        ctx.moveTo(cX + 3, cY);
-        ctx.lineTo(cX + cW * 0.45, cY + 7);
-        ctx.moveTo(cX + cW * 0.45, cY);
-        ctx.lineTo(cX + 3, cY + 7);
-        ctx.moveTo(cX + cW * 0.55, cY);
-        ctx.lineTo(cX + cW - 3, cY + 7);
-        ctx.moveTo(cX + cW - 3, cY);
-        ctx.lineTo(cX + cW * 0.55, cY + 7);
+        ctx.moveTo(cX + 6, cY);
+        ctx.lineTo(cX + 22, cY + 10);
+        ctx.moveTo(cX + 22, cY);
+        ctx.lineTo(cX + 6, cY + 10);
+        ctx.moveTo(cX + cW - 22, cY);
+        ctx.lineTo(cX + cW - 6, cY + 10);
+        ctx.moveTo(cX + cW - 6, cY);
+        ctx.lineTo(cX + cW - 22, cY + 10);
         ctx.stroke();
       }
       var stock = spec.stock || 0;
-      var boxN = stock > 6 ? 6 : stock;
+      var boxN = stock > 5 ? 5 : stock;
+      var bw = Math.min(14, (cW - 8) / 6);
       var bi;
-      var bw = Math.min(9, (cW - 8) / 7);
-      for (bi = 0; bi < boxN; bi++) {
-        icon(ctx, "box", cX + 7 + bi * (bw + 2), cY - 8, bw + 4, closed ? "#6a5648" : "#e08a3c");
-      }
+      for (bi = 0; bi < boxN; bi++) icon(ctx, "box", cX + 12 + bi * (bw + 4), cY - 14, bw + 8, "#e08a3c");
       if (spec.employee) {
-        var ex = cX + cW - 8;
-        var ey = cY - 14;
+        var ex = cX + cW - 10;
+        var ey = cY - 18;
         if (spec.employee.caught) {
-          ctx.fillStyle = "rgba(255,244,210,0.7)";
+          ctx.fillStyle = "rgba(255,246,214,0.8)";
           ctx.beginPath();
-          ctx.moveTo(ex, ey - 16);
-          ctx.lineTo(ex - 9, ey + 6);
-          ctx.lineTo(ex + 9, ey + 6);
+          ctx.moveTo(ex, ey - 20);
+          ctx.lineTo(ex - 12, ey + 8);
+          ctx.lineTo(ex + 12, ey + 8);
           ctx.closePath();
           ctx.fill();
         }
-        badge(ctx, "people", ex, ey, 13, spec.employee.caught ? CRIMSON : "#fffdf8", spec.employee.caught ? "#fffdf8" : DARK);
+        badge(ctx, "people", ex, ey, 18, spec.employee.caught ? CRIMSON : "#fffdf8", spec.employee.caught ? "#fffdf8" : DARK);
       }
-      if (spec.hands) icon(ctx, "hand", cX + Math.min(cW * 0.42, cW - 16), cY - 5, 14, "#f0c7a0");
+      if (spec.hands) icon(ctx, "hand", cX + Math.min(cW * 0.4, 70), cY - 2, 18, "#f0c7a0");
     }
     if (!dayOne && owned && (phase === "morning" || phase === "lunch")) {
       var puff = (now % 1400) / 1400;
-      ctx.fillStyle = "rgba(255,255,255,0.62)";
+      ctx.fillStyle = "rgba(255,255,255,0.75)";
       ctx.beginPath();
-      ctx.arc(shopX + shopW * 0.72, shopTop - puff * 8, 2.5 + puff * 2, 0, Math.PI * 2);
-      ctx.arc(shopX + shopW * 0.72 + 5, shopTop - 4 - puff * 6, 2, 0, Math.PI * 2);
+      ctx.arc(shopX + shopW * 0.55, y + 8 + (1 - puff) * 8, 3 + puff * 2, 0, Math.PI * 2);
       ctx.fill();
     } else if (!dayOne && phase === "night") {
       var blinkOn = ((now / 480) | 0) % 2 === 0;
-      ctx.fillStyle = blinkOn ? CRIMSON : "#4a2030";
+      ctx.fillStyle = blinkOn ? CRIMSON : "#5a2430";
       ctx.beginPath();
-      ctx.arc(shopX + shopW - 7, shopTop + 7, 2.6, 0, Math.PI * 2);
+      ctx.arc(shopX + shopW - 10, shopTop + 10, 3.2, 0, Math.PI * 2);
       ctx.fill();
     }
-    if (spec.rival) {
-      var rx = shopX + shopW + 6;
-      var rw = x + w - 8 - rx;
-      if (rw > 16) {
-        var rh = (shopBot - shopTop) * 0.68;
-        var ry = shopBot - rh;
-        ctx.globalAlpha = signed ? 1 : 0.45;
-        ctx.fillStyle = signed ? "#6a4458" : "#2a2830";
-        ctx.fillRect(rx, ry, rw, rh);
-        ctx.fillStyle = "#1a1520";
-        ctx.fillRect(rx + 3, ry + 6, Math.max(4, rw * 0.28), Math.max(5, rh * 0.24));
-        ctx.globalAlpha = 1;
-        if (!signed) {
-          var wk;
-          for (wk = 0; wk < 3; wk++) {
-            var t = ((now / 1600) + wk * 0.33) % 1;
-            drawPerson(ctx, shopX + shopW + 4 + t * Math.max(8, rw - 4), street + 1, 12, "#12151c");
-          }
-        }
+    var foot = y + h - 1;
+    var body = Math.max(18, Math.min(34, streetH + 8));
+    if (spec.regular) {
+      drawNpc(ctx, shopX + 18, foot - 12, Math.max(9, body * 0.34), "sera");
+      if (spec.regularDue) {
+        var dueOn = ((now / 460) | 0) % 2 === 0;
+        ctx.fillStyle = dueOn ? CYAN : "#145058";
+        ctx.beginPath();
+        ctx.arc(shopX + 30, foot - 26, 3.2, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
+    if (spec.rentDue > 0 && owned) drawNpc(ctx, doorX + doorW * 0.5, foot - 11, Math.max(9, body * 0.34), "landlord");
     var rush = phase === "morning" || phase === "lunch" || phase === "evening";
-    var crowd = dayOne ? 0 : rush ? 4 : (phase === "night" ? 1 : 0);
-    if (spec.rival && !signed) crowd = crowd > 1 ? 1 : crowd;
+    var crowd = dayOne ? 0 : rush ? 3 : (phase === "night" ? 1 : 0);
     var ci;
-    for (ci = 0; ci < crowd; ci++) {
-      drawPerson(ctx, shopX + doorW + 16 + ci * Math.min(18, shopW / 6), street + 1, 14, ci % 2 ? "#141820" : "#1c2436");
-    }
-    if (h >= 64) {
-      var faceY = street - 2;
-      if (spec.regular) {
-        var sxFace = shopX + shopW * 0.48;
-        drawNpc(ctx, sxFace, faceY - 10, 8, "sera");
-        if (spec.regularDue) {
-          var dueOn = ((now / 460) | 0) % 2 === 0;
-          ctx.fillStyle = dueOn ? CYAN : "#1a4a52";
-          ctx.beginPath();
-          ctx.arc(sxFace + 7, faceY - 18, 2.4, 0, Math.PI * 2);
-          ctx.fill();
+    for (ci = 0; ci < crowd; ci++) drawPerson(ctx, shopX + 46 + ci * 26, foot, body, ci % 2 ? "#12161e" : "#1c2636");
+    if (spec.rival && rivalW > 24) {
+      var rx = x + w - rivalW - 8;
+      var ry = shopTop + (shopBot - shopTop) * 0.18;
+      var rh = shopBot - ry;
+      ctx.globalAlpha = signed ? 1 : 0.48;
+      ctx.fillStyle = signed ? "#73485c" : "#3a3038";
+      ctx.fillRect(rx, ry, rivalW, rh);
+      ctx.fillStyle = signed ? "#4a3040" : "#221c22";
+      ctx.beginPath();
+      ctx.moveTo(rx - 4, ry + 1);
+      ctx.lineTo(rx + rivalW * 0.5, ry - Math.min(14, skyH - 2));
+      ctx.lineTo(rx + rivalW + 4, ry + 1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = lit && signed ? "#c4a060" : "#120e12";
+      ctx.fillRect(rx + 8, ry + 10, Math.max(10, rivalW * 0.28), Math.max(10, rh * 0.32));
+      ctx.globalAlpha = 1;
+      drawNpc(ctx, rx + rivalW * 0.55, foot - 12, Math.max(9, body * 0.32), "juniper");
+      if (!signed) {
+        var wk;
+        for (wk = 0; wk < 3; wk++) {
+          var t = ((now / 1600) + wk * 0.33) % 1;
+          drawPerson(ctx, shopX + shopW + 8 + t * Math.max(12, rx - shopX - shopW - 10), foot, body * 0.8, "#10141c");
         }
       }
-      if (spec.rentDue > 0 && owned) drawNpc(ctx, doorX + doorW * 0.5, faceY - 8, 8, "landlord");
-      if (spec.rival) drawNpc(ctx, shopX + shopW + 2, faceY - 10, 8, "juniper");
     }
     ctx.restore();
   }
@@ -2426,8 +2422,8 @@
     if (bot - top < 80 || w < 40) return;
     var newest = game.logN - 1;
     var strips = 0;
-    if (newest >= 1 && bot - top > 280) strips = 1;
-    if (newest >= 2 && bot - top > 360) strips = 2;
+    if (newest >= 1 && bot - top > 320) strips = 1;
+    if (newest >= 2 && bot - top > 560) strips = 2;
     var stripH = 40;
     var gap = 8;
     var sy = top;
@@ -2548,14 +2544,9 @@
       if (game.world && game.world.rival && game.player.place && !game.player.place.sign) scene += " " + game.world.rival.split(" ")[0] + " is across the street.";
       if (game.world && game.world.floor) scene += " Upstairs is yours.";
     }
-    var reserveStore = 0;
-    if (limit - cursor > 150) reserveStore = Math.min(spec.floor ? 136 : 118, (limit - cursor) * 0.5);
-    else if (limit - cursor > 96) reserveStore = 70;
-    else reserveStore = Math.max(0, limit - cursor - 40);
     var lineH = L.w < 720 ? 22 : 26;
-    var textBudget = limit - cursor - reserveStore - 16;
-    if (textBudget < lineH) textBudget = lineH;
-    var maxLines = Math.max(1, Math.min(3, (textBudget / lineH) | 0));
+    var roomForArt = limit - cursor;
+    var maxLines = roomForArt > 220 ? 2 : 1;
     var bodyFont = font(L.w < 720 ? 18 : 22, false, 500);
     var lines = wrapLines(ctx, bodyFont, hero.line, textW, maxLines);
     ctx.font = bodyFont;
@@ -2567,19 +2558,13 @@
       ctx.fillText(lines[li], textX, cursor);
       cursor += lineH;
     }
-    if (limit - cursor > reserveStore + 14) {
-      var sceneFont = font(13, false, 500);
-      ctx.font = sceneFont;
-      ctx.fillStyle = "#6b6258";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.fillText(clipText(ctx, sceneFont, scene, textW), textX, cursor);
-      cursor += 18;
-    }
-    var chipRoom = limit - cursor > reserveStore + 34 ? 36 : 0;
-    var storeH = limit - cursor - chipRoom - 4;
+    var chipRoom = limit - cursor > 150 ? 34 : 0;
+    var storeH = limit - cursor - chipRoom - 6;
+    if (storeH > 168) storeH = 168;
     if (storeH >= 48) {
-      drawStorefront(ctx, textX, cursor, textW, storeH, spec);
+      var storeW = Math.min(textW, Math.max(260, storeH * 3.05));
+      var storeX = textX + (textW - storeW) * 0.5;
+      drawStorefront(ctx, storeX, cursor, storeW, storeH, spec);
       cursor += storeH + 6;
     }
     if (chipRoom && slot0 && cursor + 28 <= limit + 4) {
@@ -2723,7 +2708,7 @@
       ctx.arc(faceX - r * 0.72, faceY - r * 0.72, 3.2, 0, Math.PI * 2);
       ctx.fill();
     }
-    if (L.header >= 146) drawSkillPips(ctx, faceX - 24, faceY + r + 8, game.player.skills || {});
+    if (L.header >= 146) drawSkillPips(ctx, faceX - 22, faceY + r + 18, game.player.skills || {});
     var textX = faceX + r + 14;
     var cash = S.money(game.player.capital);
     var cashSize = L.w < 520 ? 22 : 28;
