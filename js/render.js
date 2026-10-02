@@ -23,7 +23,11 @@
   var pops = [];
   var seenCash = null;
   var smileUntil = 0;
+  var cashPulse = 0;
   var paperOn = false;
+  var buttonTone = "";
+  var sheetLock = false;
+  var roomAccent = "#8a5a12";
   var shakeLeft = 0;
   var pool = [];
   var pi;
@@ -31,8 +35,8 @@
     pool.push({ alive: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, rot: 0, kind: 0, color: GOLD });
   }
 
-  function font(px, mono) {
-    return "600 " + px + "px " + (mono ? MONO : SANS);
+  function font(px, mono, weight) {
+    return (weight || 600) + " " + px + "px " + (mono ? MONO : SANS);
   }
 
   function glowOk() {
@@ -134,49 +138,103 @@
     return best || "…";
   }
 
-  function ensurePlate(w, h, perf, dpr) {
-    var key = (w | 0) + "x" + (h | 0) + ":" + dpr + (perf ? ":p" : ":f");
+  function platePalette(phase) {
+    if (phase === "morning") {
+      return { sky: "#f0b56a", sky2: "#f8d7a4", ground: "#2c2418", glow: "rgba(245,197,66,0.24)", wash: "rgba(255,214,150,0.2)", star: 0.08, moon: 0, sun: 1, rain: 0, haze: 0 };
+    }
+    if (phase === "lunch") {
+      return { sky: "#7ec4e6", sky2: "#f4e3b6", ground: "#2a3140", glow: "rgba(255,248,220,0.2)", wash: "rgba(255,255,255,0.14)", star: 0, moon: 0, sun: 1, rain: 0, haze: 1 };
+    }
+    if (phase === "evening") {
+      return { sky: "#d2653a", sky2: "#2c2458", ground: "#1a1428", glow: "rgba(226,90,60,0.18)", wash: "rgba(90,40,130,0.14)", star: 0.28, moon: 1, sun: 0, rain: 0, haze: 0 };
+    }
+    if (phase === "standard") {
+      return { sky: "#243454", sky2: "#12182c", ground: "#171c30", glow: "rgba(62,200,216,0.14)", wash: "rgba(62,200,216,0.1)", star: 0.4, moon: 0, sun: 0, rain: 0, haze: 0 };
+    }
+    return { sky: "#0c1020", sky2: "#10162c", ground: "#171c30", glow: "rgba(245,197,66,0.16)", wash: "rgba(62,200,216,0.12)", star: 0.55, moon: 1, sun: 0, rain: 1, haze: 0 };
+  }
+
+  function ensurePlate(w, h, perf, dpr, phase) {
+    phase = phase || "night";
+    var key = (w | 0) + "x" + (h | 0) + ":" + dpr + (perf ? ":p" : ":f") + ":" + phase;
     if (plate && plateKey === key) return plate;
+    var pal = platePalette(phase);
     var c = document.createElement("canvas");
     c.width = Math.max(1, Math.floor(w * dpr));
     c.height = Math.max(1, Math.floor(h * dpr));
     var g = c.getContext("2d");
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.fillStyle = NAVY;
-    g.fillRect(0, 0, w, h);
-    if (!perf) {
+    g.shadowBlur = 0;
+    if (perf) {
+      g.fillStyle = pal.sky;
+      g.fillRect(0, 0, w, h);
+    } else {
+      var sky = g.createLinearGradient(0, 0, 0, h * 0.78);
+      sky.addColorStop(0, pal.sky);
+      sky.addColorStop(1, pal.sky2);
+      g.fillStyle = sky;
+      g.fillRect(0, 0, w, h);
       var glow = g.createRadialGradient(w * 0.5, h * 0.82, 12, w * 0.5, h * 0.72, Math.max(w, h) * 0.48);
-      glow.addColorStop(0, "rgba(245,197,66,0.16)");
+      glow.addColorStop(0, pal.glow);
       glow.addColorStop(1, "rgba(12,16,32,0)");
       g.fillStyle = glow;
       g.fillRect(0, 0, w, h);
       var wash = g.createRadialGradient(w * 0.12, h * 0.08, 8, w * 0.2, h * 0.12, Math.max(w, h) * 0.42);
-      wash.addColorStop(0, "rgba(62,200,216,0.14)");
+      wash.addColorStop(0, pal.wash);
       wash.addColorStop(1, "rgba(12,16,32,0)");
       g.fillStyle = wash;
       g.fillRect(0, 0, w, h);
     }
-    var si;
-    g.fillStyle = "#f4efe4";
-    for (si = 0; si < 42; si++) {
-      var sx = ((si * 97) % 1000) / 1000 * w;
-      var sy = ((si * 53) % 520) / 520 * h * 0.42;
-      g.globalAlpha = 0.28 + (si % 5) * 0.1;
+    if (pal.star > 0) {
+      var si;
+      g.fillStyle = "#f4efe4";
+      for (si = 0; si < 42; si++) {
+        var sx = ((si * 97) % 1000) / 1000 * w;
+        var sy = ((si * 53) % 520) / 520 * h * 0.42;
+        g.globalAlpha = pal.star * (0.45 + (si % 5) * 0.12);
+        g.beginPath();
+        g.arc(sx, sy, (si % 3) + 1, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.globalAlpha = 1;
+    }
+    if (pal.sun) {
+      g.fillStyle = "#fff4c8";
       g.beginPath();
-      g.arc(sx, sy, (si % 3) + 1, 0, Math.PI * 2);
+      g.arc(w * 0.78, h * 0.12, Math.min(w, h) * 0.045, 0, Math.PI * 2);
       g.fill();
     }
-    g.globalAlpha = 1;
-    var moon = Math.min(w, h) * 0.05;
-    g.fillStyle = "#f6e7b8";
-    g.beginPath();
-    g.arc(w * 0.78, h * 0.1, moon, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = NAVY;
-    g.beginPath();
-    g.arc(w * 0.78 + moon * 0.45, h * 0.09, moon * 0.82, 0, Math.PI * 2);
-    g.fill();
-    g.fillStyle = "#171c30";
+    if (pal.moon) {
+      var moon = Math.min(w, h) * 0.05;
+      g.fillStyle = "#f6e7b8";
+      g.beginPath();
+      g.arc(w * 0.78, h * 0.1, moon, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = pal.sky;
+      g.beginPath();
+      g.arc(w * 0.78 + moon * 0.45, h * 0.09, moon * 0.82, 0, Math.PI * 2);
+      g.fill();
+    }
+    if (pal.haze) {
+      g.fillStyle = "rgba(255,255,255,0.16)";
+      g.fillRect(0, h * 0.18, w, 5);
+      g.fillRect(0, h * 0.28, w, 3);
+      g.fillRect(0, h * 0.4, w, 2);
+    }
+    if (pal.rain) {
+      g.strokeStyle = "rgba(190, 206, 230, 0.35)";
+      g.lineWidth = 1;
+      var ri;
+      for (ri = 0; ri < 28; ri++) {
+        var rx = ((ri * 137) % 1000) / 1000 * w;
+        var ry = ((ri * 89) % 700) / 700 * h * 0.7;
+        g.beginPath();
+        g.moveTo(rx, ry);
+        g.lineTo(rx - 3, ry + 10);
+        g.stroke();
+      }
+    }
+    g.fillStyle = pal.ground;
     g.fillRect(0, h * 0.78, w, h * 0.22);
     g.fillStyle = "#222844";
     g.fillRect(w * 0.06, h * 0.64, w * 0.12, h * 0.16);
@@ -191,8 +249,8 @@
 
   function layout(w, h) {
     var narrow = w < 560;
-    var header = narrow ? 156 : (h < 620 ? 118 : 134);
-    var tabH = h < 620 ? 82 : 92;
+    var header = narrow ? 188 : (h < 620 ? 150 : 168);
+    var tabH = h < 620 ? 100 : 116;
     var storyBot = h - tabH;
     return {
       w: w,
@@ -330,11 +388,46 @@
       ctx.arc(0, u * 0.42, u * 0.12, 0, Math.PI * 2);
       ctx.fill();
     } else if (kind === "rest") {
-      ctx.fillRect(-u * 0.55, -u * 0.15, u * 1.15, u * 0.85);
-      ctx.strokeRect(-u * 0.55, -u * 0.15, u * 1.15, u * 0.85);
+      ctx.fillRect(-u * 0.95, -u * 0.2, u * 1.7, u * 0.22);
+      ctx.fillRect(-u * 0.7, -u * 0.72, u * 1.15, u * 0.18);
+      ctx.fillRect(-u * 0.72, -u * 0.2, u * 0.16, u * 0.72);
+      ctx.fillRect(u * 0.42, -u * 0.2, u * 0.16, u * 0.72);
+    } else if (kind === "key") {
       ctx.beginPath();
-      ctx.arc(u * 0.55, -u * 0.35, u * 0.28, Math.PI, 0);
+      ctx.arc(-u * 0.32, -u * 0.12, u * 0.36, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(u * 0.02, -u * 0.12);
+      ctx.lineTo(u * 0.95, -u * 0.12);
+      ctx.moveTo(u * 0.55, -u * 0.12);
+      ctx.lineTo(u * 0.55, u * 0.22);
+      ctx.moveTo(u * 0.82, -u * 0.12);
+      ctx.lineTo(u * 0.82, u * 0.16);
+      ctx.stroke();
+    } else if (kind === "chain") {
+      ctx.beginPath();
+      ctx.arc(-u * 0.36, 0, u * 0.4, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(u * 0.36, 0, u * 0.4, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (kind === "bulb") {
+      ctx.beginPath();
+      ctx.arc(0, -u * 0.18, u * 0.48, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(-u * 0.2, u * 0.26, u * 0.4, u * 0.16);
+      ctx.fillRect(-u * 0.14, u * 0.44, u * 0.28, u * 0.12);
+    } else if (kind === "hand") {
+      ctx.fillRect(-u * 0.55, -u * 0.1, u * 0.26, u * 0.8);
+      ctx.fillRect(-u * 0.22, -u * 0.55, u * 0.24, u * 1.05);
+      ctx.fillRect(u * 0.08, -u * 0.32, u * 0.24, u * 0.88);
+      ctx.fillRect(-u * 0.7, u * 0.38, u * 1.3, u * 0.34);
+    } else if (kind === "drop") {
+      ctx.beginPath();
+      ctx.moveTo(0, -u);
+      ctx.bezierCurveTo(u * 0.7, -u * 0.1, u * 0.55, u * 0.7, 0, u * 0.85);
+      ctx.bezierCurveTo(-u * 0.55, u * 0.7, -u * 0.7, -u * 0.1, 0, -u);
+      ctx.fill();
     } else {
       ctx.beginPath();
       ctx.arc(0, 0, u * 0.7, 0, Math.PI * 2);
@@ -379,26 +472,59 @@
       ctx.translate(-cx, -cy);
     }
     clearGlow(ctx);
-    round(ctx, x, y, w, h, paperOn ? 14 : 10);
+    var rr = paperOn ? 14 : 10;
+    var tone = buttonTone;
     if (paperOn) {
-      ctx.fillStyle = disabled ? "#e6dfd2" : on ? GOLD : hover ? "#fffdf8" : "#fffdf8";
+      round(ctx, x + 3, y + 3, w, h, rr);
+      ctx.fillStyle = disabled ? "#d9d0c2" : "#c9bba6";
       ctx.fill();
-      ctx.strokeStyle = disabled ? "#d4cbb8" : DARK;
+    }
+    round(ctx, x, y, w, h, rr);
+    var ink = paperOn ? DARK : INK;
+    if (paperOn) {
+      var fill = "#fffdf8";
+      var stroke = DARK;
+      if (disabled) {
+        fill = "#e6dfd2";
+        stroke = "#d4cbb8";
+        ink = "#9a9186";
+      } else if (tone === "violet") {
+        fill = on ? VIOLET : hover ? "#fbf7fd" : "#f6e9fa";
+        stroke = VIOLET;
+        ink = on ? "#fffdf8" : "#4a2060";
+      } else if (tone === "locked") {
+        fill = "#ece6dc";
+        stroke = "#8d8494";
+        ink = "#6d6570";
+      } else if (on) {
+        fill = GOLD;
+      }
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = stroke;
       ctx.lineWidth = on ? 2 : 1.5;
+      if (tone === "locked") ctx.setLineDash([4, 3]);
       ctx.stroke();
+      ctx.setLineDash([]);
     } else {
       ctx.fillStyle = disabled ? "#1a1e2a" : on ? "#3a3018" : hover ? "#243044" : "#171b28";
       ctx.fill();
       ctx.strokeStyle = disabled ? "#2a3142" : (on || hover) ? GOLD : "#2c3548";
       ctx.lineWidth = on ? 2 : 1;
       ctx.stroke();
+      ink = disabled ? "#6c7380" : on ? GOLD : INK;
     }
-    var f = font(w < 110 ? 12 : 15, false);
+    var f = font(w < 110 ? 12 : 15, false, on ? 700 : 600);
     ctx.font = f;
-    ctx.fillStyle = paperOn ? (disabled ? "#9a9186" : DARK) : (disabled ? "#6c7380" : on ? GOLD : INK);
+    ctx.fillStyle = ink;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(clipText(ctx, f, label, w - 12), cx, cy);
+    var labelShift = 0;
+    if (paperOn && w >= 124 && (tone === "locked" || tone === "violet")) {
+      icon(ctx, tone === "locked" ? "chain" : "alert", x + 16, cy, 14, ink);
+      labelShift = 8;
+    }
+    ctx.fillText(clipText(ctx, f, label, w - 12 - (labelShift ? 16 : 0)), cx + labelShift, cy);
     ctx.restore();
     ctx.textAlign = "left";
     if (!disabled) pushHit(ui, id, x, y, w, h);
@@ -466,18 +592,29 @@
     var r = row(flow, 30);
     if (!r.on) return;
     var ctx = flow.ctx;
-    var kind = sectionIcon(text);
+    var shadyName = text === "SHADY" || text === "STREET";
+    var locked = shadyName && sheetLock;
+    if (shadyName) {
+      round(ctx, flow.x - 4, r.y + 2, flow.w + 8, 26, 8);
+      ctx.fillStyle = locked ? "rgba(90,80,100,0.16)" : "rgba(180,74,192,0.16)";
+      ctx.fill();
+    }
+    var kind = locked ? "chain" : sectionIcon(text);
     var tx = flow.x;
+    var accent = shadyName ? (locked ? "#8d7a9a" : VIOLET) : (paperOn ? roomAccent : GOLD);
     if (kind) {
-      badge(ctx, kind, flow.x + 11, r.y + 15, 22, paperOn ? "#fffdf8" : "#241c10", paperOn ? "#8a5a12" : GOLD);
+      badge(ctx, kind, flow.x + 11, r.y + 15, 22, paperOn ? "#fffdf8" : "#241c10", accent);
       tx += 28;
     }
-    var f = font(12, false);
+    var f = font(12, false, 700);
     ctx.font = f;
-    ctx.fillStyle = text === "SHADY" || text === "STREET" ? VIOLET : (paperOn ? "#8a5a12" : GOLD);
+    ctx.fillStyle = accent;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillText(text, tx, r.y + 15);
+    if (locked) {
+      icon(ctx, "chain", flow.x + flow.w - 12, r.y + 15, 14, "#8d7a9a");
+    }
     clearGlow(ctx);
   }
 
@@ -541,6 +678,8 @@
         button(flow.ctx, ui, "upgrade:" + part, flow.x, ur.y, flow.w, 30, done ? parts[pi][1] + "  in" : parts[pi][1] + "  " + S.money(D.ROOM[part]), done, done || game.player.capital < D.ROOM[part]);
       }
     }
+    var plan = row(flow, 46);
+    if (plan.on) drawFloorPlan(flow.ctx, flow.x, plan.y + 2, flow.w, place, game.world && game.world.floor);
     if (game.world && (game.world.rentDue || game.player.place.owned)) {
       section(flow, "THE BLOCK");
       if (game.world.rentDue) {
@@ -566,7 +705,9 @@
       var openH = S.hobbyOpen(game, hobby);
       var hr = row(flow, 36);
       if (!hr.on) continue;
-      button(flow.ctx, ui, "hobby:" + hobby.id, flow.x, hr.y, flow.w, 30, hobby.name + (openH ? "  " + S.money(hobby.pay) : "  needs " + hobby.needSkill + " " + hobby.need), false, !openH);
+      var hk = hobby.id === "tutor" ? "cap" : hobby.id === "flip" ? "coin" : hobby.id === "stream" ? "star" : "book";
+      badge(flow.ctx, hk, flow.x + 14, hr.y + 15, 26, "#fffdf8", openH ? "#8a5a12" : "#b7ad9e");
+      button(flow.ctx, ui, "hobby:" + hobby.id, flow.x + 32, hr.y, flow.w - 32, 30, hobby.name + (openH ? "  " + S.money(hobby.pay) : "  needs " + hobby.needSkill + " " + hobby.need), false, !openH);
     }
 
     section(flow, "YOUR SHOPS");
@@ -582,6 +723,15 @@
         round(ctx, flow.x, r.y, flow.w, 100, 16);
         ctx.fillStyle = cardFill();
         ctx.fill();
+        if (slot.employee && slot.employee.caught) {
+          ctx.fillStyle = "rgba(255, 244, 210, 0.72)";
+          ctx.beginPath();
+          ctx.moveTo(flow.x + 36, r.y + 2);
+          ctx.lineTo(flow.x + 58, r.y + 62);
+          ctx.lineTo(flow.x + 14, r.y + 62);
+          ctx.closePath();
+          ctx.fill();
+        }
         ctx.strokeStyle = ui.focusSlot === i ? (paperOn ? DARK : GOLD) : (paperOn ? "#e0d2b8" : CYAN);
         ctx.lineWidth = ui.focusSlot === i ? 2 : 1;
         setGlow(ctx, ctx.strokeStyle);
@@ -768,6 +918,7 @@
   }
 
   function drawLab(flow, game, ui) {
+    sheetLock = !(game.flags && game.flags.shady);
     section(flow, "POINTS");
     para(flow, "You have " + game.player.vp + ". Spend them on clout or on machines. Each new year gives 1.");
     var lineName = "";
@@ -781,8 +932,10 @@
       var owned = !!game.nodes[node.id];
       var nr = row(flow, 44);
       if (!nr.on) continue;
-      flow.ctx.font = font(14, false);
-      flow.ctx.fillStyle = owned ? "#2f8f5b" : titleInk();
+      var shadyNode = node.line === "shady";
+      buttonTone = shadyNode ? (sheetLock ? "locked" : "violet") : "";
+      flow.ctx.font = font(14, false, 700);
+      flow.ctx.fillStyle = owned ? "#2f8f5b" : (shadyNode && !sheetLock ? "#4a2060" : titleInk());
       flow.ctx.textAlign = "left";
       flow.ctx.textBaseline = "middle";
       flow.ctx.fillText(node.name, flow.x, nr.y + 12);
@@ -790,6 +943,7 @@
       flow.ctx.fillStyle = muteInk();
       flow.ctx.fillText(clipText(flow.ctx, font(11, false), node.text, flow.w - 100), flow.x, nr.y + 30);
       button(flow.ctx, ui, "node:" + node.id, flow.x + flow.w - 88, nr.y + 6, 88, 28, owned ? "Open" : node.cost + " VP", owned, owned);
+      buttonTone = "";
     }
 
     if (game.nodes.skim || game.nodes.score) {
@@ -797,10 +951,13 @@
       para(flow, "Heat is " + Math.round(game.player.heat || 0) + ". A bust takes cash. High heat makes you sit.");
       var street = row(flow, 40);
       if (street.on) {
+        buttonTone = "violet";
         if (game.nodes.skim) button(flow.ctx, ui, "skim", flow.x, street.y, game.nodes.score ? (flow.w - 8) * 0.48 : flow.w, 32, "Skim", false, false);
         if (game.nodes.score) button(flow.ctx, ui, "score", flow.x + (game.nodes.skim ? (flow.w - 8) * 0.52 : 0), street.y, game.nodes.skim ? (flow.w - 8) * 0.48 : flow.w, 32, "Big score", false, false);
+        buttonTone = "";
       }
     }
+    sheetLock = false;
 
     section(flow, "MIX STUFF");
     para(flow, "Drop parts in the slots. Two of the right ones make something legendary. The book remembers it.");
@@ -946,15 +1103,22 @@
     var y = L.header + (1 - ease) * (L.tabY - L.header);
     var h = L.tabY - y;
     clearGlow(ctx);
+    ctx.save();
     round(ctx, 10, y, L.w - 20, h, 18);
-    ctx.fillStyle = CREAM;
-    ctx.fill();
-    ctx.strokeStyle = "#e4d3b0";
+    ctx.clip();
+    ctx.fillStyle = roomPaper(ui.menu);
+    ctx.fillRect(10, y, L.w - 20, h);
+    ctx.fillStyle = roomBand(ui.menu);
+    ctx.fillRect(10, y, L.w - 20, 10);
+    ctx.restore();
+    round(ctx, 10, y, L.w - 20, h, 18);
+    ctx.strokeStyle = roomBand(ui.menu);
     ctx.lineWidth = 1;
     ctx.stroke();
     clearGlow(ctx);
     if (ease < 0.8) return;
     paperOn = true;
+    roomAccent = ui.menu === "edu" ? "#1d5c78" : ui.menu === "scout" ? "#8a3060" : ui.menu === "lab" ? "#6a3480" : ui.menu === "journal" ? "#6b5340" : "#8a5a12";
     var rect = { x: 10, y: y, w: L.w - 20, h: h };
     ui.clip = rect;
     if (ui.scroll < 0) ui.scroll = 0;
@@ -971,6 +1135,9 @@
     else if (ui.menu === "settings") drawSettings(flow, game, ui);
     ctx.restore();
     paperOn = false;
+    roomAccent = "#8a5a12";
+    buttonTone = "";
+    sheetLock = false;
     ui.clip = null;
     ui.contentH = flow.cy + 20;
     var max = ui.contentH - h;
@@ -1353,6 +1520,9 @@
       ctx.translate(-cx, -cy);
     }
     clearGlow(ctx);
+    round(ctx, x + 3, y + 4, w, h, 16);
+    ctx.fillStyle = ghost ? "#b7a88e" : "#8a6414";
+    ctx.fill();
     round(ctx, x, y, w, h, 16);
     if (ghost) {
       ctx.fillStyle = hover ? "#fffdf8" : "rgba(255,253,248,0.55)";
@@ -1364,7 +1534,7 @@
       ctx.fillStyle = hover ? "#ffdf6b" : GOLD;
       ctx.fill();
     }
-    var f = font(h < 48 ? 16 : 20, false);
+    var f = font(h < 48 ? 16 : 20, false, 700);
     ctx.font = f;
     ctx.fillStyle = DARK;
     ctx.textAlign = "center";
@@ -1417,39 +1587,466 @@
     return "RUSH";
   }
 
-  function drawFace(ctx, cx, cy, r, mood) {
+  function drawFace(ctx, cx, cy, r, o) {
+    if (typeof o === "number") o = { mood: o };
+    o = o || {};
+    var mood = o.mood || 0;
+    var stress = o.stress || 0;
+    var heat = o.heat || 0;
+    var shady = !!o.shady;
+    var job = o.job || "";
+    var broke = !!o.broke;
+    ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fillStyle = "#f0c7a0";
+    ctx.fillStyle = stress > 75 ? "#e0ae90" : "#f0c7a0";
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(cx, cy - r * 0.08, r, Math.PI * 1.05, Math.PI * 1.95);
+    ctx.arc(cx - r * 0.92, cy + r * 0.05, r * 0.14, 0, Math.PI * 2);
+    ctx.arc(cx + r * 0.92, cy + r * 0.05, r * 0.14, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = "#241c18";
+    ctx.beginPath();
+    ctx.arc(cx, cy - r * 0.08, r, Math.PI * 1.02, Math.PI * 1.98);
+    ctx.fill();
+    if (!broke && (job === "fast_food" || job === "counter_lead" || job === "")) {
+      ctx.fillStyle = "#fffdf8";
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.78, cy - r * 0.42);
+      ctx.lineTo(cx, cy - r * 1.2);
+      ctx.lineTo(cx + r * 0.78, cy - r * 0.42);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillRect(cx - r, cy - r * 0.48, r * 2, r * 0.16);
+      ctx.strokeStyle = DARK;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx - r, cy - r * 0.48, r * 2, r * 0.16);
+    } else if (job === "tutor_desk" || job === "server") {
+      ctx.strokeStyle = "#1a140c";
+      ctx.lineWidth = Math.max(1.2, r * 0.06);
+      ctx.beginPath();
+      ctx.arc(cx - r * 0.28, cy + r * 0.02, r * 0.22, 0, Math.PI * 2);
+      ctx.arc(cx + r * 0.28, cy + r * 0.02, r * 0.22, 0, Math.PI * 2);
+      ctx.moveTo(cx - r * 0.06, cy + r * 0.02);
+      ctx.lineTo(cx + r * 0.06, cy + r * 0.02);
+      ctx.stroke();
+    } else if (job === "engineer" || job === "automation") {
+      ctx.fillStyle = CYAN;
+      ctx.fillRect(cx - r * 0.72, cy - r * 0.55, r * 1.44, r * 0.14);
+    }
+    ctx.strokeStyle = "#241c18";
+    ctx.lineWidth = Math.max(1.4, r * 0.07);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    if (stress > 50) {
+      ctx.moveTo(cx - r * 0.46, cy - r * 0.2);
+      ctx.lineTo(cx - r * 0.12, cy - r * 0.08);
+      ctx.moveTo(cx + r * 0.46, cy - r * 0.2);
+      ctx.lineTo(cx + r * 0.12, cy - r * 0.08);
+    } else {
+      ctx.moveTo(cx - r * 0.46, cy - r * 0.12);
+      ctx.lineTo(cx - r * 0.12, cy - r * 0.18);
+      ctx.moveTo(cx + r * 0.12, cy - r * 0.18);
+      ctx.lineTo(cx + r * 0.46, cy - r * 0.12);
+    }
+    ctx.stroke();
+    ctx.fillStyle = DARK;
+    ctx.beginPath();
+    ctx.arc(cx - r * 0.28, cy + r * 0.04, r * 0.08, 0, Math.PI * 2);
+    ctx.arc(cx + r * 0.28, cy + r * 0.04, r * 0.08, 0, Math.PI * 2);
+    ctx.fill();
+    if (shady && heat > 40) {
+      ctx.strokeStyle = VIOLET;
+      ctx.lineWidth = Math.max(1.5, r * 0.07);
+      ctx.beginPath();
+      ctx.arc(cx + r * 0.28, cy + r * 0.04, r * 0.16, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    if (stress > 60) {
+      ctx.strokeStyle = "rgba(90,50,40,0.75)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.42, cy + r * 0.18);
+      ctx.lineTo(cx - r * 0.14, cy + r * 0.18);
+      ctx.moveTo(cx + r * 0.14, cy + r * 0.18);
+      ctx.lineTo(cx + r * 0.42, cy + r * 0.18);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = DARK;
+    ctx.lineWidth = Math.max(1.5, r * 0.08);
+    ctx.beginPath();
+    if (mood === 1 && stress < 70) ctx.arc(cx, cy + r * 0.22, r * 0.26, 0.15 * Math.PI, 0.85 * Math.PI);
+    else if (mood === 2 || stress > 70) {
+      ctx.moveTo(cx - r * 0.22, cy + r * 0.42);
+      ctx.quadraticCurveTo(cx, cy + r * 0.28, cx + r * 0.22, cy + r * 0.4);
+    } else {
+      ctx.moveTo(cx - r * 0.16, cy + r * 0.38);
+      ctx.lineTo(cx + r * 0.16, cy + r * 0.38);
+    }
+    ctx.stroke();
+    if (stress > 45 || (shady && heat > 35)) {
+      ctx.fillStyle = "#7ec8e3";
+      ctx.beginPath();
+      ctx.ellipse(cx + r * 0.78, cy + r * 0.08, r * 0.08, r * 0.13, 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      if (stress > 70) {
+        ctx.beginPath();
+        ctx.ellipse(cx - r * 0.78, cy + r * 0.22, r * 0.06, r * 0.1, -0.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawNpc(ctx, cx, cy, r, who) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = who === "landlord" ? "#e4c0a2" : "#f3c8ae";
+    ctx.fill();
+    if (who === "landlord") {
+      ctx.fillStyle = "#9aa0a8";
+      ctx.beginPath();
+      ctx.arc(cx, cy - r * 0.2, r * 0.78, Math.PI * 1.15, Math.PI * 1.85);
+      ctx.fill();
+      ctx.fillStyle = "#6a5648";
+      ctx.fillRect(cx - r * 0.28, cy + r * 0.28, r * 0.56, r * 0.1);
+      ctx.strokeStyle = "#1a140c";
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.arc(cx - r * 0.28, cy, r * 0.18, 0, Math.PI * 2);
+      ctx.arc(cx + r * 0.28, cy, r * 0.18, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (who === "juniper") {
+      ctx.fillStyle = "#6a1d3a";
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.95, cy + r * 0.15);
+      ctx.quadraticCurveTo(cx - r * 0.1, cy - r * 1.2, cx + r * 0.35, cy - r * 0.15);
+      ctx.lineTo(cx + r, cy + r * 0.2);
+      ctx.quadraticCurveTo(cx + r * 0.1, cy - r * 0.35, cx - r * 0.95, cy + r * 0.15);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = "#1c2430";
+      ctx.beginPath();
+      ctx.arc(cx, cy - r * 0.02, r * 0.98, Math.PI * 0.95, Math.PI * 2.08);
+      ctx.fill();
+      ctx.fillStyle = CYAN;
+      ctx.fillRect(cx - r * 0.08, cy - r * 0.95, r * 0.14, r * 0.32);
+    }
+    ctx.fillStyle = who === "juniper" ? "#4a2030" : who === "landlord" ? "#3a342c" : "#245060";
+    round(ctx, cx - r * 0.75, cy + r * 0.72, r * 1.5, r * 0.7, 3);
     ctx.fill();
     ctx.fillStyle = DARK;
     ctx.beginPath();
-    ctx.arc(cx - r * 0.28, cy + r * 0.02, r * 0.08, 0, Math.PI * 2);
-    ctx.arc(cx + r * 0.28, cy + r * 0.02, r * 0.08, 0, Math.PI * 2);
+    ctx.arc(cx - r * 0.26, cy + r * 0.02, r * 0.08, 0, Math.PI * 2);
+    ctx.arc(cx + r * 0.26, cy + r * 0.02, r * 0.08, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = DARK;
-    ctx.lineWidth = Math.max(1.5, r * 0.08);
+    ctx.lineWidth = Math.max(1.2, r * 0.08);
     ctx.lineCap = "round";
     ctx.beginPath();
-    if (mood === 1) ctx.arc(cx, cy + r * 0.18, r * 0.28, 0.15 * Math.PI, 0.85 * Math.PI);
-    else if (mood === 2) {
-      ctx.moveTo(cx - r * 0.22, cy + r * 0.38);
-      ctx.quadraticCurveTo(cx, cy + r * 0.28, cx + r * 0.22, cy + r * 0.36);
-    } else {
-      ctx.moveTo(cx - r * 0.18, cy + r * 0.36);
-      ctx.lineTo(cx + r * 0.18, cy + r * 0.36);
-    }
+    if (who === "juniper") {
+      ctx.moveTo(cx - r * 0.18, cy + r * 0.32);
+      ctx.quadraticCurveTo(cx, cy + r * 0.5, cx + r * 0.2, cy + r * 0.3);
+    } else if (who === "landlord") {
+      ctx.moveTo(cx - r * 0.16, cy + r * 0.46);
+      ctx.lineTo(cx + r * 0.16, cy + r * 0.4);
+    } else ctx.arc(cx, cy + r * 0.22, r * 0.2, 0.2 * Math.PI, 0.8 * Math.PI);
     ctx.stroke();
-    if (mood === 2) {
-      ctx.fillStyle = "#7ec8e3";
-      ctx.beginPath();
-      ctx.ellipse(cx + r * 0.78, cy, r * 0.1, r * 0.16, 0.4, 0, Math.PI * 2);
-      ctx.fill();
+    ctx.restore();
+  }
+
+  function drawPerson(ctx, x, y, s, color) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y - s * 0.72, s * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x - s * 0.22, y);
+    ctx.lineTo(x, y - s * 0.5);
+    ctx.lineTo(x + s * 0.22, y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawSkillPips(ctx, x, y, skills) {
+    var keys = [["work", "W", GOLD], ["mind", "M", CYAN], ["hustle", "H", "#e08a3c"], ["clout", "C", "#e2569a"]];
+    var i;
+    var p;
+    for (i = 0; i < 4; i++) {
+      var val = skills[keys[i][0]] || 0;
+      var filled = val > 5 ? 5 : val;
+      if (filled < 0) filled = 0;
+      var cx = x + i * 16;
+      ctx.font = font(9, true, 800);
+      ctx.fillStyle = keys[i][2];
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(keys[i][1], cx, y);
+      for (p = 0; p < 5; p++) {
+        ctx.beginPath();
+        ctx.arc(cx, y + 8 + p * 5, 1.6, 0, Math.PI * 2);
+        ctx.fillStyle = p < filled ? keys[i][2] : "#2a3348";
+        ctx.fill();
+      }
     }
+    ctx.textAlign = "left";
+  }
+
+  function signWord(job, closed) {
+    if (closed) return "SHUT";
+    if (!job) return "OPEN";
+    var map = {
+      fast_food: "FRIES",
+      counter_lead: "OPEN",
+      tutor_desk: "TUTOR",
+      marketing: "ADS",
+      automation: "AUTO",
+      scout_lead: "SCOUT",
+      server: "OPS",
+      pr: "PR",
+      engineer: "VOID"
+    };
+    return map[job.id] || "OPEN";
+  }
+
+  function skyFill(phase, dayOne) {
+    if (dayOne) return "#1a1e2a";
+    if (phase === "morning") return "#f0b56a";
+    if (phase === "lunch") return "#9fd4ea";
+    if (phase === "evening") return "#e07a4a";
+    if (phase === "night") return "#12162a";
+    return "#31486e";
+  }
+
+  function heldDegree(game) {
+    var k;
+    if (!game.degrees) return false;
+    for (k in game.degrees) if (game.degrees[k]) return true;
+    return false;
+  }
+
+  function storySpec(game, now, hands) {
+    var place = (game.player && game.player.place) || {};
+    var world = game.world || {};
+    var slot = game.slots && game.slots[0];
+    var job = slot && D.jobById ? D.jobById[slot.jobId] : null;
+    var chosen = !!(game.flags && game.flags.chosen);
+    var phase = S.phaseAt(now);
+    return {
+      owned: !!place.owned,
+      lights: !!place.lights,
+      sign: !!place.sign,
+      counter: !!place.counter,
+      floor: !!(world.floor && chosen),
+      rival: chosen ? (world.rival || "") : "",
+      rentDue: chosen ? (world.rentDue || 0) : 0,
+      regular: chosen ? world.regular : null,
+      regularDue: !!(chosen && world.regularDue),
+      stock: slot ? slot.stock : 0,
+      employee: slot ? slot.employee : null,
+      job: job,
+      phase: phase.id,
+      now: now,
+      dayOne: !chosen,
+      degree: heldDegree(game),
+      heat: (game.player && game.player.heat) || 0,
+      shady: !!(game.flags && game.flags.shady),
+      hands: !!hands
+    };
+  }
+
+  function roomPaper(menu) {
+    if (menu === "job") return "#f4e4cc";
+    if (menu === "edu") return "#e4eef6";
+    if (menu === "scout") return "#f8e4ee";
+    if (menu === "lab") return "#f1e6f7";
+    if (menu === "journal") return "#f7f1e4";
+    return "#eceae6";
+  }
+
+  function roomBand(menu) {
+    if (menu === "job") return "#e2b15a";
+    if (menu === "edu") return "#7eb6d4";
+    if (menu === "scout") return "#e48ab4";
+    if (menu === "lab") return "#c49ad4";
+    if (menu === "journal") return "#e4d3b0";
+    return "#d9d3c8";
+  }
+
+  function drawFloorPlan(ctx, x, y, w, place, floor) {
+    var bits = [
+      ["CORNER", !!(place && place.owned)],
+      ["LIGHTS", !!(place && place.lights)],
+      ["SIGN", !!(place && place.sign)],
+      ["COUNTER", !!(place && place.counter)],
+      ["FLOOR", !!floor]
+    ];
+    var gap = 6;
+    var cw = (w - gap * 4) / 5;
+    var i;
+    ctx.save();
+    for (i = 0; i < 5; i++) {
+      var bx = x + i * (cw + gap);
+      round(ctx, bx, y, cw, 36, 6);
+      ctx.fillStyle = bits[i][1] ? (i === 4 ? "#e7c56a" : "#c4a574") : "#f7f1e6";
+      ctx.fill();
+      ctx.strokeStyle = bits[i][1] ? DARK : "#b7ad9e";
+      ctx.lineWidth = bits[i][1] ? 2 : 1;
+      if (!bits[i][1]) ctx.setLineDash([3, 2]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = font(cw < 58 ? 8 : 9, true, 800);
+      ctx.fillStyle = bits[i][1] ? DARK : "#8a8278";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(bits[i][0], bx + cw * 0.5, y + 18);
+    }
+    ctx.restore();
+  }
+
+  function drawStampBanner(ctx, x, y, w, h, hero) {
+    var stamp = (hero && hero.stamp) || "";
+    ctx.fillStyle = (hero && hero.rail) || GOLD;
+    ctx.fillRect(x, y, w, h);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    if (stamp === "DAY ONE") {
+      ctx.fillStyle = "rgba(26,20,12,0.22)";
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = "rgba(26,20,12,0.35)";
+      ctx.fillRect(x + 10, y + h * 0.72, w * 0.28, 2);
+    } else {
+      ctx.fillStyle = stamp === "HEAT" || stamp === "RIVAL" ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.14)";
+      var step = stamp === "RAISE" ? 18 : 26;
+      var i;
+      for (i = -2; i < 16; i++) {
+        ctx.beginPath();
+        ctx.moveTo(x + i * step, y);
+        ctx.lineTo(x + i * step + 9, y);
+        ctx.lineTo(x + i * step + 9 + h, y + h);
+        ctx.lineTo(x + i * step + h, y + h);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    ctx.fillRect(x, y, w, h * 0.28);
+    ctx.restore();
+  }
+
+  function drawYearStamp(ctx, x, y, level) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-0.14);
+    round(ctx, -32, -11, 64, 22, 3);
+    ctx.fillStyle = "#fffdf8";
+    ctx.fill();
+    ctx.strokeStyle = CRIMSON;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.font = font(11, true, 800);
+    ctx.fillStyle = CRIMSON;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("YEAR " + level, 0, 1);
+    ctx.restore();
+  }
+
+  function drawPhotoChip(ctx, x, y, maxW, game) {
+    var up = game.world && game.world.floor;
+    var text = "YR " + game.player.level + (up ? " · UPSTAIRS" : " · GROUND");
+    var f = font(11, true, 700);
+    ctx.font = f;
+    var tw = measure(ctx, f, text) + 16;
+    if (tw > maxW) tw = maxW;
+    round(ctx, x, y, tw, 18, 9);
+    ctx.fillStyle = "#fffdf8";
+    ctx.fill();
+    ctx.strokeStyle = DARK;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = DARK;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(clipText(ctx, f, text, tw - 12), x + 8, y + 9);
+  }
+
+  function drawVpStamps(ctx, x, y, vp) {
+    var n = vp | 0;
+    if (n < 0) n = 0;
+    var show = n > 4 ? 4 : n;
+    var i;
+    ctx.save();
+    if (!show) {
+      ctx.globalAlpha = 0.85;
+      ctx.strokeStyle = "#fffdf8";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(x, y, 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.font = font(10, true, 700);
+      ctx.fillStyle = "#fffdf8";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText("VP 0", x + 10, y);
+    } else {
+      for (i = 0; i < show; i++) icon(ctx, "star", x + i * 13, y, 11, "#fffdf8");
+      ctx.font = font(10, true, 800);
+      ctx.fillStyle = "#fffdf8";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(n > 4 ? String(n) : "", x + show * 13, y);
+    }
+    ctx.restore();
+  }
+
+  function drawPhotoFrame(ctx, x, y, w, h) {
+    ctx.save();
+    ctx.strokeStyle = "#e4d3b0";
+    ctx.lineWidth = 1;
+    round(ctx, x + 7, y + 7, w - 14, h - 14, 16);
+    ctx.stroke();
+    ctx.strokeStyle = DARK;
+    ctx.lineWidth = 2;
+    var c = 12;
+    var inset = 11;
+    ctx.beginPath();
+    ctx.moveTo(x + inset, y + inset + c);
+    ctx.lineTo(x + inset, y + inset);
+    ctx.lineTo(x + inset + c, y + inset);
+    ctx.moveTo(x + w - inset - c, y + inset);
+    ctx.lineTo(x + w - inset, y + inset);
+    ctx.lineTo(x + w - inset, y + inset + c);
+    ctx.moveTo(x + inset, y + h - inset - c);
+    ctx.lineTo(x + inset, y + h - inset);
+    ctx.lineTo(x + inset + c, y + h - inset);
+    ctx.moveTo(x + w - inset - c, y + h - inset);
+    ctx.lineTo(x + w - inset, y + h - inset);
+    ctx.lineTo(x + w - inset, y + h - inset - c);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawPeel(ctx, x, y, w) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x + w - 34, y);
+    ctx.lineTo(x + w, y);
+    ctx.lineTo(x + w, y + 26);
+    ctx.closePath();
+    ctx.fillStyle = "#6a3480";
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x + w - 34, y);
+    ctx.quadraticCurveTo(x + w - 10, y + 8, x + w, y + 26);
+    ctx.lineTo(x + w, y);
+    ctx.closePath();
+    ctx.fillStyle = VIOLET;
+    ctx.fill();
+    ctx.restore();
   }
 
   function noteCash(game, now, x, y) {
@@ -1461,6 +2058,7 @@
     var d = Math.round(c - seenCash);
     seenCash = c;
     if (!d) return;
+    cashPulse = now;
     pops.push({
       text: (d > 0 ? "+" : "") + S.money(d),
       x: x,
@@ -1484,10 +2082,16 @@
         continue;
       }
       var u = age / p.life;
+      var py = p.y - u * 62;
+      var popFont = font(30, true, 800);
+      ctx.font = popFont;
+      var tw = measure(ctx, popFont, p.text);
       ctx.globalAlpha = 1 - u * u;
-      ctx.font = font(26, true);
+      round(ctx, p.x - tw * 0.5 - 10, py - 16, tw + 20, 32, 10);
+      ctx.fillStyle = p.text.charAt(0) === "-" ? "#3a1820" : "#2a2416";
+      ctx.fill();
       ctx.fillStyle = p.text.charAt(0) === "-" ? CRIMSON : GOLD;
-      ctx.fillText(p.text, p.x, p.y - u * 54);
+      ctx.fillText(p.text, p.x, py);
     }
     ctx.globalAlpha = 1;
     ctx.textAlign = "left";
@@ -1566,45 +2170,248 @@
     return hero;
   }
 
-  function drawStorefront(ctx, x, y, w, h, place, floor, rival) {
-    var owned = !!(place && place.owned);
+  function drawStorefront(ctx, x, y, w, h, spec) {
+    if (w < 48 || h < 44) return;
+    spec = spec || {};
+    var owned = !!spec.owned;
+    var lights = !!spec.lights;
+    var signed = !!spec.sign;
+    var counter = !!spec.counter;
+    var floor = !!spec.floor && h >= 96;
+    var dayOne = !!spec.dayOne;
+    var closed = (spec.stock || 0) <= 0;
+    var phase = spec.phase || "night";
+    var now = spec.now || 0;
+    ctx.save();
     clearGlow(ctx);
     round(ctx, x, y, w, h, 12);
-    ctx.fillStyle = owned ? "#2c2418" : "#1c1814";
-    ctx.fill();
-    var win = owned && place.lights ? GOLD : "#3a342c";
-    var top = floor ? 18 : 10;
+    ctx.clip();
+    ctx.fillStyle = skyFill(phase, dayOne);
+    ctx.fillRect(x, y, w, h);
+    var skyH = Math.max(12, Math.min(26, h * 0.16));
+    var streetH = Math.max(16, Math.min(32, h * 0.2));
+    var street = y + h - streetH;
+    ctx.fillStyle = dayOne ? "#1c2028" : "#2a3144";
+    ctx.fillRect(x, street, w, streetH);
+    ctx.fillStyle = dayOne ? "#343b48" : "#5a6478";
+    ctx.fillRect(x, street, w, 5);
+    var rivalW = spec.rival ? Math.max(64, Math.min(160, w * 0.2)) : 0;
+    var shopX = x + 8;
+    var shopW = w - 16 - (rivalW ? rivalW + 16 : 0);
+    var shopTop = y + skyH;
+    var shopBot = street + 2;
+    ctx.fillStyle = dayOne ? "#4a4036" : owned ? "#8d5e40" : "#6a5548";
+    ctx.fillRect(shopX, shopTop, shopW, shopBot - shopTop);
+    ctx.fillStyle = dayOne ? "#2a221c" : "#3a2418";
+    ctx.fillRect(shopX - 4, shopTop, shopW + 8, Math.max(5, h * 0.04));
+    var groundTop = shopTop + Math.max(5, h * 0.04);
     if (floor) {
-      round(ctx, x + 8, y + 6, w * 0.46, 12, 3);
-      ctx.fillStyle = "#3a3126";
-      ctx.fill();
-      round(ctx, x + 12, y + 8, 10, 7, 2);
-      ctx.fillStyle = win;
-      ctx.fill();
-      round(ctx, x + 26, y + 8, 10, 7, 2);
-      ctx.fillStyle = win;
-      ctx.fill();
+      var upH = (shopBot - shopTop) * 0.36;
+      groundTop = shopTop + upH;
+      var uw = Math.max(16, Math.min(34, shopW * 0.1));
+      var ui2;
+      for (ui2 = 0; ui2 < 3; ui2++) {
+        var ux = shopX + 14 + ui2 * (uw + 12);
+        if (ux + uw > shopX + shopW - 36) break;
+        ctx.fillStyle = lights && !closed && !dayOne ? "#ffe08a" : "#1a1612";
+        ctx.fillRect(ux, shopTop + 10, uw, Math.max(10, upH - 18));
+        ctx.strokeStyle = "#2a2118";
+        ctx.strokeRect(ux, shopTop + 10, uw, Math.max(10, upH - 18));
+      }
+      if (spec.degree) {
+        var fx = shopX + shopW - 30;
+        var fy = shopTop + 10;
+        ctx.strokeStyle = GOLD;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(fx, fy, 18, 14);
+        ctx.beginPath();
+        ctx.moveTo(fx, fy + 7);
+        ctx.lineTo(fx + 18, fy + 7);
+        ctx.stroke();
+      }
     }
-    var ww = Math.min(36, (w - 40) / 3);
+    var lit = lights && !closed && !dayOne;
+    var winY = groundTop + 8;
+    var winH = Math.max(18, (shopBot - groundTop) * 0.46);
+    var winW = Math.max(18, Math.min(56, (shopW * 0.55) / 3));
     var wi;
     for (wi = 0; wi < 3; wi++) {
-      round(ctx, x + 12 + wi * (ww + 8), y + top, ww, Math.max(8, h * 0.42 - (floor ? 8 : 0)), 4);
-      ctx.fillStyle = win;
-      ctx.fill();
+      var wx = shopX + 12 + wi * (winW + 8);
+      if (wx + winW > shopX + shopW * 0.62) break;
+      ctx.fillStyle = lit ? "#ffe08a" : "#14110e";
+      ctx.fillRect(wx, winY, winW, winH);
+      ctx.strokeStyle = "#241c14";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(wx, winY, winW, winH);
+      if (closed) {
+        ctx.fillStyle = "#efe4d2";
+        ctx.fillRect(wx + 2, winY + winH * 0.4, winW - 4, 3);
+      } else if (lit) {
+        ctx.fillStyle = "rgba(255,255,255,0.5)";
+        ctx.fillRect(wx + 3, winY + 3, Math.max(4, winW * 0.22), Math.max(4, winH * 0.18));
+      }
     }
-    if (rival) {
-      round(ctx, x + w - 18, y + h * 0.35, 8, h * 0.4, 2);
+    if (owned && !lights && !dayOne) {
+      var bulbX = shopX + 12 + winW * 0.5;
+      ctx.strokeStyle = "#efe4d2";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(bulbX, groundTop + 2);
+      ctx.lineTo(bulbX, winY + 2);
+      ctx.stroke();
+      icon(ctx, "bulb", bulbX, winY + Math.min(16, winH * 0.45), Math.min(20, winH), "#f5c542");
+    }
+    var doorW = Math.max(18, Math.min(32, shopW * 0.09));
+    var doorX = shopX + shopW - doorW - 8;
+    var doorH = shopBot - winY;
+    ctx.fillStyle = closed || dayOne || !owned ? "#16130f" : "#6b4030";
+    ctx.fillRect(doorX, winY, doorW, doorH);
+    ctx.strokeStyle = "#1a140c";
+    ctx.strokeRect(doorX, winY, doorW, doorH);
+    if (owned && !dayOne) icon(ctx, "key", doorX - 14, winY + 18, 16, GOLD);
+    if (spec.rentDue > 0 && owned) {
+      ctx.fillStyle = "#fffdf8";
+      ctx.fillRect(doorX + 3, winY + 8, doorW - 6, 18);
+      ctx.strokeStyle = CRIMSON;
+      ctx.strokeRect(doorX + 3, winY + 8, doorW - 6, 18);
       ctx.fillStyle = CRIMSON;
+      ctx.font = font(8, true, 800);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("RENT", doorX + doorW * 0.5, winY + 17);
+    }
+    if (signed && !dayOne) {
+      var word = signWord(spec.job, closed);
+      var sf = font(Math.max(12, Math.min(16, h * 0.11)), true, 800);
+      ctx.font = sf;
+      var tw = measure(ctx, sf, word) + 16;
+      var sgx = shopX + 12;
+      var sgy = shopTop + 7;
+      round(ctx, sgx, sgy, Math.min(tw, shopW * 0.4), 18, 3);
+      ctx.fillStyle = closed ? "#241c16" : GOLD;
+      ctx.fill();
+      ctx.strokeStyle = DARK;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.fillStyle = closed ? "#f4efe4" : DARK;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(word, sgx + Math.min(tw, shopW * 0.4) * 0.5, sgy + 9);
+    } else if (closed && owned) {
+      ctx.fillStyle = "#efe4d2";
+      ctx.fillRect(shopX + 12, shopTop + 8, 46, 16);
+      ctx.fillStyle = DARK;
+      ctx.font = font(11, true, 800);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("SHUT", shopX + 35, shopTop + 16);
+    }
+    var cX = shopX + 12;
+    var cRight = doorX - 18;
+    var cW = cRight - cX;
+    var cY = winY + winH - 6;
+    if (cW > 24) {
+      if (counter && owned && !dayOne) {
+        ctx.fillStyle = "#6b442c";
+        ctx.fillRect(cX, cY, cW, Math.max(6, winH * 0.16));
+        ctx.fillStyle = "#e7c98a";
+        ctx.fillRect(cX, cY - 7, cW, 8);
+        ctx.fillStyle = GOLD;
+        ctx.fillRect(cX, cY - 9, cW, 3);
+      } else {
+        ctx.strokeStyle = dayOne ? "#8a8074" : "#d5dbe4";
+        ctx.lineWidth = 1.7;
+        ctx.beginPath();
+        ctx.moveTo(cX, cY);
+        ctx.lineTo(cX + cW, cY);
+        ctx.moveTo(cX + 6, cY);
+        ctx.lineTo(cX + 22, cY + 10);
+        ctx.moveTo(cX + 22, cY);
+        ctx.lineTo(cX + 6, cY + 10);
+        ctx.moveTo(cX + cW - 22, cY);
+        ctx.lineTo(cX + cW - 6, cY + 10);
+        ctx.moveTo(cX + cW - 6, cY);
+        ctx.lineTo(cX + cW - 22, cY + 10);
+        ctx.stroke();
+      }
+      var stock = spec.stock || 0;
+      var boxN = stock > 5 ? 5 : stock;
+      var bw = Math.min(14, (cW - 8) / 6);
+      var bi;
+      for (bi = 0; bi < boxN; bi++) icon(ctx, "box", cX + 12 + bi * (bw + 4), cY - 14, bw + 8, "#e08a3c");
+      if (spec.employee) {
+        var ex = cX + cW - 10;
+        var ey = cY - 18;
+        if (spec.employee.caught) {
+          ctx.fillStyle = "rgba(255,246,214,0.8)";
+          ctx.beginPath();
+          ctx.moveTo(ex, ey - 20);
+          ctx.lineTo(ex - 12, ey + 8);
+          ctx.lineTo(ex + 12, ey + 8);
+          ctx.closePath();
+          ctx.fill();
+        }
+        badge(ctx, "people", ex, ey, 18, spec.employee.caught ? CRIMSON : "#fffdf8", spec.employee.caught ? "#fffdf8" : DARK);
+      }
+      if (spec.hands) icon(ctx, "hand", cX + Math.min(cW * 0.4, 70), cY - 2, 18, "#f0c7a0");
+    }
+    if (!dayOne && owned && (phase === "morning" || phase === "lunch")) {
+      var puff = (now % 1400) / 1400;
+      ctx.fillStyle = "rgba(255,255,255,0.75)";
+      ctx.beginPath();
+      ctx.arc(shopX + shopW * 0.55, y + 8 + (1 - puff) * 8, 3 + puff * 2, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (!dayOne && phase === "night") {
+      var blinkOn = ((now / 480) | 0) % 2 === 0;
+      ctx.fillStyle = blinkOn ? CRIMSON : "#5a2430";
+      ctx.beginPath();
+      ctx.arc(shopX + shopW - 10, shopTop + 10, 3.2, 0, Math.PI * 2);
       ctx.fill();
     }
-    if (owned && place.sign) {
-      round(ctx, x + w * 0.58, y + 8, Math.min(110, w * 0.28), 16, 4);
-      ctx.fillStyle = GOLD;
-      ctx.fill();
+    var foot = y + h - 1;
+    var body = Math.max(18, Math.min(34, streetH + 8));
+    if (spec.regular) {
+      drawNpc(ctx, shopX + 18, foot - 12, Math.max(9, body * 0.34), "sera");
+      if (spec.regularDue) {
+        var dueOn = ((now / 460) | 0) % 2 === 0;
+        ctx.fillStyle = dueOn ? CYAN : "#145058";
+        ctx.beginPath();
+        ctx.arc(shopX + 30, foot - 26, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
-    round(ctx, x + 10, y + h - 16, w - 20, 8, 3);
-    ctx.fillStyle = owned && place.counter ? "#c4a574" : "#4a4036";
-    ctx.fill();
+    if (spec.rentDue > 0 && owned) drawNpc(ctx, doorX + doorW * 0.5, foot - 11, Math.max(9, body * 0.34), "landlord");
+    var rush = phase === "morning" || phase === "lunch" || phase === "evening";
+    var crowd = dayOne ? 0 : rush ? 3 : (phase === "night" ? 1 : 0);
+    var ci;
+    for (ci = 0; ci < crowd; ci++) drawPerson(ctx, shopX + 46 + ci * 26, foot, body, ci % 2 ? "#12161e" : "#1c2636");
+    if (spec.rival && rivalW > 24) {
+      var rx = x + w - rivalW - 8;
+      var ry = shopTop + (shopBot - shopTop) * 0.18;
+      var rh = shopBot - ry;
+      ctx.globalAlpha = signed ? 1 : 0.48;
+      ctx.fillStyle = signed ? "#73485c" : "#3a3038";
+      ctx.fillRect(rx, ry, rivalW, rh);
+      ctx.fillStyle = signed ? "#4a3040" : "#221c22";
+      ctx.beginPath();
+      ctx.moveTo(rx - 4, ry + 1);
+      ctx.lineTo(rx + rivalW * 0.5, ry - Math.min(14, skyH - 2));
+      ctx.lineTo(rx + rivalW + 4, ry + 1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = lit && signed ? "#c4a060" : "#120e12";
+      ctx.fillRect(rx + 8, ry + 10, Math.max(10, rivalW * 0.28), Math.max(10, rh * 0.32));
+      ctx.globalAlpha = 1;
+      drawNpc(ctx, rx + rivalW * 0.55, foot - 12, Math.max(9, body * 0.32), "juniper");
+      if (!signed) {
+        var wk;
+        for (wk = 0; wk < 3; wk++) {
+          var t = ((now / 1600) + wk * 0.33) % 1;
+          drawPerson(ctx, shopX + shopW + 8 + t * Math.max(12, rx - shopX - shopW - 10), foot, body * 0.8, "#10141c");
+        }
+      }
+    }
+    ctx.restore();
   }
 
   function drawStory(ctx, game, ui, L, now) {
@@ -1615,8 +2422,8 @@
     if (bot - top < 80 || w < 40) return;
     var newest = game.logN - 1;
     var strips = 0;
-    if (newest >= 1 && bot - top > 280) strips = 1;
-    if (newest >= 2 && bot - top > 360) strips = 2;
+    if (newest >= 1 && bot - top > 320) strips = 1;
+    if (newest >= 2 && bot - top > 560) strips = 2;
     var stripH = 40;
     var gap = 8;
     var sy = top;
@@ -1641,9 +2448,10 @@
       logAnim.head = game.logHead;
       logAnim.t = 0;
     }
-    var scale = 0.94 + 0.06 * easeOut(logAnim.t);
-    var cx = x + w * 0.5;
-    var cy = sy + cardH * 0.5;
+    var deal = easeOut(logAnim.t);
+    var scale = 0.94 + 0.06 * deal;
+    var cx = x + w * 0.5 + (1 - deal) * Math.min(28, w * 0.05);
+    var cy = sy + cardH * 0.5 + (1 - deal) * 16;
     var sw = w * scale;
     var sh = cardH * scale;
     var sx = cx - sw * 0.5;
@@ -1674,43 +2482,53 @@
     } else if (game.flags && game.flags.chosen) {
       hero = decorateOffer(game, hero);
     }
-    var band = Math.min(76, Math.max(58, sh * 0.18));
+    var handsOn = hero.action === "shift";
+    var spec = storySpec(game, now, handsOn);
+    var band = Math.min(68, Math.max(52, sh * 0.16));
+    var showAlt = !!(hero.alt && sh > 188);
+    var bh = sh < 210 ? 44 : 52;
+    var btnBlock = bh + (showAlt ? bh + 8 : 0);
+    var btnTop = scy + sh - 14 - btnBlock;
+    if (btnTop < scy + band + 36) btnTop = scy + band + 36;
     ctx.save();
     clearGlow(ctx);
+    if (deal < 0.995) {
+      ctx.globalAlpha = 0.4 * (1 - deal);
+      round(ctx, sx - 18 * (1 - deal), scy + 8, sw, sh, 22);
+      ctx.fillStyle = "#cbb892";
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    round(ctx, sx + 4, scy + 5, sw, sh, 22);
+    ctx.fillStyle = "#c9b89a";
+    ctx.fill();
     round(ctx, sx, scy, sw, sh, 22);
-    ctx.fillStyle = CREAM;
+    ctx.fillStyle = spec.dayOne ? "#efe4d2" : CREAM;
     ctx.fill();
     ctx.save();
     round(ctx, sx, scy, sw, sh, 22);
     ctx.clip();
-    ctx.fillStyle = hero.rail;
-    ctx.fillRect(sx, scy, sw, band);
-    ctx.fillStyle = "rgba(255,255,255,0.16)";
-    ctx.fillRect(sx, scy, sw, band * 0.42);
+    drawStampBanner(ctx, sx, scy, sw, band, hero);
     ctx.restore();
-    var stampInk = hero.rail === GOLD ? DARK : "#fffdf8";
-    badge(ctx, beatIcon(hero), sx + 40, scy + band * 0.5, 46, "#fffdf8", hero.rail);
-    ctx.font = font(L.w < 720 ? 18 : 22, false);
+    drawPhotoFrame(ctx, sx, scy, sw, sh);
+    if (spec.shady && spec.heat > 50) drawPeel(ctx, sx, scy, sw);
+    var stampInk = hero.rail === GOLD || hero.stamp === "DAY ONE" ? DARK : "#fffdf8";
+    badge(ctx, beatIcon(hero), sx + 36, scy + band * 0.5, 42, "#fffdf8", hero.rail);
+    var titleFont = font(L.w < 720 ? 18 : 22, false, 800);
+    ctx.font = titleFont;
     ctx.fillStyle = stampInk;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(clipText(ctx, font(L.w < 720 ? 18 : 22, false), beatStamp(hero), sw - 220), sx + 72, scy + band * 0.5);
-    if (sw > 420 && game.flags && game.flags.chosen) {
-      drawStorefront(ctx, sx + sw - 124, scy + 8, 108, Math.max(36, band - 16), game.player.place, game.world && game.world.floor, game.world && game.world.rival && game.player.place && !game.player.place.sign);
-    }
-    var textX = sx + 24;
-    var textW = sw - 40;
-    var f = font(L.w < 720 ? 22 : 28, false);
-    var lines = wrapLines(ctx, f, hero.line, textW, 3);
-    ctx.font = f;
-    ctx.fillStyle = DARK;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    var ly = scy + band + 18;
-    var li;
-    for (li = 0; li < lines.length; li++) {
-      ctx.fillText(lines[li], textX, ly);
-      ly += L.w < 720 ? 28 : 36;
+    ctx.fillText(clipText(ctx, titleFont, beatStamp(hero), sw > 520 ? sw - 250 : sw - 150), sx + 64, scy + band * 0.5);
+    if (sw > 280) drawVpStamps(ctx, sx + sw - (sw > 560 ? 200 : 118), scy + band * 0.5, game.player.vp || 0);
+    var textX = sx + 22;
+    var textW = sw - 44;
+    var cursor = scy + band + 8;
+    var limit = btnTop - 8;
+    if (limit - cursor > 26) {
+      drawPhotoChip(ctx, textX, cursor, Math.min(220, textW * 0.58), game);
+      if (sw > 200) drawYearStamp(ctx, sx + sw - 46, cursor + 10, game.player.level);
+      cursor += 26;
     }
     var slot0 = game.slots && game.slots[0];
     var job0 = slot0 ? D.jobById[slot0.jobId] : null;
@@ -1726,18 +2544,31 @@
       if (game.world && game.world.rival && game.player.place && !game.player.place.sign) scene += " " + game.world.rival.split(" ")[0] + " is across the street.";
       if (game.world && game.world.floor) scene += " Upstairs is yours.";
     }
-    var sceneFont = font(15, false);
-    ctx.font = sceneFont;
-    ctx.fillStyle = "#6b6258";
-    ctx.fillText(clipText(ctx, sceneFont, scene, textW), textX, ly + 6);
-    ly += 28;
-    if (sh > 220 && ly + 64 < scy + sh - 64) {
-      drawStorefront(ctx, textX, ly, textW, 52, game.player.place, game.world && game.world.floor, game.world && game.world.rival && game.player.place && !game.player.place.sign);
-      ly += 58;
+    var lineH = L.w < 720 ? 22 : 26;
+    var roomForArt = limit - cursor;
+    var maxLines = roomForArt > 220 ? 2 : 1;
+    var bodyFont = font(L.w < 720 ? 18 : 22, false, 500);
+    var lines = wrapLines(ctx, bodyFont, hero.line, textW, maxLines);
+    ctx.font = bodyFont;
+    ctx.fillStyle = DARK;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    var li;
+    for (li = 0; li < lines.length; li++) {
+      ctx.fillText(lines[li], textX, cursor);
+      cursor += lineH;
     }
-    if (sh > 250 && slot0) {
+    var chipRoom = limit - cursor > 150 ? 34 : 0;
+    var storeH = limit - cursor - chipRoom - 6;
+    if (storeH > 168) storeH = 168;
+    if (storeH >= 48) {
+      var storeW = Math.min(textW, Math.max(260, storeH * 3.05));
+      var storeX = textX + (textW - storeW) * 0.5;
+      drawStorefront(ctx, storeX, cursor, storeW, storeH, spec);
+      cursor += storeH + 6;
+    }
+    if (chipRoom && slot0 && cursor + 28 <= limit + 4) {
       var chipW = (textW - 16) / 3;
-      var chipY = ly + 4;
       var whoShort = slot0.employee ? slot0.employee.name.split(" ")[0] : "Solo";
       var stressN = Math.round(game.player.stress);
       var chips = [
@@ -1748,29 +2579,23 @@
       var ci;
       for (ci = 0; ci < chips.length; ci++) {
         var chx = textX + ci * (chipW + 8);
-        round(ctx, chx, chipY, chipW, 32, 16);
+        round(ctx, chx, cursor, chipW, 30, 15);
         ctx.fillStyle = "#fffdf8";
         ctx.fill();
         ctx.strokeStyle = chips[ci][2];
         ctx.lineWidth = 2;
         ctx.stroke();
-        icon(ctx, chips[ci][0], chx + 16, chipY + 16, 16, chips[ci][2]);
-        ctx.font = font(12, false);
+        icon(ctx, chips[ci][0], chx + 16, cursor + 15, 15, chips[ci][2]);
+        ctx.font = font(12, false, 600);
         ctx.fillStyle = DARK;
         ctx.textAlign = "left";
         ctx.textBaseline = "middle";
-        ctx.fillText(clipText(ctx, font(12, false), chips[ci][1], chipW - 36), chx + 30, chipY + 16);
+        ctx.fillText(clipText(ctx, font(12, false, 600), chips[ci][1], chipW - 36), chx + 28, cursor + 15);
       }
-      ly = chipY + 40;
     }
-    var showAlt = hero.alt && sh > 210;
-    var bh = sh < 200 ? 46 : 54;
-    var by = scy + sh - 18 - bh;
-    if (showAlt) by = scy + sh - 18 - bh * 2 - 8;
-    if (by < ly + 8) by = ly + 8;
     if (!ui.menu) {
-      fatButton(ctx, ui, hero.action, textX, by, textW, bh, hero.label, false);
-      if (showAlt) fatButton(ctx, ui, hero.alt, textX, by + bh + 8, textW, bh, hero.altLabel, true);
+      fatButton(ctx, ui, hero.action, textX, btnTop, textW, bh, hero.label, false);
+      if (showAlt) fatButton(ctx, ui, hero.alt, textX, btnTop + bh + 8, textW, bh, hero.altLabel, true);
     }
     ctx.restore();
     ctx.globalAlpha = 1;
@@ -1862,9 +2687,28 @@
     ctx.arc(faceX, faceY, r + 1.5, 0, Math.PI * 2);
     ctx.fillStyle = "#2a2416";
     ctx.fill();
-    drawFace(ctx, faceX, faceY, r, mood);
+    var jobId = "";
+    var broke = !(game.flags && game.flags.chosen);
+    if (!broke && game.slots && game.slots[0] && D.jobById[game.slots[0].jobId]) jobId = game.slots[0].jobId;
+    var shadyOn = !!(game.flags && game.flags.shady);
+    var heatN = game.player.heat || 0;
+    drawFace(ctx, faceX, faceY, r, {
+      mood: mood,
+      stress: game.player.stress || 0,
+      heat: heatN,
+      shady: shadyOn,
+      job: jobId,
+      broke: broke
+    });
     if (mood === 1) badge(ctx, "coin", faceX + r * 0.7, faceY + r * 0.65, 16, GOLD, DARK);
-    else if (mood === 2) badge(ctx, "flame", faceX + r * 0.7, faceY + r * 0.65, 16, CRIMSON, "#fffdf8");
+    else if (mood === 2) badge(ctx, "flame", faceX + r * 0.7, faceY + r * 0.65, 16, shadyOn && heatN > 40 ? VIOLET : CRIMSON, "#fffdf8");
+    if (shadyOn && heatN > 25 && ((now / 380) | 0) % 2 === 0) {
+      ctx.fillStyle = VIOLET;
+      ctx.beginPath();
+      ctx.arc(faceX - r * 0.72, faceY - r * 0.72, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (L.header >= 146) drawSkillPips(ctx, faceX - 22, faceY + r + 18, game.player.skills || {});
     var textX = faceX + r + 14;
     var cash = S.money(game.player.capital);
     var cashSize = L.w < 520 ? 22 : 28;
@@ -1888,20 +2732,37 @@
     var yearMax = Math.max(48, (stacked ? bookX : pillX) - textX - 10);
     ctx.fillText(clipText(ctx, yearFont, yearBlurb(game, now), yearMax), textX, 32);
     var pillY = stacked ? 52 : faceY - pillH * 0.5;
+    var pulse = 0;
+    if (cashPulse && now - cashPulse < 680) pulse = Math.sin(((now - cashPulse) / 680) * Math.PI);
+    var pillCY = pillY + pillH * 0.5;
     clearGlow(ctx);
+    ctx.save();
+    if (pulse) {
+      var pcx = pillX + pillW * 0.5;
+      ctx.translate(pcx, pillCY);
+      ctx.scale(1 + pulse * 0.16, 1 + pulse * 0.16);
+      ctx.translate(-pcx, -pillCY);
+      ctx.globalAlpha = 0.85;
+      round(ctx, pillX - 5, pillY - 5, pillW + 10, pillH + 10, 22);
+      ctx.strokeStyle = GOLD;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     round(ctx, pillX, pillY, pillW, pillH, 20);
     ctx.fillStyle = "#2a2416";
     ctx.fill();
     ctx.strokeStyle = GOLD;
     ctx.lineWidth = 2;
     ctx.stroke();
-    icon(ctx, "coin", pillX + 20, faceY, 22, GOLD);
+    icon(ctx, "coin", pillX + 20, pillCY, 22, GOLD);
     ctx.font = cashFont;
     ctx.fillStyle = GOLD;
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
-    ctx.fillText(cash, pillX + 36, faceY);
-    noteCash(game, now, pillX + pillW * 0.55, faceY);
+    ctx.fillText(cash, pillX + 36, pillCY);
+    ctx.restore();
+    noteCash(game, now, pillX + pillW * 0.55, pillCY);
     if (bookX > textX + 36) {
       ctx.font = font(11, false);
       ctx.fillStyle = "#8b93a7";
@@ -1940,6 +2801,8 @@
     var ids = ["job", "edu", "scout", "lab"];
     var kinds = ["shop", "cap", "people", "box"];
     var colors = [GOLD, "#7ec8e3", "#ff7ab6", "#e08a3c"];
+    var hot = !!(game.flags && game.flags.shady && (game.player.heat || 0) > 40);
+    var accent = hot ? VIOLET : GOLD;
     var gap = 8;
     var bw = (L.w - 32 - gap * 3) / 4;
     var i;
@@ -1961,19 +2824,25 @@
         ctx.translate(-cx, -cy);
       }
       clearGlow(ctx);
-      round(ctx, x, ty, tw, th, 18);
-      ctx.fillStyle = on ? GOLD : hover ? "#243044" : "#171b28";
+      round(ctx, x + 3, ty + 4, tw, th, 18);
+      ctx.fillStyle = "#07090f";
       ctx.fill();
-      ctx.strokeStyle = (hover || on) ? GOLD : "#2c3548";
+      round(ctx, x, ty, tw, th, 18);
+      ctx.fillStyle = on ? (hot ? "#d7a4e4" : GOLD) : hover ? "#243044" : "#171b28";
+      ctx.fill();
+      ctx.strokeStyle = (hover || on || hot) ? accent : "#2c3548";
       ctx.globalAlpha = 1;
-      ctx.lineWidth = on ? 0 : 1;
+      ctx.lineWidth = on ? 0 : 1.5;
       if (!on) ctx.stroke();
-      icon(ctx, kinds[i], cx, cy - 11, 22, on ? DARK : colors[i]);
-      ctx.font = font(L.w < 860 ? 13 : 14, false);
+      var ink = on ? DARK : (hot && i === 3 ? VIOLET : colors[i]);
+      icon(ctx, kinds[i], cx, cy - 14, 26, ink);
+      ctx.fillStyle = on ? DARK : accent;
+      ctx.fillRect(cx - 16, cy + 2, 32, 3);
+      ctx.font = font(L.w < 860 ? 13 : 15, false, 700);
       ctx.fillStyle = on ? DARK : INK;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(labels[i], cx, cy + 12);
+      ctx.fillText(labels[i], cx, cy + 18);
       clearGlow(ctx);
       ctx.restore();
       pushHit(ui, id, x, ty, tw, th);
@@ -2002,7 +2871,7 @@
       logAnim.n = game.logN;
       logAnim.head = game.logHead;
     } else if (logAnim.t < 1) {
-      logAnim.t += dt / 240;
+      logAnim.t += dt / 320;
       if (logAnim.t > 1) logAnim.t = 1;
     }
     if (!particlesOk()) return;
@@ -2106,7 +2975,7 @@
     var ox = 0;
     var oy = 0;
     if (shakeLeft > 0) {
-      var bounce = [0, 2, -5, 6];
+      var bounce = [0, 1, -2, 2];
       var mag = bounce[shakeLeft] || 0;
       ox = mag;
       oy = mag * 0.4;
@@ -2117,8 +2986,18 @@
     ctx.globalAlpha = 1;
     ui.hits.length = 0;
     ui.clip = null;
-    var bg = ensurePlate(w, h, !!game.settings.performanceMode, dpr);
+    var phaseId = S.phaseAt(now).id;
+    var bg = ensurePlate(w, h, !!game.settings.performanceMode, dpr, phaseId);
     ctx.drawImage(bg, 0, 0, w, h);
+    var heatN = (game.player && game.player.heat) || 0;
+    if (game.flags && game.flags.shady && heatN > 28) {
+      var ha = (heatN - 28) / 80;
+      if (ha > 0.32) ha = 0.32;
+      ctx.fillStyle = "rgba(110, 36, 150, " + ha.toFixed(3) + ")";
+      ctx.fillRect(0, 0, w, h);
+    }
+    buttonTone = "";
+    sheetLock = false;
     var L = layout(w, h);
     ui.L = L;
     drawStory(ctx, game, ui, L, now);

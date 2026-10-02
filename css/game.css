@@ -5,6 +5,14 @@ html, body {
   color: #f4efe4;
   font-family: system-ui, Segoe UI, sans-serif;
   overflow: hidden;
+  color-scheme: dark;
+}
+
+body {
+  background:
+    radial-gradient(ellipse at 50% 100%, rgba(245, 197, 66, 0.08), transparent 46%),
+    radial-gradient(ellipse at 12% 0%, rgba(62, 200, 216, 0.08), transparent 42%),
+    #0c1020;
 }
 
 #wash {
@@ -24,4 +32,6 @@ html, body {
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  image-rendering: auto;
 }
