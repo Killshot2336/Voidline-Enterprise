@@ -83,6 +83,35 @@
     if (id === "comp") { S.compRegular(game); return; }
     if (id === "greet") { S.greetRegular(game); return; }
     if (id.indexOf("upgrade:") === 0) { S.upgradeRoom(game, id.substring(8)); return; }
+    if (id.indexOf("shop:") === 0) {
+      var which = id.substring(5);
+      if (which === "more") S.cycleShop(game);
+      else if (which === "pick") S.setShop(game, (game.world && game.world.shopPage) || 0);
+      else S.setShop(game, Number(which));
+      return;
+    }
+    if (id.indexOf("up:") === 0) { S.setUpstairs(game, id.substring(3)); return; }
+    if (id === "truce") { S.makeTruce(game); return; }
+    if (id === "class") { S.takeClass(game); return; }
+    if (id === "lot") { S.claimLot(game); return; }
+    if (id === "billpay") { S.payBill(game); return; }
+    if (id === "insure") { S.buyInsurance(game); return; }
+    if (id === "loan") { S.takeLoan(game); return; }
+    if (id === "loanpay") { S.payLoan(game); return; }
+    if (id === "deliver") { S.deliver(game, now); return; }
+    if (id === "cater") { S.cater(game); return; }
+    if (id.indexOf("menu:") === 0) { S.setMenu(game, Number(id.substring(5))); return; }
+    if (id === "laylow") { S.layLow(game, now); return; }
+    if (id === "fine") { S.payFine(game); return; }
+    if (id === "quiet") { S.buyQuiet(game); return; }
+    if (id === "partner") { S.takePartner(game); return; }
+    if (id === "favor") { S.seraFavor(game); return; }
+    if (id === "council:pay") { S.councilPay(game); return; }
+    if (id === "council:mute") { S.councilMute(game); return; }
+    if (id === "inspectpay") { S.payInspect(game); return; }
+    if (id === "nightmarket") { S.openNightMarket(game); return; }
+    if (id === "retire") { S.retire(game); return; }
+    if (id.indexOf("district:") === 0) { S.moveDistrict(game, id.substring(9)); return; }
     if (id === "skim") { S.skim(game, now); return; }
     if (id === "score") { S.score(game, now); return; }
     if (id === "rest") { S.rest(game, now); return; }

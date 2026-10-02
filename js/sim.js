@@ -213,11 +213,20 @@
     return game;
   }
 
+  var SEASONS = ["winter", "spring", "summer", "fall"];
+
+  function seasonOf(level) {
+    var n = (level || 0) % 4;
+    if (n < 0) n += 4;
+    return SEASONS[n];
+  }
+
   function ensureLife(game) {
     var p = game.player;
     if (!p.skills) p.skills = { work: 0, mind: 0, hustle: 0, clout: 0 };
     if (p.heat == null) p.heat = 0;
     if (p.heldUntil == null) p.heldUntil = 0;
+    if (p.shop == null) p.shop = "";
     if (!game.flags) game.flags = { insight: false, shady: false };
     if (game.flags.shady == null) game.flags.shady = !!(game.nodes && game.nodes.shady_open);
     if (game.nodes && game.nodes.shady_open) game.flags.shady = true;
@@ -227,15 +236,105 @@
     if (game.flags.chosen == null) {
       game.flags.chosen = !!game.flags.opened || (p.skills && p.skills.mind > 0) || (p.capital || 0) > 0;
     }
-    if (!p.place) p.place = { owned: false, lights: 0, sign: 0, counter: 0 };
-    if (!game.world) game.world = { rentDue: 0, floor: 0, behind: 0, regular: null, regularDue: false, rival: "", showing: "", seen: {}, welcomed: false };
-    if (!game.world.seen) game.world.seen = {};
+    if (!p.place) p.place = {};
+    var place = p.place;
+    if (place.owned == null) place.owned = false;
+    if (place.lights == null) place.lights = 0;
+    if (place.sign == null) place.sign = 0;
+    if (place.counter == null) place.counter = 0;
+    if (place.cooler == null) place.cooler = 0;
+    if (place.safe == null) place.safe = 0;
+    if (place.speaker == null) place.speaker = 0;
+    if (place.plant == null) place.plant = 0;
+    if (place.neon == null) place.neon = 0;
+    if (!game.world) game.world = {};
+    var w = game.world;
+    if (w.rentDue == null) w.rentDue = 0;
+    if (w.floor == null) w.floor = 0;
+    if (w.behind == null) w.behind = 0;
+    if (w.regular === undefined) w.regular = null;
+    if (w.regularDue == null) w.regularDue = false;
+    if (w.rival == null) w.rival = "";
+    if (w.showing == null) w.showing = "";
+    if (!w.seen) w.seen = {};
+    if (w.welcomed == null) w.welcomed = false;
+    if (w.locked == null) w.locked = 0;
+    if (w.upstairs == null) w.upstairs = "none";
+    if (w.deed == null) w.deed = place.owned ? "renting" : "";
+    if (w.rentPays == null) w.rentPays = 0;
+    if (w.tenantPaid == null) w.tenantPaid = 0;
+    if (w.tenantPhase == null) w.tenantPhase = "";
+    if (!w.regulars) w.regulars = [];
+    if (w.regular && w.regulars.length === 0) w.regulars.push(w.regular);
+    if (w.rivalSign == null) w.rivalSign = false;
+    if (w.truce == null) w.truce = false;
+    if (w.promoted == null) w.promoted = false;
+    if (w.hobbyShop == null) w.hobbyShop = "";
+    if (!w.goals) w.goals = { hundred: false, hire: false, floor: false };
+    if (w.goals.hundred == null) w.goals.hundred = false;
+    if (w.goals.hire == null) w.goals.hire = false;
+    if (w.goals.floor == null) w.goals.floor = false;
+    if (w.loan == null) w.loan = 0;
+    if (!w.album) w.album = [];
+    if (!w.milestones) w.milestones = { regular: false, raise: false, floor: false };
+    if (w.milestones.regular == null) w.milestones.regular = false;
+    if (w.milestones.raise == null) w.milestones.raise = false;
+    if (w.milestones.floor == null) w.milestones.floor = false;
+    if (w.retired == null) w.retired = false;
+    if (w.notePhase == null) w.notePhase = "";
+    if (!w.district) w.district = "downtown";
+    if (w.deliverPhase == null) w.deliverPhase = "";
+    if (w.catered == null) w.catered = false;
+    if (!w.menu) w.menu = { price: 1 };
+    if (w.menu.price == null) w.menu.price = 1;
+    if (w.insured == null) w.insured = false;
+    if (w.bill == null) w.bill = 0;
+    if (w.biggestBill == null) w.biggestBill = 0;
+    if (w.quietRoom == null) w.quietRoom = false;
+    if (w.partner == null) w.partner = false;
+    if (w.favorYear == null) w.favorYear = 0;
+    if (w.classYear == null) w.classYear = 0;
+    if (w.signMuted == null) w.signMuted = 0;
+    if (w.secondLot == null) w.secondLot = false;
+    if (w.nightMarket == null) w.nightMarket = false;
+    if (w.scoutJust == null) w.scoutJust = false;
+    if (w.shopPage == null) w.shopPage = 0;
+    if (w.craftShiftLogged == null) w.craftShiftLogged = false;
+    if (w.catchNamed == null) w.catchNamed = false;
+    if (w.councilYear == null) w.councilYear = 0;
+    w.season = seasonOf(p.level);
+    ensureEmployees(game);
+  }
+
+  function shopIndex(game) {
+    var shops = D.SHOPS || [];
+    var n = shops.length || 1;
+    var i = game.world && game.world.shopPage || 0;
+    if (i < 0) i = 0;
+    return i % n;
+  }
+
+  function crewLine(game) {
+    var list = game.world && game.world.regulars;
+    var i;
+    var names = [];
+    if (list && list.length) {
+      for (i = 0; i < list.length; i++) if (list[i].name) names.push(list[i].name);
+    } else if (game.world && game.world.regular && game.world.regular.name) {
+      names.push(game.world.regular.name);
+    }
+    return names.length ? names.join(", ") : "Regulars";
   }
 
   function fillLife(text, game) {
     if (!text) return "";
     var w = game.world || {};
     var reg = w.regular || {};
+    var shops = D.SHOPS || [];
+    var pick = shops[shopIndex(game)] || "the corner";
+    var rest = [];
+    var i;
+    for (i = 0; i < shops.length; i++) if (shops[i] !== pick) rest.push(shops[i]);
     return text
       .replace(/\{rent\}/g, money(w.rentDue || 0))
       .replace(/\{heat\}/g, String(Math.round(game.player.heat || 0)))
@@ -243,7 +342,22 @@
       .replace(/\{name\}/g, reg.name || "A regular")
       .replace(/\{visits\}/g, String(reg.visits || 1))
       .replace(/\{floor\}/g, money(D.ROOM.floor))
-      .replace(/\{year\}/g, String(game.player.level));
+      .replace(/\{year\}/g, String(game.player.level))
+      .replace(/\{shop\}/g, game.player.shop || "the corner")
+      .replace(/\{season\}/g, w.season || seasonOf(game.player.level))
+      .replace(/\{shopPick\}/g, pick)
+      .replace(/\{shopRest\}/g, rest.join(" and ") || pick)
+      .replace(/\{shopA\}/g, shops[0] || "Greasefire")
+      .replace(/\{shopB\}/g, shops[1] || "Neon Nook")
+      .replace(/\{shopC\}/g, shops[2] || "Orbit Counter")
+      .replace(/\{crew\}/g, crewLine(game))
+      .replace(/\{bill\}/g, money(w.bill || 0))
+      .replace(/\{cooler\}/g, money(D.ROOM.cooler || 0))
+      .replace(/\{safe\}/g, money(D.ROOM.safe || 0))
+      .replace(/\{speaker\}/g, money(D.ROOM.speaker || 0))
+      .replace(/\{plant\}/g, money(D.ROOM.plant || 0))
+      .replace(/\{neon\}/g, money(D.ROOM.neon || 0))
+      .replace(/\{insure\}/g, money(30));
   }
 
   function templateOk(game, card) {
@@ -256,6 +370,21 @@
     if (card.rival && !w.rival) return false;
     if (card.floor && !w.floor) return false;
     if (card.shady && !(game.flags && game.flags.shady)) return false;
+    if (card.part && (!place.owned || place[card.part])) return false;
+    if (card.upstairs && !(w.floor && (!w.upstairs || w.upstairs === "none"))) return false;
+    if (card.crew && !(w.regulars && w.regulars.length >= 2)) return false;
+    if (card.teach && w.classYear === game.player.level) return false;
+    if (card.council && w.councilYear === game.player.level) return false;
+    if (card.truce && w.truce) return false;
+    if (card.loan && w.loan) return false;
+    if (card.insure && w.insured) return false;
+    if (card.cater && w.catered) return false;
+    if (card.partner && w.partner) return false;
+    if (card.quiet && (!(game.flags && game.flags.shady) || !place.owned || w.quietRoom)) return false;
+    if (card.favor && (!(w.regular && (w.regular.mood || 0) >= 3) || w.favorYear === game.player.level)) return false;
+    if (card.market && ((game.player.visibility || 0) < 40 || w.nightMarket)) return false;
+    if (card.lot && (!game.degrees || !game.degrees.bach || w.secondLot)) return false;
+    if (card.retire && w.retired) return false;
     return true;
   }
 
@@ -288,16 +417,22 @@
     if (place.owned && !w.floor && game.player.capital >= D.ROOM.floor) return "floor";
     var slot = game.slots && game.slots[0];
     if (slot && slot.stock > 0 && slot.stock <= 2) return "thin";
+    if (inspectionDue(game)) return "inspect";
+    if (w.scoutJust) return "scout_back";
+    if (w.bill > 0) return "bill";
+    if (!game.player.shop && game.player.shifts >= 1) return "shopname";
     return templateId(game, now);
   }
 
   function offerLife(game, now) {
     ensureLife(game);
     if (!game.flags || !game.flags.opened) return false;
+    tenantTick(game, phaseAt(now).id);
     var id = currentLifeId(game, now);
     if (!id || id === game.world.showing) return false;
     var card = D.lifeById[id];
     game.world.showing = id;
+    if (id === "scout_back") game.world.scoutJust = false;
     if (card && card.once) game.world.seen[id] = game.player.level;
     pushLog(game, "* Life: " + id);
     return true;
@@ -318,16 +453,45 @@
     };
   }
 
+  function addRegular(game, person) {
+    var list = game.world.regulars;
+    var i;
+    for (i = 0; i < list.length; i++) if (list[i].name === person.name) return list[i];
+    list.push(person);
+    return person;
+  }
+
+  function markLightRegulars(game) {
+    var list = game.world.regulars;
+    var lights = game.player.place && game.player.place.lights;
+    var i;
+    for (i = 0; i < list.length; i++) {
+      if (!list[i].needsLights) continue;
+      list[i].due = !!lights;
+    }
+  }
+
   function meetPeople(game, now) {
     ensureLife(game);
-    if (game.player.shifts === 2 && !game.world.regular) {
-      game.world.regular = { name: D.FIRST[2] + " " + D.LAST[1], visits: 1, mood: 1 };
-      game.world.regularDue = true;
-    } else if (game.world.regular && game.player.shifts > 0 && game.player.shifts % 4 === 0) {
-      game.world.regularDue = true;
+    var w = game.world;
+    var shifts = game.player.shifts;
+    if (shifts === 2 && !w.regular) {
+      w.regular = { name: D.FIRST[2] + " " + D.LAST[1], visits: 1, mood: 1 };
+      w.regularDue = true;
+      addRegular(game, w.regular);
+      if (!w.milestones.regular) {
+        w.milestones.regular = true;
+        pushLog(game, "* Milestone: first regular.");
+      }
+    } else if (w.regular && shifts > 0 && shifts % 4 === 0) {
+      w.regularDue = true;
     }
-    if (game.player.shifts === 6 && game.player.place && game.player.place.owned && !game.world.rival) {
-      game.world.rival = "Juniper Pike";
+    if (shifts === 4) addRegular(game, { name: D.FIRST[3] + " " + D.LAST[2], visits: 1, mood: 1 });
+    if (shifts === 8) addRegular(game, { name: D.FIRST[7] + " " + D.LAST[6], visits: 1, mood: 1, needsLights: true });
+    if (shifts > 0 && shifts % 4 === 0) markLightRegulars(game);
+    if (shifts === 6 && game.player.place && game.player.place.owned && !w.rival) {
+      w.rival = "Juniper Pike";
+      syncRivalSign(game);
     }
     offerLife(game, now);
   }
@@ -391,11 +555,14 @@
         pushLog(game, "* Prestige mark at rank " + game.player.level + "." + (hasRid(game, 129) ? " Neural Ledger +1 VP." : ""));
       }
       pushLog(game, "* Rank " + game.player.level + ". +1 Void Point. Next XP threshold " + Math.round(xpNeed(game.player.level)) + ".");
+      ensureLife(game);
+      if (game.world.album.length < 12) game.world.album.push("Y" + game.player.level);
+      pushLog(game, awardsLine(game));
       guard += 1;
     }
     if (leveled && game.player.place && game.player.place.owned) {
       ensureLife(game);
-      game.world.rentDue = 18 + game.player.level * 6;
+      game.world.rentDue = rentAmount(game);
       game.world.showing = "";
       offerLife(game, game.lastReal || 0);
     }
@@ -517,6 +684,7 @@
     slot.stock -= 1;
     if (steal) {
       var loss = Math.round((10 + jobBase(slot) * 0.3) * phase.revenue);
+      if (game.player.place && game.player.place.safe) loss = Math.max(1, Math.round(loss * 0.85));
       game.player.capital = Math.max(0, game.player.capital - loss);
       if (slot.camera) {
         emp.caught = true;
@@ -524,7 +692,7 @@
           emp.salary = Math.max(1, Math.round(emp.salary * 0.75));
           if (!quiet) pushLog(game, "! Sentinel slashed " + emp.name + " to " + money(emp.salary) + ". Loss " + money(loss) + ".");
         } else if (!quiet) {
-          pushLog(game, "! Camera slot " + (slot.id + 1) + ": " + emp.name + " caught lifting stock. Loss " + money(loss) + ".");
+          pushLog(game, "! Camera slot " + (slot.id + 1) + ": " + emp.name + " caught lifting stock. Loss " + money(loss) + ". The lens kept the name.");
         }
       } else if (!quiet) {
         pushLog(game, "! Inventory discrepancy on slot " + (slot.id + 1) + ". Unexplained loss " + money(loss) + ". Stock -1.");
@@ -545,16 +713,22 @@
     if (game.player.place && game.player.place.owned) {
       var room = 1;
       if (game.player.place.lights) room += 0.06;
-      if (game.player.place.sign) room += 0.08;
+      room += signLift(game);
       if (game.player.place.counter) room += 0.07;
       gross *= room;
     }
     if (game.world && game.world.floor) gross *= 1.08;
-    if (game.world && game.world.rival && game.player.place && !game.player.place.sign && phase.id === "lunch") gross *= 0.82;
+    if (phase.id === "lunch") {
+      gross *= districtLunchMult(game);
+      gross *= rivalLunchMult(game);
+    }
+    gross *= menuGrossMult(game);
+    gross *= nightBump(game, phase.id);
     if (slot.jobId === "fast_food" && hasRid(game, 105)) gross *= 2;
     if (hasRid(game, 109)) gross *= 2;
     if (hasRid(game, 120)) gross *= 1.5;
     var wage = emp ? emp.salary / 20 : 0;
+    if (emp && emp.pref) wage *= wagePrefMult(emp, phase.id);
     wage /= bonus.wage;
     if (hasRid(game, 107)) wage *= 0.85;
     if (gradOn(game, "ba")) wage *= 0.9;
@@ -692,6 +866,8 @@
     var pay = mission.id === "orbital" ? 40 : mission.id === "city" ? 18 : 8;
     pay = Math.round(pay * phase.revenue);
     game.player.capital += pay;
+    ensureLife(game);
+    game.world.scoutJust = true;
     pushLog(game, "* Scout returned: " + (item ? item.name : itemId) + " and " + money(pay) + ".");
     if (mission.id === "orbital" && Math.random() < 0.35) revealRecipe(game, "survey");
     game.rev += 1;
@@ -763,7 +939,12 @@
         if (biz > capMs) biz = capMs;
         if (!game.booted && wall > 1500) {
           var hours = hasRid(game, 124) ? 72 : 24;
-          pushLog(game, "Catch-up used the device clock (" + Math.round(wall / 1000) + "s). Business buffer is " + hours + "h.");
+          var catchLine = "Catch-up used the device clock (" + Math.round(wall / 1000) + "s). Business buffer is " + hours + "h.";
+          if (game.world.regular && game.world.regular.name && !game.world.catchNamed) {
+            catchLine += " " + game.world.regular.name + " covered the quiet hours.";
+            game.world.catchNamed = true;
+          }
+          pushLog(game, catchLine);
         }
         if (biz > 20000) bulkBusiness(game, now, biz, rng);
         else runBusiness(game, now, biz, rng);
@@ -777,11 +958,20 @@
       offerLife(game, now);
     }
     if (game.flags.opened && (!game.booted || phase.id !== game.phaseId)) {
+      if (game.world.rival && game.world.notePhase !== phase.id) {
+        game.world.notePhase = phase.id;
+        pushLog(game, "City note: " + game.world.rival + " is still across the street.");
+      }
+      tenantTick(game, phase.id);
       if (!offerLife(game, now) && !game.world.showing) {
         pushLog(game, "Clock phase: " + phase.name + ". Revenue x" + phase.revenue.toFixed(2) + ".");
       }
     }
     game.phaseId = phase.id;
+    spoilTick(game, now);
+    checkQuits(game);
+    checkHints(game);
+    checkGoals(game);
     if (game.player.heat > 0 && now - (game.heatAt || 0) > 5000) {
       game.heatAt = now;
       game.player.heat = Math.max(0, game.player.heat - 1);
@@ -931,6 +1121,10 @@
       pushLog(game, "! You're being held. Shifts wait.");
       return { ok: false, reason: "held" };
     }
+    if (game.world.locked >= 3 && game.world.rentDue > 0) {
+      pushLog(game, "! The night is locked. Pay the rent first.");
+      return { ok: false, reason: "locked" };
+    }
     game.flags.opened = true;
     game.flags.chosen = true;
     if (now - game.shiftAt < 350) return { ok: false, reason: "cooldown" };
@@ -939,7 +1133,13 @@
     var bonus = recomputeBonus(game);
     var pay = Math.round((14 + game.player.level * 2) * phase.revenue * bonus.revenue);
     if (game.fx && now < game.fx.sugarUntil) pay *= 2;
+    if ((game.player.skills.work || 0) + 1 >= 8) pay += 2;
+    if (game.world.upstairs === "office" && game.world.floor) pay += 3;
     game.player.capital += pay;
+    if (game.world.partner) {
+      var split = Math.max(1, Math.round(pay * 0.1));
+      game.player.capital = Math.max(0, game.player.capital - split);
+    }
     addXp(game, 22 * bonus.xp);
     game.player.stress = clampStat(game.player.stress + 4);
     game.player.intelligence = clampStat(game.player.intelligence + 0.4);
@@ -950,7 +1150,12 @@
       game.flags.raised = true;
       gotRaise = true;
       game.player.capital += 2;
+      if (!game.world.milestones.raise) {
+        game.world.milestones.raise = true;
+        pushLog(game, "* Milestone: first raise.");
+      }
     }
+    if (game.player.skills.work >= 8) game.world.promoted = true;
     if (game.nodes && game.nodes.backroom) {
       var cut = Math.max(1, Math.round(pay * 0.15));
       game.player.capital += cut;
@@ -959,10 +1164,20 @@
     if (game.player.shifts % 3 === 0) {
       game.player.visibility = clampStat(game.player.visibility + 1.5 * bonus.visibility);
     }
+    var place = game.player.place;
+    if (place && place.speaker) game.player.visibility = clampStat(game.player.visibility + 0.3);
+    if (place && place.plant) game.player.stress = clampStat(game.player.stress - 1);
+    if (place && place.neon) game.player.visibility = clampStat(game.player.visibility + 0.4);
+    if (game.player.shifts % 4 === 0) postBill(game);
+    if (game.crafted && game.crafted.length && !game.world.craftShiftLogged) {
+      game.world.craftShiftLogged = true;
+      pushLog(game, "A crafted plate is on the counter.");
+    }
     maybeLevel(game);
     pushLog(game, "+ Shift closed. Paid " + money(pay) + ". Academic XP rose.");
     if (gotRaise) pushLog(game, "+ The counter noticed. You got a raise.");
     noteUnlocks(game);
+    checkGoals(game);
     meetPeople(game, now);
     game.rev += 1;
     markPulse(game, pay);
@@ -987,14 +1202,20 @@
     var key = hobby.skill;
     var skill = game.player.skills[key] || 0;
     var pay = hobby.pay + Math.floor(skill / 3);
+    if (game.world.upstairs === "tutor" && game.world.floor) pay += 3;
     game.player.capital += pay;
     game.player.skills[key] = Math.min(100, skill + 1);
+    if (game.player.skills[key] >= 5 && !game.world.hobbyShop) {
+      game.world.hobbyShop = hobby.id;
+      pushLog(game, "+ Hobby shop: " + hobby.name + ".");
+    }
     if (key === "mind") game.player.intelligence = clampStat(game.player.intelligence + 0.6);
     if (key === "clout") game.player.visibility = clampStat(game.player.visibility + 0.8);
     addXp(game, hobby.xp || 8);
     maybeLevel(game);
     pushLog(game, "+ Hobby paid " + money(pay) + ". You know this a little better.");
     noteUnlocks(game);
+    checkGoals(game);
     game.rev += 1;
     return { ok: true, pay: pay };
   }
@@ -1009,6 +1230,7 @@
     }
     game.player.capital -= cost;
     game.player.place.owned = true;
+    if (!game.world.deed || game.world.deed === "") game.world.deed = "renting";
     pushLog(game, "+ You rented the corner. It's yours to change.");
     game.rev += 1;
     return { ok: true };
@@ -1020,18 +1242,25 @@
       pushLog(game, "Rent the corner before you change it.");
       return { ok: false, reason: "rent" };
     }
-    if (part !== "lights" && part !== "sign" && part !== "counter") return { ok: false };
+    if (part !== "lights" && part !== "sign" && part !== "counter" && part !== "cooler" && part !== "safe" && part !== "speaker" && part !== "plant" && part !== "neon") return { ok: false };
     if (game.player.place[part]) return { ok: false, reason: "owned" };
     var cost = D.ROOM[part];
-    if (game.player.capital < cost) {
-      pushLog(game, "! That change costs " + money(cost) + ".");
+    if (!(cost > 0) || game.player.capital < cost) {
+      pushLog(game, "! That change costs " + money(cost || 0) + ".");
       return { ok: false, reason: "capital" };
     }
     game.player.capital -= cost;
     game.player.place[part] = 1;
     if (part === "lights") pushLog(game, "+ Warm lights. The corner looks like a shop.");
-    else if (part === "sign") pushLog(game, "+ A sign. People can find you.");
-    else pushLog(game, "+ A real counter. The folding table is gone.");
+    else if (part === "sign") {
+      pushLog(game, "+ A sign. People can find you.");
+      syncRivalSign(game);
+    } else if (part === "counter") pushLog(game, "+ A real counter. The folding table is gone.");
+    else if (part === "cooler") pushLog(game, "+ A cooler. The shelf keeps longer.");
+    else if (part === "safe") pushLog(game, "+ A safe. Losses land a little softer.");
+    else if (part === "speaker") pushLog(game, "+ A speaker. The room has a little more clout.");
+    else if (part === "plant") pushLog(game, "+ A plant. The shift feels less sharp.");
+    else pushLog(game, "+ Neon. Mostly for show.");
     game.rev += 1;
     return { ok: true };
   }
@@ -1047,7 +1276,9 @@
     game.player.capital -= due;
     game.world.rentDue = 0;
     game.world.behind = 0;
+    game.world.locked = 0;
     game.world.showing = "";
+    advanceLease(game, "rent");
     pushLog(game, "+ You paid the landlord " + money(due) + ". The year is yours.");
     game.rev += 1;
     return { ok: true };
@@ -1061,6 +1292,7 @@
     game.world.showing = "";
     if (game.world.behind >= 3 && game.player.place) {
       game.player.place.lights = 0;
+      game.world.locked = game.world.behind;
       pushLog(game, "! You stalled too long. The landlord took the lights.");
     } else {
       pushLog(game, "! You stalled. Rent is still " + money(game.world.rentDue) + ".");
@@ -1083,7 +1315,14 @@
     }
     game.player.capital -= cost;
     game.world.floor = 1;
+    game.world.upstairs = "none";
     game.world.showing = "";
+    advanceLease(game, "floor");
+    if (!game.world.milestones.floor) {
+      game.world.milestones.floor = true;
+      pushLog(game, "* Milestone: the floor.");
+    }
+    checkGoals(game);
     pushLog(game, "+ The floor above is yours. The building got taller.");
     game.rev += 1;
     return { ok: true };
@@ -1138,6 +1377,7 @@
     if (rng() < bust) {
       game.player.heat = Math.min(100, game.player.heat + 16);
       var fine = 12 + Math.round(game.player.heat * 0.4);
+      if (game.world.insured) fine = Math.max(1, Math.round(fine * 0.5));
       game.player.capital = Math.max(0, game.player.capital - fine);
       if (game.player.heat > 70) {
         game.player.heldUntil = now + 60000;
@@ -1149,9 +1389,14 @@
       return { ok: false, reason: "busted" };
     }
     var pay = 14 + Math.floor((game.player.skills.hustle || 0) / 2);
+    var heatGain = 8;
+    if (game.world.quietRoom) {
+      pay += 4;
+      heatGain += 2;
+    }
     game.player.capital += pay;
     game.player.skills.hustle = Math.min(100, (game.player.skills.hustle || 0) + 1);
-    game.player.heat = Math.min(100, game.player.heat + 8);
+    game.player.heat = Math.min(100, game.player.heat + heatGain);
     pushLog(game, "+ Skimmed " + money(pay) + ". Heat is watching.");
     game.rev += 1;
     return { ok: true, pay: pay };
@@ -1271,8 +1516,10 @@
       name: card.name,
       salary: salary,
       traits: card.traits.slice(),
-      caught: false
+      caught: false,
+      pref: prefFor(card.name)
     };
+    checkGoals(game);
     var idx = game.resumes.indexOf(card);
     if (idx >= 0) game.resumes.splice(idx, 1);
     pushLog(game, "* " + card.name + " locked into slot " + (slot.id + 1) + " at " + money(salary) + ".");
@@ -1753,6 +2000,553 @@
     return Math.max(1, Math.round(cost));
   }
 
+  function prefFor(name) {
+    var prefs = ["morning", "lunch", "night"];
+    var h = 0;
+    var i;
+    name = name || "A";
+    for (i = 0; i < name.length; i++) h = (h + name.charCodeAt(i)) % 997;
+    return prefs[h % 3];
+  }
+
+  function ensureEmployees(game) {
+    var slots = game.slots || [];
+    var i;
+    for (i = 0; i < slots.length; i++) {
+      var emp = slots[i].employee;
+      if (emp && !emp.pref) emp.pref = prefFor(emp.name);
+    }
+  }
+
+  function wagePrefMult(emp, phaseId) {
+    if (!emp || !emp.pref) return 1;
+    if (emp.pref === phaseId) return 1;
+    return 1.08;
+  }
+
+  function rentAmount(game) {
+    var level = game.player.level || 1;
+    var due = 18 + level * 6;
+    var place = game.player.place;
+    if (place && place.lights) due += 4;
+    if (place && place.sign) due += 4;
+    if (place && place.counter) due += 4;
+    if (game.world && game.world.floor) due += 6;
+    return due;
+  }
+
+  function signLift(game) {
+    var place = game.player.place;
+    if (!place || !place.sign) return 0;
+    var w = game.world;
+    if (w && w.signMuted > (game.player.shifts || 0)) return 0;
+    return 0.08;
+  }
+
+  function districtLunchMult(game) {
+    var d = game.world && game.world.district;
+    if (d === "campus") return 0.9;
+    if (d === "night") return 1.08;
+    return 1;
+  }
+
+  function syncRivalSign(game) {
+    var w = game.world;
+    var place = game.player.place;
+    if (!w || w.truce) return;
+    if (w.rival && place && place.sign) w.rivalSign = true;
+  }
+
+  function rivalLunchMult(game) {
+    var w = game.world;
+    if (!w || !w.rival || w.truce) return 1;
+    var place = game.player.place;
+    if (place && place.sign) {
+      w.rivalSign = true;
+      return 0.93;
+    }
+    if (place && !place.sign) return 0.82;
+    return 1;
+  }
+
+  function menuGrossMult(game) {
+    var price = game.world && game.world.menu && game.world.menu.price;
+    if (price >= 3) return 0.84;
+    if (price === 2) return 0.92;
+    return 1;
+  }
+
+  function nightBump(game, phaseId) {
+    if (phaseId !== "night" || !game.world || !game.world.nightMarket) return 1;
+    return 1.06;
+  }
+
+  function anyCamera(game) {
+    var slots = game.slots || [];
+    var i;
+    for (i = 0; i < slots.length; i++) if (slots[i].camera) return true;
+    return false;
+  }
+
+  function stockSum(game) {
+    var slots = game.slots || [];
+    var n = 0;
+    var i;
+    for (i = 0; i < slots.length; i++) n += slots[i].stock || 0;
+    return n;
+  }
+
+  function inspectionDue(game) {
+    if (anyCamera(game)) return false;
+    if (stockSum(game) <= 0) return false;
+    if (game.world && game.world.seen && game.world.seen.inspect === game.player.level) return false;
+    return true;
+  }
+
+  function tenantTick(game, phaseId) {
+    var w = game.world;
+    if (!w || w.deed !== "owned" || !w.floor) return;
+    if (w.tenantPhase === phaseId) return;
+    w.tenantPhase = phaseId;
+    w.tenant = true;
+    if ((w.tenantPaid || 0) >= 36) return;
+    var cut = 3;
+    if (w.tenantPaid + cut > 36) cut = 36 - w.tenantPaid;
+    if (!(cut > 0)) return;
+    w.tenantPaid += cut;
+    game.player.capital += cut;
+    pushLog(game, "+ A tenant left " + money(cut) + ".");
+  }
+
+  function bestRegularName(game) {
+    var best = "";
+    var score = -1;
+    function consider(person) {
+      if (!person || !person.name) return;
+      var s = (person.mood || 0) * 10 + (person.visits || 0);
+      if (s > score) {
+        score = s;
+        best = person.name;
+      }
+    }
+    if (game.world) {
+      consider(game.world.regular);
+      var list = game.world.regulars;
+      var i;
+      if (list) for (i = 0; i < list.length; i++) consider(list[i]);
+    }
+    return best || "none";
+  }
+
+  function awardsLine(game) {
+    var bill = 0;
+    if (game.world) bill = game.world.biggestBill || game.world.bill || 0;
+    var floor = game.world && game.world.floor ? "floor up" : "no floor";
+    return "* Awards: " + bestRegularName(game) + ", bill " + money(bill) + ", " + floor + ".";
+  }
+
+  function postBill(game) {
+    var wages = 0;
+    var i;
+    for (i = 0; i < game.slots.length; i++) {
+      var emp = game.slots[i].employee;
+      if (emp) wages += emp.salary || 0;
+    }
+    var power = 4;
+    var place = game.player.place;
+    if (place && place.lights) power += 2;
+    if (place && place.sign) power += 1;
+    var bill = power + Math.round(wages * 0.15);
+    if (bill < 4) bill = 4;
+    game.world.bill = bill;
+    if (bill > (game.world.biggestBill || 0)) game.world.biggestBill = bill;
+  }
+
+  function advanceLease(game, how) {
+    var w = game.world;
+    if (!w.deed) w.deed = "renting";
+    if (how === "floor") {
+      w.deed = "owned";
+      return;
+    }
+    w.rentPays = (w.rentPays || 0) + 1;
+    if (w.deed === "renting" && w.rentPays >= 3) {
+      w.deed = "mortgage";
+      pushLog(game, "+ Lease: mortgage.");
+    } else if (w.deed === "mortgage" && w.rentPays >= 6) {
+      w.deed = "owned";
+      pushLog(game, "+ Lease: owned.");
+    }
+  }
+
+  function spoilTick(game, now) {
+    var place = game.player.place;
+    var slot = game.slots && game.slots[0];
+    if (!place || place.cooler || !slot || !(slot.stock > 12)) return;
+    if (now - (game.spoilAt || 0) < 12000) return;
+    game.spoilAt = now;
+    slot.stock -= 1;
+    pushLog(game, "! A little stock turned. No cooler.");
+  }
+
+  function checkQuits(game) {
+    if ((game.player.stress || 0) <= 90) return;
+    var i;
+    for (i = 0; i < game.slots.length; i++) {
+      var emp = game.slots[i].employee;
+      if (!emp || !emp.traits) continue;
+      if (!hasTrait(emp, "clock")) continue;
+      var name = emp.name;
+      game.slots[i].employee = null;
+      pushLog(game, "! " + name + " quit. The clock was enough.");
+    }
+  }
+
+  function checkHints(game) {
+    var i;
+    var t;
+    for (i = 0; i < game.slots.length; i++) {
+      var slot = game.slots[i];
+      var emp = slot.employee;
+      if (!emp || !slot.camera || emp.hinted || !emp.traits) continue;
+      var bad = false;
+      for (t = 0; t < emp.traits.length; t++) {
+        var def = D.TRAITS[emp.traits[t]];
+        if (def && def.hidden && !def.positive) bad = true;
+      }
+      if (!bad) continue;
+      emp.hinted = true;
+      pushLog(game, "The camera caught a tell on slot " + (slot.id + 1) + ".");
+    }
+  }
+
+  function checkGoals(game) {
+    ensureLife(game);
+    var g = game.world.goals;
+    var i;
+    if (!g.hundred && game.player.capital >= 100) {
+      g.hundred = true;
+      pushLog(game, "* Goal: hundred in the drawer.");
+    }
+    if (!g.hire) {
+      for (i = 0; i < game.slots.length; i++) {
+        if (game.slots[i].employee) {
+          g.hire = true;
+          pushLog(game, "* Goal: someone else is on the clock.");
+          break;
+        }
+      }
+    }
+    if (!g.floor && game.world.floor) {
+      g.floor = true;
+      pushLog(game, "* Goal: the floor is yours.");
+    }
+  }
+
+  function calendarLine(game) {
+    ensureLife(game);
+    var bits = [];
+    if (game.world.rentDue > 0) bits.push("rent");
+    if (game.degree) bits.push("exam");
+    if (game.world.season === "summer") bits.push("festival");
+    if (!bits.length) return "clear";
+    return bits.join(", ");
+  }
+
+  function setShop(game, index) {
+    ensureLife(game);
+    var shops = D.SHOPS || [];
+    index = Number(index);
+    if (!shops[index]) return { ok: false, reason: "name" };
+    game.player.shop = shops[index];
+    game.world.showing = "";
+    pushLog(game, "+ The shop is " + game.player.shop + ".");
+    game.rev += 1;
+    return { ok: true, shop: game.player.shop };
+  }
+
+  function cycleShop(game) {
+    ensureLife(game);
+    var n = (D.SHOPS && D.SHOPS.length) || 1;
+    game.world.shopPage = ((game.world.shopPage || 0) + 1) % n;
+    game.world.showing = "shopname";
+    game.rev += 1;
+    return { ok: true, page: game.world.shopPage, name: D.SHOPS[game.world.shopPage] };
+  }
+
+  function setUpstairs(game, kind) {
+    ensureLife(game);
+    if (!game.world.floor) return { ok: false, reason: "floor" };
+    if (kind !== "tutor" && kind !== "office") return { ok: false, reason: "kind" };
+    game.world.upstairs = kind;
+    game.world.showing = "";
+    pushLog(game, "+ Upstairs is a " + kind + ".");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function makeTruce(game) {
+    ensureLife(game);
+    if (!game.world.rival) return { ok: false, reason: "none" };
+    game.world.truce = true;
+    game.world.showing = "";
+    pushLog(game, "+ A truce. Lunch is just lunch.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function takeClass(game) {
+    ensureLife(game);
+    if (game.world.classYear === game.player.level) return { ok: false, reason: "year" };
+    if (game.player.capital < 10) {
+      pushLog(game, "! Class costs $10.");
+      return { ok: false, reason: "capital" };
+    }
+    game.player.capital -= 10;
+    game.player.intelligence = clampStat(game.player.intelligence + 2);
+    game.world.classYear = game.player.level;
+    game.world.showing = "";
+    pushLog(game, "+ Night class. Intelligence ticked up.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function claimLot(game) {
+    ensureLife(game);
+    if (!game.degrees || !game.degrees.bach) return { ok: false, reason: "degree" };
+    if (game.world.secondLot) return { ok: false, reason: "owned" };
+    game.world.secondLot = true;
+    game.world.showing = "";
+    pushLog(game, "+ A second lot is marked. This corner still runs.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function payBill(game) {
+    ensureLife(game);
+    var due = game.world.bill;
+    if (!(due > 0)) return { ok: false, reason: "none" };
+    if (game.player.capital < due) return { ok: false, reason: "capital" };
+    game.player.capital -= due;
+    game.world.bill = 0;
+    game.world.showing = "";
+    pushLog(game, "+ Weekly bill paid. " + money(due) + ".");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function buyInsurance(game) {
+    ensureLife(game);
+    if (game.world.insured) return { ok: false, reason: "owned" };
+    if (game.player.capital < 30) return { ok: false, reason: "capital" };
+    game.player.capital -= 30;
+    game.world.insured = true;
+    game.world.showing = "";
+    pushLog(game, "+ Insured. Fines land softer.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function takeLoan(game) {
+    ensureLife(game);
+    if (game.world.loan > 0) return { ok: false, reason: "open" };
+    game.player.capital += 80;
+    game.world.loan = 100;
+    game.world.showing = "";
+    pushLog(game, "+ Loan opened. $80 in, $100 on the book.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function payLoan(game) {
+    ensureLife(game);
+    var due = game.world.loan;
+    if (!(due > 0)) return { ok: false, reason: "none" };
+    if (game.player.capital < due) return { ok: false, reason: "capital" };
+    game.player.capital -= due;
+    game.world.loan = 0;
+    pushLog(game, "+ Loan cleared.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function deliver(game, now) {
+    ensureLife(game);
+    var phase = phaseAt(now).id;
+    if (game.world.deliverPhase === phase) return { ok: false, reason: "phase" };
+    game.world.deliverPhase = phase;
+    game.player.capital += 6;
+    game.player.stress = clampStat(game.player.stress + 3);
+    pushLog(game, "+ Delivery dropped. A little cash, a little stress.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function cater(game) {
+    ensureLife(game);
+    if (game.world.catered) return { ok: false, reason: "once" };
+    if (game.player.capital < 20) return { ok: false, reason: "capital" };
+    game.player.capital -= 20;
+    game.player.capital += 48;
+    game.world.catered = true;
+    game.world.showing = "";
+    pushLog(game, "+ Catering contract paid out.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function setMenu(game, level) {
+    ensureLife(game);
+    level = Number(level);
+    if (level < 1 || level > 3) return { ok: false, reason: "level" };
+    game.world.menu.price = level;
+    pushLog(game, "+ Menu price is " + level + ".");
+    game.rev += 1;
+    return { ok: true, price: level };
+  }
+
+  function layLow(game, now) {
+    ensureLife(game);
+    if (!game.flags || !game.flags.shady) return { ok: false, reason: "shady" };
+    if (now - (game.layAt || 0) < 3000) return { ok: false, reason: "cooldown" };
+    game.layAt = now;
+    game.player.heat = Math.max(0, (game.player.heat || 0) - 8);
+    game.player.stress = clampStat(game.player.stress - 4);
+    game.world.showing = "";
+    pushLog(game, "You laid low. Heat eased.");
+    game.rev += 1;
+    return { ok: true, heat: game.player.heat };
+  }
+
+  function payFine(game) {
+    ensureLife(game);
+    if (!(game.player.heat > 0)) return { ok: false, reason: "none" };
+    if (game.player.capital < 10) return { ok: false, reason: "capital" };
+    game.player.capital -= 10;
+    game.player.heat = Math.max(0, game.player.heat - 12);
+    game.world.showing = "";
+    pushLog(game, "+ Fine paid. Heat dropped.");
+    game.rev += 1;
+    return { ok: true, heat: game.player.heat };
+  }
+
+  function buyQuiet(game) {
+    ensureLife(game);
+    if (!game.flags || !game.flags.shady || !game.player.place.owned) return { ok: false, reason: "locked" };
+    if (game.world.quietRoom) return { ok: false, reason: "owned" };
+    if (game.player.capital < 28) return { ok: false, reason: "capital" };
+    game.player.capital -= 28;
+    game.world.quietRoom = true;
+    game.world.showing = "";
+    pushLog(game, "+ The quiet room is on the books.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function takePartner(game) {
+    ensureLife(game);
+    if (game.world.partner) return { ok: false, reason: "active" };
+    game.world.partner = true;
+    game.world.showing = "";
+    pushLog(game, "+ A partner is in. They take a cut of the shift.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function betrayPartner(game, rng) {
+    ensureLife(game);
+    if (!game.world.partner) return { ok: false, reason: "none" };
+    var roll = rng ? rng() : 1;
+    if (roll < 0.2) {
+      game.world.partner = false;
+      game.player.capital = Math.max(0, game.player.capital - 10);
+      pushLog(game, "! Your partner walked off with a cut.");
+      game.rev += 1;
+      return { ok: true, betrayed: true };
+    }
+    return { ok: true, betrayed: false };
+  }
+
+  function seraFavor(game) {
+    ensureLife(game);
+    var reg = game.world.regular;
+    if (!reg || (reg.mood || 0) < 3) return { ok: false, reason: "mood" };
+    if (game.world.favorYear === game.player.level) return { ok: false, reason: "year" };
+    game.world.favorYear = game.player.level;
+    game.player.capital += 8;
+    game.world.showing = "";
+    pushLog(game, "+ " + reg.name + " did you a favor.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function councilPay(game) {
+    ensureLife(game);
+    if (game.player.capital < 15) return { ok: false, reason: "capital" };
+    game.player.capital -= 15;
+    game.world.signMuted = 0;
+    game.world.councilYear = game.player.level;
+    game.world.showing = "";
+    pushLog(game, "+ Council fee paid. The sign stays loud.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function councilMute(game) {
+    ensureLife(game);
+    game.world.signMuted = (game.player.shifts || 0) + 5;
+    game.world.councilYear = game.player.level;
+    game.world.showing = "";
+    pushLog(game, "+ The sign goes quiet for a while.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function payInspect(game) {
+    ensureLife(game);
+    var fine = game.world.insured ? 4 : 8;
+    if (game.player.capital < fine) return { ok: false, reason: "capital" };
+    game.player.capital -= fine;
+    game.world.seen.inspect = game.player.level;
+    game.world.showing = "";
+    pushLog(game, "+ Inspection fine paid. " + money(fine) + ".");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function openNightMarket(game) {
+    ensureLife(game);
+    if ((game.player.visibility || 0) < 40) return { ok: false, reason: "visibility" };
+    if (game.world.nightMarket) return { ok: false, reason: "open" };
+    game.world.nightMarket = true;
+    game.world.showing = "";
+    pushLog(game, "+ Night market is open.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function moveDistrict(game, id) {
+    ensureLife(game);
+    if (id !== "campus" && id !== "downtown" && id !== "night") return { ok: false, reason: "district" };
+    if (game.world.district === id) return { ok: false, reason: "same" };
+    if (game.player.capital < 15) return { ok: false, reason: "capital" };
+    game.player.capital -= 15;
+    game.world.district = id;
+    game.world.showing = "";
+    pushLog(game, "+ The corner sits in " + id + ".");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function retire(game) {
+    ensureLife(game);
+    game.world.retired = true;
+    game.world.showing = "";
+    pushLog(game, "* Retired. The save stays where it is.");
+    game.rev += 1;
+    return { ok: true, retired: true };
+  }
+
   function toJSON(game) {
     return {
       v: 1,
@@ -1840,6 +2634,25 @@
     storage.setItem(D.SAVE_KEY, JSON.stringify(toJSON(game)));
   }
 
+  function slotKey(slot) {
+    if (slot === 1 || slot === "b" || slot === "B") return D.SAVE_KEY + ".b";
+    return D.SAVE_KEY;
+  }
+
+  function saveSlot(game, storage, slot) {
+    storage.setItem(slotKey(slot), JSON.stringify(toJSON(game)));
+  }
+
+  function loadSlot(now, storage, slot) {
+    try {
+      var raw = storage.getItem(slotKey(slot));
+      if (!raw) return fresh(now);
+      return fromJSON(JSON.parse(raw), now);
+    } catch (err) {
+      return fresh(now);
+    }
+  }
+
   function reset(game, now) {
     var settings = {
       highFX: game.settings.highFX,
@@ -1903,7 +2716,42 @@
     fmtMs: fmtMs,
     load: load,
     save: save,
+    saveSlot: saveSlot,
+    loadSlot: loadSlot,
     reset: reset,
+    setShop: setShop,
+    cycleShop: cycleShop,
+    setUpstairs: setUpstairs,
+    makeTruce: makeTruce,
+    takeClass: takeClass,
+    claimLot: claimLot,
+    payBill: payBill,
+    buyInsurance: buyInsurance,
+    takeLoan: takeLoan,
+    payLoan: payLoan,
+    deliver: deliver,
+    cater: cater,
+    setMenu: setMenu,
+    layLow: layLow,
+    payFine: payFine,
+    buyQuiet: buyQuiet,
+    takePartner: takePartner,
+    betrayPartner: betrayPartner,
+    seraFavor: seraFavor,
+    councilPay: councilPay,
+    councilMute: councilMute,
+    payInspect: payInspect,
+    openNightMarket: openNightMarket,
+    moveDistrict: moveDistrict,
+    retire: retire,
+    calendarLine: calendarLine,
+    rentAmount: rentAmount,
+    rivalLunchMult: rivalLunchMult,
+    districtLunchMult: districtLunchMult,
+    menuGrossMult: menuGrossMult,
+    nightBump: nightBump,
+    wagePrefMult: wagePrefMult,
+    signLift: signLift,
     toJSON: toJSON,
     bookHas: bookHas,
     ensureSlots: ensureSlots,

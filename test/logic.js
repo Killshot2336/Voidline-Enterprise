@@ -382,5 +382,494 @@ function lastLog(game) {
   assert(S.lifeBeat(day, day.world.showing).label, "card has a choice");
 })();
 
+function allLogs(game) {
+  var out = "";
+  var i;
+  for (i = 0; i < game.logN; i++) out += (S.logLine(game, i) || "") + "\n";
+  return out;
+}
+
+function countText(game, text) {
+  var n = 0;
+  var i;
+  var line;
+  for (i = 0; i < game.logN; i++) {
+    line = S.logLine(game, i) || "";
+    if (line.indexOf(text) >= 0) n += 1;
+  }
+  return n;
+}
+
+function memStorage() {
+  var mem = {};
+  return {
+    mem: mem,
+    getItem: function (k) { return mem[k] || null; },
+    setItem: function (k, v) { mem[k] = String(v); },
+    removeItem: function (k) { delete mem[k]; }
+  };
+}
+
+(function featurePass() {
+  var now = 1_750_000_000_000;
+  var freshGame = S.fresh(now);
+  assert(freshGame.player.capital === 0, "feature fresh capital");
+  assert(S.workShift(freshGame, now).ok, "fresh shift is not locked");
+
+  assert(D.SHOPS.length === 3, "three shop names");
+  var named = S.fresh(now);
+  assert(S.setShop(named, 0).ok && named.player.shop === "Greasefire", "shop 0");
+  assert(S.setShop(named, 1).ok && named.player.shop === "Neon Nook", "shop 1");
+  assert(S.setShop(named, 2).ok && named.player.shop === "Orbit Counter", "shop 2");
+  assert(!S.setShop(named, 9).ok, "shop reject");
+  assert(S.cycleShop(named).page === 1, "shop cycles");
+  var yearLine = S.lifeBeat(named, "year_open").line;
+  assert(yearLine.indexOf("Orbit Counter") >= 0, "fill shop");
+  assert(yearLine.indexOf("spring") >= 0, "fill season");
+  assert(S.lifeBeat(named, "shopname").label, "shop card");
+
+  var bare = S.fresh(now);
+  bare.player.capital = 80;
+  assert(S.buyRoom(bare).ok, "bare room");
+  bare.player.xp = S.xpNeed(1) - 1;
+  assert(S.workShift(bare, now).ok, "bare level");
+  assert(bare.world.rentDue === 18 + bare.player.level * 6, "bare rent unchanged");
+
+  var lit = S.fresh(now);
+  lit.player.capital = 80;
+  assert(S.buyRoom(lit).ok, "lit room");
+  assert(S.upgradeRoom(lit, "lights").ok, "lit lights");
+  lit.player.xp = S.xpNeed(1) - 1;
+  assert(S.workShift(lit, now).ok, "lit level");
+  assert(lit.world.rentDue > 18 + lit.player.level * 6, "upgrades bump rent");
+
+  var locked = S.fresh(now);
+  locked.player.capital = 40;
+  assert(S.buyRoom(locked).ok, "lock room");
+  locked.world.rentDue = 5;
+  locked.player.capital = 0;
+  assert(S.stallRent(locked).ok && S.stallRent(locked).ok && S.stallRent(locked).ok, "three stalls");
+  assert(locked.player.place.lights === 0, "lights taken");
+  assert(locked.world.locked >= 3, "locked nights");
+  var blocked = S.workShift(locked, now);
+  assert(!blocked.ok && blocked.reason === "locked", "shift blocked");
+  locked.player.capital = 20;
+  assert(S.payRent(locked).ok, "rent clears lock");
+  assert(locked.world.locked === 0, "lock cleared");
+  assert(S.workShift(locked, now + 1000).ok, "shift after rent");
+
+  var lease = S.fresh(now);
+  lease.player.capital = 40;
+  assert(S.buyRoom(lease).ok, "lease room");
+  assert(lease.world.deed === "renting", "deed renting");
+  var payN;
+  lease.player.capital = 30;
+  for (payN = 0; payN < 3; payN++) {
+    lease.world.rentDue = 5;
+    assert(S.payRent(lease).ok, "lease pay " + payN);
+  }
+  assert(lease.world.deed === "mortgage", "three rents advance deed");
+
+  var owned = S.fresh(now);
+  owned.player.capital = 200;
+  assert(S.buyRoom(owned).ok && S.buyFloor(owned).ok, "buy floor");
+  assert(owned.world.floor === 1 && owned.world.upstairs === "none", "upstairs empty");
+  assert(owned.world.deed === "owned", "floor owns the deed");
+  assert(owned.world.goals.floor && owned.world.milestones.floor, "floor goal and milestone");
+  assert(countText(owned, "Milestone: the floor.") === 1, "floor milestone once");
+
+  var tutor = S.fresh(now);
+  var office = S.fresh(now);
+  var plain = S.fresh(now);
+  tutor.world = { floor: 1, upstairs: "tutor", seen: {} };
+  office.world = { floor: 1, upstairs: "office", seen: {} };
+  var hobbyPlain = S.workHobby(plain, now);
+  var hobbyTutor = S.workHobby(tutor, now);
+  assert(hobbyTutor.ok && hobbyTutor.pay === hobbyPlain.pay + 3, "tutor upstairs pays");
+  var shiftPlain = S.workShift(plain, now + 1000);
+  var shiftOffice = S.workShift(office, now);
+  assert(shiftOffice.ok && shiftOffice.pay === shiftPlain.pay + 3, "office upstairs pays");
+  assert(!S.setUpstairs(plain, "tutor").ok, "upstairs needs floor");
+  assert(S.setUpstairs(tutor, "office").ok && tutor.world.upstairs === "office", "pick office");
+
+  owned.player.capital = 80;
+  assert(S.upgradeRoom(owned, "cooler").ok && owned.player.place.cooler === 1, "cooler");
+  assert(S.upgradeRoom(owned, "safe").ok && owned.player.place.safe === 1, "safe");
+  assert(S.upgradeRoom(owned, "speaker").ok && owned.player.place.speaker === 1, "speaker");
+  assert(S.upgradeRoom(owned, "plant").ok && owned.player.place.plant === 1, "plant");
+  assert(S.upgradeRoom(owned, "neon").ok && owned.player.place.neon === 1, "neon");
+
+  var people = S.fresh(now);
+  var s;
+  for (s = 0; s < 8; s++) assert(S.workShift(people, now + s * 1000).ok, "people shift " + s);
+  assert(people.world.regular.name === "Sera Keel", "sera stays the regular");
+  assert(people.world.regulars.length >= 3, "regulars array");
+  var crew = "";
+  var lightReg = null;
+  for (s = 0; s < people.world.regulars.length; s++) {
+    crew += people.world.regulars[s].name + " ";
+    if (people.world.regulars[s].needsLights) lightReg = people.world.regulars[s];
+  }
+  assert(crew.indexOf("Sera Keel") >= 0 && crew.indexOf("Ivo Amar") >= 0 && crew.indexOf("Vela Hale") >= 0, "regular names");
+  assert(lightReg && lightReg.due === false, "lights regular skipped");
+  assert(countText(people, "Milestone: first regular.") === 1, "first regular once");
+  people.player.place.lights = 1;
+  people.player.shifts = 11;
+  assert(S.workShift(people, now + 20000).ok, "later visit");
+  assert(lightReg.due === true, "lights regular visits");
+  var crewBeat = S.lifeBeat(people, "crew");
+  assert(crewBeat && crewBeat.line.indexOf("Ivo Amar") >= 0, "crew card");
+
+  var rival = S.fresh(now);
+  rival.player.place = { owned: true, lights: 0, sign: 0, counter: 0 };
+  rival.world = { rival: "Juniper Pike", seen: {}, truce: false, rivalSign: false };
+  assert(S.rivalLunchMult(rival) === 0.82, "no-sign lunch penalty");
+  rival.player.place.sign = 1;
+  var copied = S.rivalLunchMult(rival);
+  assert(rival.world.rivalSign === true, "rival copies sign");
+  assert(copied > 0.82 && copied < 1, "copied sign is a smaller penalty");
+  assert(S.makeTruce(rival).ok, "truce");
+  assert(S.rivalLunchMult(rival) === 1, "truce clears lunch penalty");
+
+  var emp = { pref: "morning" };
+  assert(S.wagePrefMult(emp, "morning") === 1, "on preference");
+  assert(S.wagePrefMult(emp, "night") > 1, "off preference costs more");
+  var hire = S.fresh(now);
+  var card = S.rollResume(hire, function () { return 0; });
+  var hired = S.counterOffer(hire, card.id, card.floor);
+  assert(hired.ok && hire.slots[0].employee.salary === card.floor, "hire salary unchanged");
+  var pref = hire.slots[0].employee.pref;
+  assert(pref === "morning" || pref === "lunch" || pref === "night", "pref assigned");
+
+  var quitter = S.fresh(now);
+  quitter.lastReal = now;
+  quitter.player.stress = 95;
+  quitter.slots[0].employee = { name: "Ada", salary: 10, traits: ["clock"], caught: false };
+  S.frame(quitter, now);
+  assert(!quitter.slots[0].employee, "clock quits");
+  assert(countText(quitter, "quit") === 1, "quit logged");
+  S.frame(quitter, now);
+  assert(countText(quitter, "quit") === 1, "quit once");
+  var stayer = S.fresh(now);
+  stayer.lastReal = now;
+  stayer.player.stress = 95;
+  stayer.slots[0].employee = { name: "Bea", salary: 10, traits: ["loyal"], caught: false };
+  S.frame(stayer, now);
+  assert(stayer.slots[0].employee, "no clock, no quit");
+
+  var promo = S.fresh(now);
+  promo.player.skills.work = 7;
+  assert(S.workShift(promo, now).ok, "promo shift");
+  assert(promo.world.promoted && promo.flags.raised, "promoted with the raise");
+  assert(countText(promo, "You got a raise.") === 1, "raise not double logged");
+
+  var hobby = S.fresh(now);
+  var h;
+  for (h = 0; h < 5; h++) assert(S.workHobby(hobby, now + h * 1000).ok, "hobby " + h);
+  assert(hobby.world.hobbyShop === "tutor", "hobby shop");
+  assert(countText(hobby, "Hobby shop:") === 1, "hobby shop once");
+  assert(S.workHobby(hobby, now + 8000).ok, "hobby again");
+  assert(countText(hobby, "Hobby shop:") === 1, "hobby shop stays once");
+
+  var runner = S.fresh(now);
+  assert(!S.jobUnlocked(runner, D.jobById.runner), "runner sealed");
+  runner.player.skills.hustle = 4;
+  assert(S.jobUnlocked(runner, D.jobById.runner), "runner opens");
+  assert(!S.jobUnlocked(runner, D.jobById.marketing), "marketing still sealed");
+
+  var klass = S.fresh(now);
+  klass.player.capital = 20;
+  var mind = klass.player.intelligence;
+  assert(S.takeClass(klass).ok, "class");
+  assert(klass.player.capital === 10, "class cost");
+  assert(klass.player.intelligence === mind + 2, "class mind");
+  assert(!S.takeClass(klass).ok, "class once a year");
+
+  var lot = S.fresh(now);
+  assert(!S.claimLot(lot).ok, "lot needs degree");
+  lot.degrees.bach = true;
+  assert(S.claimLot(lot).ok && lot.world.secondLot, "second lot marker");
+  assert(!S.claimLot(lot).ok, "lot once");
+
+  var scout = S.fresh(now);
+  scout.nodes.charter = true;
+  scout.player.capital = 100;
+  assert(S.dispatchScout(scout, "block").ok, "dispatch");
+  scout.scouts[0].left = 100;
+  scout.lastReal = now;
+  S.frame(scout, now + 10000);
+  assert(scout.scouts.length === 0, "scout finished");
+  scout.slots[0].camera = true;
+  scout.slots[0].stock = 0;
+  assert(S.currentLifeId(scout, now + 10000) === "scout_back", "scout card");
+
+  var album = S.fresh(now);
+  album.player.xp = S.xpNeed(1) - 1;
+  album.world = { regular: { name: "Sera Keel", mood: 2, visits: 2 }, floor: 1, biggestBill: 12, seen: {} };
+  assert(S.workShift(album, now).ok, "album shift");
+  assert(album.world.album.length === 1 && album.world.album[0] === "Y2", "album grows");
+  var albumLog = allLogs(album);
+  assert(albumLog.indexOf("Next XP threshold") >= 0, "rank log kept");
+  assert(albumLog.indexOf("* Awards:") >= 0 && albumLog.indexOf("Sera Keel") >= 0 && albumLog.indexOf("floor up") >= 0, "awards");
+  album.player.xp = S.xpNeed(album.player.level) - 1;
+  assert(S.workShift(album, now + 1000).ok, "second year");
+  assert(album.world.album.length === 2, "album grows again");
+  var capped = S.fresh(now);
+  capped.player.xp = 1e15;
+  assert(S.workShift(capped, now).ok, "many years");
+  assert(capped.world.album.length === 12, "album cap");
+
+  var billed = S.fresh(now);
+  for (s = 0; s < 4; s++) assert(S.workShift(billed, now + s * 1000).ok, "bill shift");
+  assert(billed.world.bill > 0, "bill posted");
+  var beforeBill = billed.player.capital;
+  assert(S.payBill(billed).ok, "pay bill");
+  assert(billed.player.capital === beforeBill - (beforeBill - billed.player.capital), "bill math");
+  assert(billed.player.capital < beforeBill, "bill reduces capital");
+  assert(billed.world.bill === 0, "bill cleared");
+
+  function bustCapital(insured) {
+    var g = S.fresh(now);
+    g.nodes.skim = true;
+    g.player.capital = 200;
+    g.player.heat = 0;
+    if (insured) g.world = { insured: true, seen: {} };
+    var res = S.skim(g, now, function () { return 0; });
+    assert(!res.ok && res.reason === "busted", "bust still busts");
+    return g.player.capital;
+  }
+  assert(bustCapital(true) > bustCapital(false), "insurance softens the fine");
+
+  var goals = S.fresh(now);
+  goals.player.capital = 100;
+  goals.lastReal = now;
+  S.frame(goals, now);
+  assert(goals.world.goals.hundred, "hundred goal");
+  S.frame(goals, now);
+  assert(countText(goals, "Goal: hundred") === 1, "hundred once");
+  goals.slots[0].employee = { name: "Bea", salary: 8, traits: ["loyal"], caught: false, pref: "morning" };
+  S.frame(goals, now);
+  assert(goals.world.goals.hire, "hire goal");
+
+  var loan = S.fresh(now);
+  assert(S.takeLoan(loan).ok && loan.player.capital === 80 && loan.world.loan === 100, "loan");
+  assert(!S.takeLoan(loan).ok, "one loan");
+  loan.player.capital = 100;
+  assert(S.payLoan(loan).ok && loan.player.capital === 0 && loan.world.loan === 0, "pay loan");
+
+  var retired = S.fresh(now);
+  retired.player.capital = 12;
+  assert(S.retire(retired).ok && retired.world.retired, "retire flag");
+  assert(retired.player.capital === 12, "retire keeps the save");
+  assert(allLogs(retired).indexOf("Retired") >= 0, "retire log");
+
+  var store = memStorage();
+  var slotA = S.fresh(now);
+  slotA.player.capital = 55;
+  S.save(slotA, store);
+  assert(store.getItem(D.SAVE_KEY), "primary key");
+  assert(!store.getItem(D.SAVE_KEY + ".b"), "save ignores slot b");
+  var slotB = S.fresh(now);
+  slotB.player.capital = 77;
+  S.saveSlot(slotB, store, "b");
+  assert(Math.round(S.load(now, store).player.capital) === 55, "load stays on A");
+  assert(Math.round(S.loadSlot(now, store, 1).player.capital) === 77, "slot b round trip");
+  var raw = JSON.parse(store.mem[D.SAVE_KEY]);
+  delete raw.world;
+  delete raw.player.shop;
+  store.mem[D.SAVE_KEY] = JSON.stringify(raw);
+  var compat = S.load(now + 50, store);
+  assert(Math.round(compat.player.capital) === 55, "old save capital");
+  assert(compat.player.shop === "", "default shop");
+  assert(compat.world.district === "downtown" && compat.world.loan === 0, "default world");
+  assert(compat.world.menu.price === 1 && compat.world.album.length === 0, "default menu and album");
+
+  var city = S.fresh(now);
+  city.flags.opened = true;
+  city.world = { rival: "Juniper Pike", seen: {} };
+  city.lastReal = now;
+  S.frame(city, now);
+  S.frame(city, now);
+  assert(countText(city, "City note:") === 1, "city note once per phase");
+
+  var moved = S.fresh(now);
+  moved.player.capital = 40;
+  assert(S.moveDistrict(moved, "campus").ok, "campus");
+  assert(S.moveDistrict(moved, "night").ok, "night district");
+  assert(moved.player.capital === 10, "district cost");
+  var campus = S.fresh(now);
+  var night = S.fresh(now);
+  campus.world = { district: "campus", seen: {}, menu: { price: 1 } };
+  night.world = { district: "night", seen: {}, menu: { price: 1 } };
+  campus.slots[0].stock = 6;
+  night.slots[0].stock = 6;
+  var lunch = { id: "lunch", name: "Lunch", revenue: 1.7, scout: 1, study: 1 };
+  S.resolveCycle(campus, campus.slots[0], lunch, function () { return 0.99; }, now);
+  S.resolveCycle(night, night.slots[0], lunch, function () { return 0.99; }, now);
+  assert(S.districtLunchMult(campus) < S.districtLunchMult(night), "district mult");
+  assert(night.player.capital > campus.player.capital, "district changes lunch");
+
+  var drop = S.fresh(now);
+  var dropCash = drop.player.capital;
+  assert(S.deliver(drop, now).ok, "deliver");
+  assert(drop.player.capital === dropCash + 6, "deliver cash");
+  assert(!S.deliver(drop, now).ok, "deliver phase lock");
+
+  var catered = S.fresh(now);
+  catered.player.capital = 20;
+  assert(S.cater(catered).ok && catered.player.capital === 48, "cater gain");
+  assert(!S.cater(catered).ok, "cater once");
+
+  var cheap = S.fresh(now);
+  var dear = S.fresh(now);
+  cheap.world = { menu: { price: 1 }, seen: {}, district: "downtown" };
+  dear.world = { menu: { price: 3 }, seen: {}, district: "downtown" };
+  cheap.slots[0].stock = 6;
+  dear.slots[0].stock = 6;
+  var standard = { id: "standard", name: "Standard", revenue: 1, scout: 1, study: 1 };
+  S.resolveCycle(cheap, cheap.slots[0], standard, function () { return 0.99; }, now);
+  S.resolveCycle(dear, dear.slots[0], standard, function () { return 0.99; }, now);
+  assert(S.menuGrossMult(dear) < S.menuGrossMult(cheap), "menu mult");
+  assert(dear.player.capital < cheap.player.capital, "higher price grosses less");
+  assert(S.setMenu(cheap, 2).ok && cheap.world.menu.price === 2, "set menu");
+
+  var spoil = S.fresh(now);
+  spoil.slots[0].stock = 13;
+  spoil.spoilAt = 0;
+  spoil.lastReal = now;
+  S.frame(spoil, now);
+  assert(spoil.slots[0].stock === 12, "spoil tick");
+  assert(countText(spoil, "stock turned") === 1, "spoil log");
+  S.frame(spoil, now);
+  assert(spoil.slots[0].stock === 12, "spoil not every frame");
+  var cooled = S.fresh(now);
+  cooled.player.place = { owned: true, cooler: 1 };
+  cooled.slots[0].stock = 13;
+  cooled.spoilAt = 0;
+  cooled.lastReal = now;
+  S.frame(cooled, now);
+  assert(cooled.slots[0].stock === 13, "cooler holds stock");
+
+  var low = S.fresh(now);
+  assert(!S.layLow(low, now).ok, "lay low is shady");
+  low.flags.shady = true;
+  low.player.heat = 20;
+  assert(S.layLow(low, now).ok && low.player.heat === 12, "heat drops");
+  assert(!S.layLow(low, now + 100).ok && low.player.heat === 12, "lay low cooldown");
+  low.player.capital = 30;
+  low.player.heat = 20;
+  assert(S.payFine(low).ok && low.player.heat === 8 && low.player.capital === 20, "fine drops heat");
+
+  var quiet = S.fresh(now);
+  quiet.flags.shady = true;
+  quiet.player.place = { owned: true, lights: 0, sign: 0, counter: 0, cooler: 0, safe: 0, speaker: 0, plant: 0, neon: 0 };
+  quiet.player.capital = 40;
+  assert(S.buyQuiet(quiet).ok && quiet.world.quietRoom, "quiet room");
+  function skimPay(extra) {
+    var g = S.fresh(now);
+    g.nodes.skim = true;
+    if (extra) g.world = { quietRoom: true, seen: {} };
+    var paid = S.skim(g, now, function () { return 0.99; });
+    assert(paid.ok, "quiet skim pays");
+    return paid.pay;
+  }
+  assert(skimPay(true) > skimPay(false), "quiet room pays more");
+
+  var solo = S.fresh(now);
+  var split = S.fresh(now);
+  split.world = { partner: true, seen: {} };
+  var soloShift = S.workShift(solo, now);
+  var splitShift = S.workShift(split, now);
+  assert(soloShift.pay === splitShift.pay, "partner does not change listed pay");
+  var cut = Math.max(1, Math.round(soloShift.pay * 0.1));
+  assert(split.player.capital === solo.player.capital - cut, "partner takes ten percent");
+  assert(S.betrayPartner(split).betrayed === false && split.world.partner, "default roll does not betray");
+  assert(S.betrayPartner(split, function () { return 0; }).betrayed === true, "injected betray");
+  assert(!split.world.partner, "partner leaves");
+
+  var favor = S.fresh(now);
+  favor.world = { regular: { name: "Sera Keel", mood: 2, visits: 1 }, seen: {} };
+  assert(!S.seraFavor(favor).ok, "favor needs mood");
+  favor.world.regular.mood = 3;
+  var favorCash = favor.player.capital;
+  assert(S.seraFavor(favor).ok && favor.player.capital === favorCash + 8, "favor cash");
+  assert(!S.seraFavor(favor).ok, "favor once a year");
+
+  var council = S.fresh(now);
+  council.player.place = { owned: true, sign: 1, lights: 0, counter: 0 };
+  council.player.shifts = 1;
+  council.player.capital = 20;
+  assert(S.councilMute(council).ok, "mute");
+  assert(S.signLift(council) === 0, "sign bonus muted");
+  council.player.shifts = 10;
+  assert(S.signLift(council) === 0.08, "sign bonus returns");
+
+  var look = S.fresh(now);
+  look.slots[0].stock = 4;
+  look.slots[0].camera = false;
+  assert(S.currentLifeId(look, now) === "inspect", "inspection without camera");
+  look.slots[0].camera = true;
+  assert(S.currentLifeId(look, now) !== "inspect", "inspection skipped with camera");
+  look.slots[0].camera = false;
+  look.flags.opened = true;
+  look.lastReal = now;
+  S.frame(look, now);
+  assert(look.world.seen.inspect === look.player.level, "inspection once");
+  assert(S.currentLifeId(look, now) !== "inspect", "inspection does not repeat");
+
+  var market = S.fresh(now);
+  market.player.visibility = 39;
+  assert(!S.openNightMarket(market).ok, "market locked");
+  market.player.visibility = 40;
+  assert(S.openNightMarket(market).ok && market.world.nightMarket, "market opens");
+  assert(S.nightBump(market, "night") > 1 && S.nightBump(market, "lunch") === 1, "night bump");
+
+  var made = S.fresh(now);
+  assert(S.synthesize(made, "grease", "trainee", "chalk", "fryer").ok, "craft for shift");
+  assert(S.workShift(made, now).ok, "shift with craft");
+  assert(countText(made, "crafted plate") === 1, "craft noted");
+  assert(S.workShift(made, now + 1000).ok, "next shift");
+  assert(countText(made, "crafted plate") === 1, "craft note once");
+
+  var hint = S.fresh(now);
+  hint.lastReal = now;
+  hint.slots[0].camera = true;
+  hint.slots[0].employee = { name: "Ada", salary: 9, traits: ["fingers"], caught: false };
+  S.frame(hint, now);
+  var hintLog = allLogs(hint);
+  assert(hintLog.indexOf("tell") >= 0, "camera hint");
+  assert(hintLog.indexOf("fingers") < 0 && hintLog.indexOf("Sticky") < 0, "hint hides the trait");
+  S.frame(hint, now);
+  assert(countText(hint, "tell") === 1, "hint once");
+
+  var cal = S.fresh(now);
+  assert(S.calendarLine(cal) === "clear", "empty calendar");
+  cal.world.rentDue = 9;
+  assert(S.calendarLine(cal).indexOf("rent") >= 0, "calendar rent");
+  cal.degree = { id: "cert", left: 10, total: 10 };
+  assert(S.calendarLine(cal).indexOf("exam") >= 0, "calendar exam");
+  cal.player.level = 2;
+  assert(S.calendarLine(cal).indexOf("festival") >= 0, "calendar festival");
+
+  var caughtUp = S.fresh(now);
+  caughtUp.flags.opened = true;
+  caughtUp.world = { regular: { name: "Sera Keel", visits: 1, mood: 1 }, seen: {} };
+  caughtUp.booted = false;
+  caughtUp.lastReal = now - 4000;
+  S.frame(caughtUp, now);
+  var catchLog = allLogs(caughtUp);
+  assert(catchLog.indexOf("Catch-up") >= 0 && catchLog.indexOf("Sera Keel") >= 0, "catch-up names the regular");
+
+  var tenant = S.fresh(now);
+  tenant.flags.opened = true;
+  tenant.world = { deed: "owned", floor: 1, seen: {}, upstairs: "none" };
+  tenant.player.capital = 0;
+  tenant.lastReal = now;
+  S.frame(tenant, now);
+  assert(tenant.player.capital === 3, "tenant pays");
+  S.frame(tenant, now);
+  assert(tenant.player.capital === 3, "tenant once per phase");
+})();
+
 console.log(ok + " passed, " + fails + " failed");
 if (fails) process.exit(1);
