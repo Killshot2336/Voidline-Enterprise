@@ -182,7 +182,7 @@
       crafted: [],
       bonus: null,
       bonusRev: -1,
-      flags: { insight: false, shady: false },
+      flags: { insight: false, shady: false, opened: false },
       shiftAt: 0,
       restAt: 0,
       pulse: 0,
@@ -221,6 +221,9 @@
     if (!game.flags) game.flags = { insight: false, shady: false };
     if (game.flags.shady == null) game.flags.shady = !!(game.nodes && game.nodes.shady_open);
     if (game.nodes && game.nodes.shady_open) game.flags.shady = true;
+    if (game.flags.opened == null) {
+      game.flags.opened = (p.shifts || 0) > 0 || (p.capital || 0) > 0;
+    }
   }
 
   function isHeld(game, now) {
@@ -594,26 +597,28 @@
     if (!rng) rng = Math.random;
     if (now < game.lastReal) game.lastReal = now;
     var wall = now - game.lastReal;
+    ensureLife(game);
     if (wall > 0) {
       applyWall(game, game.lastReal, now);
-      var biz = wall;
-      var capMs = offlineCapMs(game);
-      if (biz > capMs) biz = capMs;
-      if (!game.booted && wall > 1500) {
-        var hours = hasRid(game, 124) ? 72 : 24;
-        pushLog(game, "Catch-up used the device clock (" + Math.round(wall / 1000) + "s). Business buffer is " + hours + "h.");
+      if (game.flags.opened) {
+        var biz = wall;
+        var capMs = offlineCapMs(game);
+        if (biz > capMs) biz = capMs;
+        if (!game.booted && wall > 1500) {
+          var hours = hasRid(game, 124) ? 72 : 24;
+          pushLog(game, "Catch-up used the device clock (" + Math.round(wall / 1000) + "s). Business buffer is " + hours + "h.");
+        }
+        if (biz > 20000) bulkBusiness(game, now, biz, rng);
+        else runBusiness(game, now, biz, rng);
+        serviceEngines(game, now, wall);
       }
-      if (biz > 20000) bulkBusiness(game, now, biz, rng);
-      else runBusiness(game, now, biz, rng);
-      serviceEngines(game, now, wall);
       game.lastReal = now;
     }
     var phase = phaseAt(now);
-    if (!game.booted || phase.id !== game.phaseId) {
+    if (game.flags.opened && (!game.booted || phase.id !== game.phaseId)) {
       pushLog(game, "Clock phase: " + phase.name + ". Revenue x" + phase.revenue.toFixed(2) + ".");
     }
     game.phaseId = phase.id;
-    ensureLife(game);
     if (game.player.heat > 0 && now - (game.heatAt || 0) > 5000) {
       game.heatAt = now;
       game.player.heat = Math.max(0, game.player.heat - 1);
@@ -763,6 +768,7 @@
       pushLog(game, "! You're being held. Shifts wait.");
       return { ok: false, reason: "held" };
     }
+    game.flags.opened = true;
     if (now - game.shiftAt < 350) return { ok: false, reason: "cooldown" };
     game.shiftAt = now;
     var phase = phaseAt(now);
@@ -803,6 +809,7 @@
       pushLog(game, "! You're being held. Hobbies wait.");
       return { ok: false, reason: "held" };
     }
+    game.flags.opened = true;
     if (now - (game.hobbyAt || 0) < 800) return { ok: false, reason: "cooldown" };
     game.hobbyAt = now;
     var skill = game.player.skills.mind || 0;

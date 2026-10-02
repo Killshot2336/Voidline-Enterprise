@@ -295,6 +295,9 @@ function lastLog(game) {
   var now = Date.now();
   var game = S.fresh(now);
   assert(game.player.capital === 0, "start broke");
+  assert(game.flags.opened === false, "shop waits");
+  S.frame(game, now + 8000);
+  assert(game.player.capital === 0, "no sales before a choice");
   assert(!game.flags.shady, "shady starts off");
   assert(!S.skim(game, now).ok, "skim locked");
   assert(S.workHobby(game, now).ok, "hobby pays");

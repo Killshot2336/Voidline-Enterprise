@@ -1496,6 +1496,17 @@
     var sx = cx - sw * 0.5;
     var scy = cy - sh * 0.5;
     var hero = storyBeat(newest >= 0 ? (S.logLine(game, newest) || "") : "", game);
+    if (!game.flags || game.flags.opened === false) {
+      hero = {
+        line: "Zero dollars. A shift pays tonight. A hobby pays less and teaches you.",
+        rail: GOLD,
+        action: "shift",
+        label: "Take a shift",
+        alt: "hobby",
+        altLabel: "Start a hobby",
+        stamp: "DAY ONE"
+      };
+    }
     if (game.player.heldUntil && now < game.player.heldUntil) {
       var left = Math.max(1, Math.ceil((game.player.heldUntil - now) / 1000));
       hero = {
