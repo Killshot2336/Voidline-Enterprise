@@ -48,12 +48,16 @@
   }
 
   function toggleMenu(name) {
-    if (ui.menu === name) ui.menu = null;
-    else {
+    if (ui.menu === name) {
+      ui.menu = null;
+      ui.look = "";
+      ui.lift = "";
+    } else {
       ui.menu = name;
       ui.scroll = 0;
       ui.pick = null;
       ui.resetArm = false;
+      if (name === "scout" && !ui.look) ui.look = "sera";
     }
   }
 
@@ -73,7 +77,29 @@
     }
     if (id === "hdr:journal") { toggleMenu("journal"); return; }
     if (id === "hdr:settings") { toggleMenu("settings"); return; }
-    if (id === "close") { ui.menu = null; return; }
+    if (id === "close") { ui.menu = null; ui.look = ""; ui.lift = ""; return; }
+    if (id.indexOf("look:") === 0) {
+      ui.look = id.substring(5);
+      if (ui.menu !== "scout") {
+        ui.menu = "scout";
+        ui.scroll = 0;
+        ui.pick = null;
+      }
+      return;
+    }
+    if (id === "page:next" || id === "page:prev") {
+      if (ui.flip > 0 && ui.flip < 1) return;
+      ui.flip = 0.001;
+      ui.flipDir = id === "page:next" ? 1 : -1;
+      ui.flipKind = ui.menu;
+      ui.flipApplied = false;
+      return;
+    }
+    if (id.indexOf("lift:") === 0) {
+      var lifted = id.substring(5);
+      ui.lift = ui.lift === lifted ? "" : lifted;
+      return;
+    }
     if (id === "shift") { S.workShift(game, now); return; }
     if (id === "hobby") { S.workHobby(game, now); return; }
     if (id.indexOf("hobby:") === 0) { S.workHobby(game, now, id.substring(6)); return; }
@@ -275,7 +301,7 @@
   canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 
   root.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") { ui.menu = null; return; }
+    if (e.key === "Escape") { ui.menu = null; ui.look = ""; ui.lift = ""; return; }
     if (e.key === "1") toggleMenu("job");
     else if (e.key === "2") toggleMenu("edu");
     else if (e.key === "3") toggleMenu("scout");
@@ -320,6 +346,7 @@
       if (dt < 0) dt = 0;
       S.frame(game, now);
       S.advanceSlides(game, dt);
+      if (R.settle) R.settle(ui, game, dt, now);
       if (ui.focusSlot >= game.slots.length) ui.focusSlot = 0;
       var card = selectedCard();
       if (ui.selected != null && !card) ui.selected = null;
