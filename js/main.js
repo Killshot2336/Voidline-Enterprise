@@ -66,6 +66,7 @@
   function act(id) {
     var now = Date.now();
     if (!id) return;
+    if (id === "shady") { toggleMenu("lab"); return; }
     if (id.indexOf("tab:") === 0) {
       toggleMenu(id.substring(4));
       return;
@@ -94,6 +95,13 @@
     if (id === "sendup") { S.sendUpstairs(game); return; }
     if (id === "hours:open") { S.setHours(game, "open", now); return; }
     if (id === "hours:close") { S.setHours(game, "closed", now); return; }
+    if (id.indexOf("stand:") === 0) { S.stand(game, id.substring(6)); return; }
+    if (id === "rewind") {
+      ui.rewind = ui.rewind ? 0 : 1;
+      ui.rewindAt = now;
+      ui.rewindStep = 0;
+      return;
+    }
     if (id === "truce") { S.makeTruce(game); return; }
     if (id === "class") { S.takeClass(game); return; }
     if (id === "lot") { S.claimLot(game); return; }

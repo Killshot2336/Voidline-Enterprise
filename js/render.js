@@ -1528,7 +1528,8 @@
     }
     if (low.indexOf("shift closed") >= 0) {
       var paid = raw.match(/\$[\d,]+/);
-      beat.line = paid ? "Rush over. " + paid[0] + " hits the drawer." : "Rush over. The drawer is heavier.";
+      if (game.world && game.world.lastSlip && game.world.lastSlip.text) beat.line = game.world.lastSlip.text;
+      else beat.line = paid ? "Rush over. " + paid[0] + " hits the drawer." : "Rush over. The drawer is heavier.";
       beat.rail = GOLD;
       beat.label = "Work another";
       if (game.flags && game.flags.shady && game.nodes && game.nodes.skim) {
@@ -2071,8 +2072,236 @@
       district: world.district || "downtown",
       regulars: chosen && world.regulars ? world.regulars : [],
       hours: chosen ? (world.hours || "") : "",
-      onClock: !!(chosen && slot && slot.employee && world.hours !== "closed")
+      onClock: !!(chosen && slot && slot.employee && world.hours !== "closed"),
+      spot: world.spot || "register",
+      block: world.block || null,
+      truce: !!world.truce,
+      rivalMemory: world.rivalMemory || "",
+      booksText: world.lastSlip && world.lastSlip.text ? world.lastSlip.text : "",
+      thinLine: world.thin && world.thin.line ? world.thin.line : "",
+      award: world.wallAward || null,
+      places: {
+        sera: S.personPlace ? S.personPlace(game, "sera") : "gone",
+        landlord: S.personPlace ? S.personPlace(game, "landlord") : "gone",
+        juniper: S.personPlace ? S.personPlace(game, "juniper") : "gone",
+        hire: S.personPlace ? S.personPlace(game, "hire") : "gone"
+      },
+      winning: S.juniperWinning ? !!S.juniperWinning(game) : false
     };
+  }
+
+  function slipWords(hero, spec) {
+    if (spec && spec.rewind >= 0 && spec.thinLine) return spec.thinLine;
+    var line = (hero && hero.line) || "";
+    if (spec && spec.booksText && line.indexOf("Came in") < 0) {
+      return line ? (line + " " + spec.booksText) : spec.booksText;
+    }
+    return line;
+  }
+
+  function bookHealthy(book) {
+    if (!book || book.hours === "closed") return false;
+    return (book.busy || 0) >= 2 && (book.money || 0) >= 12;
+  }
+
+  function paintWindowGlow(ctx, x, y, w, h, alpha) {
+    if (!(alpha > 0) || w < 4 || h < 4) return;
+    ctx.fillStyle = "rgba(240,195,106," + Math.min(0.9, alpha).toFixed(3) + ")";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, w, h);
+  }
+
+  function paintCrowd(ctx, x, foot, n, h) {
+    var i;
+    var count = n;
+    if (count < 0) count = 0;
+    if (count > 5) count = 5;
+    for (i = 0; i < count; i++) drawFigure(ctx, x + i * Math.max(12, h * 0.035), foot, Math.max(22, h * 0.08), "walker");
+  }
+
+  function paintOtherShops(ctx, x, y, w, h, spec) {
+    if (spec.dayOne) return;
+    var block = spec.block || {};
+    var j = block.juniper || {};
+    var campus = block.campus || {};
+    var night = block.night || {};
+    var jBright = 0.15;
+    if (j.hours !== "closed") jBright = 0.28 + Math.min(0.55, (j.busy || 0) * 0.08);
+    if (spec.winning) jBright = Math.min(0.92, jBright + 0.28);
+    if (spec.truce) jBright = Math.max(0.08, jBright - 0.35);
+    var jx = x + w * 0.66;
+    var jy = y + h * 0.3;
+    var jw = Math.max(36, w * 0.14);
+    var jh = Math.max(28, h * 0.16);
+    if (spec.rival) {
+      ctx.fillStyle = "rgba(28,22,18,0.28)";
+      ctx.fillRect(jx, jy, jw, jh);
+      paintWindowGlow(ctx, jx + jw * 0.1, jy + jh * 0.16, jw * 0.32, jh * 0.34, jBright);
+      paintWindowGlow(ctx, jx + jw * 0.52, jy + jh * 0.16, jw * 0.32, jh * 0.34, jBright * 0.85);
+      var crowd = spec.truce ? Math.min(1, j.busy || 0) : Math.min(5, j.busy || 0);
+      if (spec.winning) crowd = Math.max(crowd, Math.min(5, (j.busy || 1)));
+      paintCrowd(ctx, jx, jy + jh + h * 0.06, crowd, h);
+    }
+    var cx = x + w * 0.78;
+    var cy = y + h * 0.22;
+    var campusOn = spec.district === "campus" && bookHealthy(campus);
+    var nightOn = spec.district === "night" && bookHealthy(night);
+    if (spec.district === "campus" || spec.district === "night") {
+      var glow = spec.district === "campus" ? (campusOn ? 0.72 : 0.16) : (nightOn ? 0.7 : 0.14);
+      paintWindowGlow(ctx, cx, cy, Math.max(28, w * 0.1), Math.max(18, h * 0.08), glow);
+      if (campusOn || nightOn) paintCrowd(ctx, cx, cy + h * 0.16, 3, h);
+    }
+  }
+
+  function paintAwardPlaque(ctx, x, y, award) {
+    if (!award) return;
+    var w = 108;
+    var h = 48;
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = BRICK;
+    ctx.fillRect(x, y, w, 6);
+    ctx.fillStyle = INK;
+    ctx.font = font(13, false, 700, true);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(award.award || "", x + 8, y + 18);
+    ctx.font = font(11, false, 500, true);
+    ctx.fillText(clipText(ctx, font(11, false, 500, true), award.who || "", w - 12), x + 8, y + 30);
+    ctx.fillText(clipText(ctx, font(11, false, 500, true), award.built || "", w - 12), x + 8, y + 40);
+  }
+
+  function paintPresence(ctx, x, y) {
+    ctx.fillStyle = LAMP;
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, 2, 0, Math.PI * 2);
+    ctx.fillStyle = INK;
+    ctx.fill();
+  }
+
+  function paintEmptyStool(ctx, x, y) {
+    drawChairUp(ctx, x, y, 16);
+  }
+
+  function paintLiving(ctx, rect, spec, who, ui, now) {
+    var x = rect.x;
+    var y = rect.y;
+    var w = rect.w;
+    var h = rect.h;
+    if (spec.dayOne) return;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    if (spec.lights && spec.hours !== "closed") {
+      ctx.fillStyle = "rgba(240,195,106,0.14)";
+      ctx.fillRect(x + w * 0.14, y + h * 0.4, w * 0.36, h * 0.22);
+    } else if (spec.owned) {
+      ctx.fillStyle = "rgba(20,16,14,0.12)";
+      ctx.fillRect(x + w * 0.14, y + h * 0.4, w * 0.36, h * 0.22);
+    }
+    if (spec.district === "campus") {
+      ctx.fillStyle = "rgba(190,214,170,0.16)";
+      ctx.fillRect(x, y, w, h * 0.34);
+    } else if (spec.district === "night") {
+      ctx.fillStyle = "rgba(16,20,40,0.16)";
+      ctx.fillRect(x, y, w, h);
+    }
+    if (spec.upstairs === "tutor" || spec.upstairs === "office") {
+      ctx.fillStyle = spec.upstairs === "office" ? "rgba(240,195,106,0.34)" : "rgba(62,200,216,0.22)";
+      ctx.fillRect(x + w * 0.16, y + h * 0.16, w * 0.26, h * 0.1);
+    }
+    var hot = !!(spec.shady && (spec.heat || 0) >= 45);
+    if (hot) {
+      ctx.fillStyle = "rgba(122,74,134,0.9)";
+      ctx.beginPath();
+      ctx.arc(x + w * 0.36, y + h * 0.56, 8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    paintOtherShops(ctx, x, y, w, h, spec);
+    if (spec.award) paintAwardPlaque(ctx, x + w * 0.5, y + h * 0.12, spec.award);
+    var places = spec.places || {};
+    var counterX = x + w * (who ? 0.56 : 0.4);
+    var counterFoot = y + h * 0.8;
+    var doorX = x + w * 0.5;
+    var doorFoot = y + h * 0.86;
+    var acrossX = x + w * 0.74;
+    var acrossFoot = y + h * 0.62;
+    var upX = x + w * 0.24;
+    var upFoot = y + h * 0.3;
+    if (spec.rewind === 2) {
+      ctx.fillStyle = PAPER;
+      ctx.fillRect(x + w * 0.3, y + h * 0.66, 64, 22);
+      ctx.strokeStyle = INK;
+      ctx.strokeRect(x + w * 0.3, y + h * 0.66, 64, 22);
+      ctx.fillStyle = BRICK;
+      ctx.font = font(12, false, 700, true);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("SHORT", x + w * 0.3 + 32, y + h * 0.66 + 11);
+      ctx.textAlign = "left";
+    }
+    if (spec.rewind === 1) {
+      var slide = ((now || 0) / 280) % 1;
+      var i;
+      for (i = 0; i < 3; i++) {
+        var px = x + w * (0.42 + slide * 0.28) + i * 16;
+        drawFigure(ctx, px, y + h * 0.78, h * 0.1, "walker");
+      }
+    }
+    if (places.sera === "counter" && who !== "sera") drawFigure(ctx, counterX, counterFoot, h * 0.16, "sera");
+    if (places.sera === "gone") paintEmptyStool(ctx, counterX - 8, counterFoot - 4);
+    if (places.landlord === "door" && who !== "landlord") drawFigure(ctx, doorX, doorFoot, h * 0.18, "landlord");
+    if (places.juniper === "across" && who !== "juniper") drawFigure(ctx, acrossX, acrossFoot, h * 0.14, "juniper");
+    if (places.hire === "counter" && who !== "hire") drawFigure(ctx, counterX + 28, counterFoot, h * 0.15, "hire");
+    if (places.hire === "upstairs") drawFigure(ctx, upX, upFoot, h * 0.1, "hire");
+    var markX = x + w * 0.58;
+    var markY = y + h * 0.7;
+    if (spec.spot === "door") { markX = doorX; markY = doorFoot - h * 0.12; }
+    if (spec.spot === "upstairs") { markX = upX; markY = upFoot - 8; }
+    paintPresence(ctx, markX, markY);
+    if (ui && !ui.menu) {
+      pushHit(ui, "stand:register", x + w * 0.26, y + h * 0.58, Math.max(36, w * 0.12), Math.max(28, h * 0.12));
+      pushHit(ui, "stand:door", doorX - 18, doorFoot - h * 0.16, Math.max(36, w * 0.1), Math.max(28, h * 0.14));
+      if (spec.floor) pushHit(ui, "stand:upstairs", x + w * 0.16, y + h * 0.14, Math.max(40, w * 0.16), Math.max(24, h * 0.12));
+      if (spec.thinLine) {
+        var rx = x + 10;
+        var ry = y + 8;
+        ctx.fillStyle = ui.rewind ? LAMP : PAPER;
+        ctx.fillRect(rx, ry, 64, 22);
+        ctx.strokeStyle = INK;
+        ctx.strokeRect(rx, ry, 64, 22);
+        ctx.fillStyle = INK;
+        ctx.font = font(12, false, 700, true);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(ui.rewind ? "Now" : "Replay", rx + 32, ry + 11);
+        pushHit(ui, "rewind", rx, ry, 64, 22);
+        ctx.textAlign = "left";
+      }
+    }
+    ctx.restore();
+  }
+
+  function counterReady(game) {
+    if (!game || !game.player || (game.player.shifts || 0) < 1) return false;
+    var w = game.world || {};
+    var met = !!(w.regular || w.rival);
+    var slot = game.slots && game.slots[0];
+    if (slot && slot.employee) met = true;
+    var cash = game.player.capital || 0;
+    var offer = cash >= (D.ROOM && D.ROOM.rent ? D.ROOM.rent : 40);
+    var owned = !!(game.player.place && game.player.place.owned);
+    return met || offer || owned;
   }
 
   function roomPaper(menu) {
@@ -3004,7 +3233,7 @@
     }
     var signBox = SIGN_BOX[key] || SIGN_BOX.shopNoon;
     if (spec.cash != null) {
-      var cash = S.money(spec.cash);
+      var cash = spec.rewind === 2 ? "SHORT" : S.money(spec.cash);
       var cf = font(16, false, 700, true);
       ctx.font = cf;
       var tw = measure(ctx, cf, cash);
@@ -3047,6 +3276,7 @@
         ctx.fill();
       }
     }
+    paintLiving(ctx, { x: x, y: y, w: w, h: h }, spec, who, ui, now);
     var portraitW = 0;
     if (who && painted(who)) {
       var pw = Math.min(w * 0.46, h * 0.78);
@@ -3063,11 +3293,11 @@
         paintWords(ctx, tagX, tagY, tagW, tagH, shortChoice(plan.person.label), ui.hover === plan.person.id);
       }
     }
-    var line = (hero && hero.line) || "";
+    var line = slipWords(hero, spec);
     var slipChoice = plan.slip;
     var slipW = Math.min(narrow ? 210 : 280, w * (who ? 0.34 : 0.4));
     var bodyFont = font(narrow ? 16 : 18, false, 500, true);
-    var lines = wrapLines(ctx, bodyFont, line, slipW - 22, 4);
+    var lines = wrapLines(ctx, bodyFont, line, slipW - 22, 6);
     var lineH = narrow ? 18 : 20;
     var slipH = 18 + lines.length * lineH + (slipChoice ? 34 : 12);
     var slipX = who ? x + w * 0.5 : x + w * 0.08;
@@ -3124,7 +3354,10 @@
         nameX += cut;
         nameW -= cut;
       }
-      if (nameW > 40) paintShopName(ctx, spec.shop, nameX, y + h * signBox.y, nameW, h * signBox.h);
+      if (spec.rewind === 0) {
+        ctx.fillStyle = "rgba(20,16,14,0.78)";
+        ctx.fillRect(nameX, y + h * signBox.y, nameW, h * signBox.h);
+      } else if (nameW > 40) paintShopName(ctx, spec.shop, nameX, y + h * signBox.y, nameW, h * signBox.h);
     }
     if (!ui.menu) {
       var jx = x + w * 0.58;
@@ -3322,7 +3555,10 @@
       ctx.strokeRect(fx + 8, signY, fw - 16, signH);
       ctx.fillStyle = BRICK;
       ctx.fillRect(fx + 8, signY + signH - 4, fw - 16, 4);
-      if (spec.shop) {
+      if (spec.rewind === 0) {
+        ctx.fillStyle = "rgba(20,16,14,0.78)";
+        ctx.fillRect(fx + 8, signY, fw - 16, signH);
+      } else if (spec.shop) {
         var pxSize = Math.min(34, signH * 0.62);
         var track = Math.max(0.8, pxSize * 0.12);
         var face = font(pxSize, false, 700, true);
@@ -3432,6 +3668,7 @@
       ctx.fillRect(x, y, w, h);
     }
 
+    paintLiving(ctx, { x: x, y: y, w: w, h: h }, spec, who, ui, now);
     if (who) {
       var ph = h * 0.4;
       var pcx = x + w * (narrow ? 0.8 : 0.72);
@@ -3448,11 +3685,11 @@
       }
     }
 
-    var line = (hero && hero.line) || "";
+    var line = slipWords(hero, spec);
     var slipChoice = plan.slip;
     var slipW = plan.door ? Math.min(250, Math.max(150, doorX - fx - 16)) : Math.min(280, Math.max(170, w * 0.32));
     var bodyFont = font(narrow ? 15 : 17, false, 600, true);
-    var lines = wrapLines(ctx, bodyFont, line, slipW - 22, 4);
+    var lines = wrapLines(ctx, bodyFont, line, slipW - 22, 6);
     var lineH = narrow ? 18 : 20;
     var slipH = 22 + lines.length * lineH + (slipChoice ? 32 : 14);
     var slipX = plan.door ? fx + 10 : doorX - 6;
@@ -3569,6 +3806,7 @@
     }
     var handsOn = hero.action === "shift";
     var spec = storySpec(game, now, handsOn);
+    spec.rewind = ui.rewind ? (ui.rewindStep || 0) : -1;
     var who = spec.dayOne ? "" : cardWho(lifeId, hero);
     var plan = choicePlan(who, hero);
     ctx.save();
@@ -3686,13 +3924,36 @@
     pushHit(ui, id, x, y, s, s);
   }
 
+  function drawTree(ctx, x, y, w, h) {
+    ctx.fillStyle = "#3d5c32";
+    ctx.beginPath();
+    ctx.moveTo(x + w * 0.5, y + h * 0.08);
+    ctx.lineTo(x + w * 0.86, y + h * 0.62);
+    ctx.lineTo(x + w * 0.14, y + h * 0.62);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#2a241c";
+    ctx.fillRect(x + w * 0.44, y + h * 0.62, w * 0.12, h * 0.28);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x, y, w, h);
+  }
+
   function drawDock(ctx, game, ui, L) {
-    var labels = ["Work", "School", "People", "Stuff"];
-    var ids = ["job", "edu", "scout", "lab"];
-    var arts = ["ledger", "notebook", "photostrip", "crate"];
-    var gap = 10;
-    var bw = (L.w - 28 - gap * 3) / 4;
+    var ready = counterReady(game);
+    var shady = ready && game.flags && game.flags.shady;
+    var items = [
+      { id: "tab:job", label: "Work", art: "ledger", menu: "job", show: ready },
+      { id: "tab:edu", label: "School", art: "notebook", menu: "edu", show: true },
+      { id: "tab:scout", label: "People", art: "photostrip", menu: "scout", show: true },
+      { id: "tab:lab", label: "Stuff", art: "crate", menu: "lab", show: ready },
+      { id: "shady", label: "Tree", art: "", menu: "lab", show: !!shady, tree: true }
+    ];
+    var shown = [];
     var i;
+    for (i = 0; i < items.length; i++) if (items[i].show) shown.push(items[i]);
+    var gap = 10;
+    var bw = (L.w - 28 - gap * Math.max(0, shown.length - 1)) / Math.max(1, shown.length);
     ctx.save();
     ctx.shadowBlur = 0;
     ctx.fillStyle = "#5a3828";
@@ -3701,10 +3962,10 @@
     ctx.fillRect(0, L.tabY, L.w, 10);
     ctx.fillStyle = "rgba(239,230,212,0.08)";
     ctx.fillRect(0, L.tabY + 10, L.w, 3);
-    for (i = 0; i < 4; i++) {
-      var id = "tab:" + ids[i];
-      var on = ui.menu === ids[i];
-      var hover = ui.hover === id;
+    for (i = 0; i < shown.length; i++) {
+      var item = shown[i];
+      var on = ui.menu === item.menu;
+      var hover = ui.hover === item.id;
       var lift = on ? 22 : (hover ? 8 : 0);
       var x = 14 + i * (bw + gap);
       var objH = Math.max(64, L.tabH - 36);
@@ -3714,7 +3975,8 @@
         ctx.fillStyle = "rgba(28,22,18,0.28)";
         ctx.fillRect(x + 8, L.tabY + L.tabH - 18, bw - 16, 8);
       }
-      if (!blitCover(ctx, arts[i], x, ty, bw, objH)) {
+      if (item.tree) drawTree(ctx, x, ty, bw, objH);
+      else if (!blitCover(ctx, item.art, x, ty, bw, objH)) {
         ctx.fillStyle = PAPER;
         ctx.fillRect(x, ty, bw, objH);
       }
@@ -3722,9 +3984,9 @@
       ctx.fillStyle = PAPER;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(labels[i], x + bw * 0.5, Math.min(L.h - 14, ty + objH + 12));
+      ctx.fillText(item.label, x + bw * 0.5, Math.min(L.h - 14, ty + objH + 12));
       ctx.restore();
-      pushHit(ui, id, x, ty, bw, objH + 18);
+      pushHit(ui, item.id, x, ty, bw, objH + 18);
     }
     ctx.restore();
     ctx.textAlign = "left";
@@ -3868,6 +4130,10 @@
     ctx.globalAlpha = 1;
     ui.hits.length = 0;
     ui.clip = null;
+    if (ui.rewind) {
+      if (!ui.rewindAt) ui.rewindAt = now;
+      ui.rewindStep = Math.floor((now - ui.rewindAt) / 650) % 3;
+    } else ui.rewindStep = -1;
     var phaseId = S.phaseAt(now).id;
     var bg = ensurePlate(w, h, !!game.settings.performanceMode, dpr, phaseId);
     ctx.drawImage(bg, 0, 0, w, h);

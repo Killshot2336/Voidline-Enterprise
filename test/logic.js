@@ -984,5 +984,87 @@ function memStorage() {
   assert(loaded.world.wants.sera === "lights", "wants saved");
 })();
 
+(function livingBlock() {
+  var now = 1_750_000_000_000;
+  var win = S.fresh(now);
+  S.tickBlock(win);
+  win.player.place.owned = true;
+  win.player.place.sign = 0;
+  win.world.rival = "Juniper Pike";
+  win.world.rivalMemory = "thin";
+  win.world.truce = false;
+  var money0 = win.world.block.juniper.money;
+  var busy0 = win.world.block.juniper.busy;
+  S.tickBlock(win);
+  assert(win.world.block.juniper.money > money0, "juniper's book moves when she is winning");
+  assert(win.world.block.juniper.busy > busy0, "juniper's sidewalk fills when she is winning");
+  assert(S.juniperWinning(win), "no sign means she is winning");
+  var full = win.world.block.juniper.busy;
+  assert(S.makeTruce(win).ok, "truce for the block");
+  S.tickBlock(win);
+  assert(win.world.block.juniper.busy < full, "truce thins her line");
+
+  var old = S.fresh(now);
+  S.tickBlock(old);
+  delete old.world.block;
+  delete old.world.spot;
+  S.tickBlock(old);
+  assert(old.world.block && old.world.block.juniper && old.world.block.campus && old.world.block.night, "old save grows shop books");
+  assert(old.world.spot === "register", "old save stands at the register");
+
+  var sera = S.fresh(now);
+  sera.flags.opened = true;
+  sera.world = { hours: "open", regular: { name: "Sera Keel", visits: 2, mood: 1 }, regularDue: true, seen: {} };
+  assert(S.personPlace(sera, "sera") === "counter", "sera stands at the counter");
+  sera.world.regularDue = false;
+  assert(S.personPlace(sera, "sera") === "gone", "sera is gone when she is not due");
+
+  var up = S.fresh(now);
+  up.flags.opened = true;
+  up.flags.chosen = true;
+  up.lastReal = now;
+  up.slots[0].stock = 6;
+  up.world = { hours: "open", hoursHold: true, hoursPhase: S.phaseAt(now).id, spot: "upstairs", seen: {}, spine: [] };
+  S.frame(up, now + 8000);
+  assert(up.slots[0].stock === 6, "upstairs without a hire skips the open-hours sale");
+  assert(S.registerCovered(up) === false, "register is empty upstairs");
+  var biz = S.fresh(now);
+  biz.flags.opened = true;
+  biz.slots[0].stock = 6;
+  biz.world = { hours: "open", spot: "upstairs", seen: {} };
+  S.runBusiness(biz, now, 5000, function () { return 0.99; });
+  assert(biz.slots[0].stock < 6, "runBusiness still sells from upstairs");
+  var covered = S.fresh(now);
+  covered.flags.opened = true;
+  covered.lastReal = now;
+  covered.slots[0].stock = 6;
+  covered.slots[0].employee = { name: "Ada", salary: 8, traits: ["loyal"], caught: false, pref: "lunch", mood: 2 };
+  covered.world = { hours: "open", hoursHold: true, hoursPhase: S.phaseAt(now).id, spot: "upstairs", upstairsStaff: "", seen: {}, spine: [] };
+  S.frame(covered, now + 8000);
+  assert(covered.slots[0].stock < 6, "a hire at the register still sells");
+  covered.world.upstairsStaff = "Ada";
+  covered.slots[0].stock = 6;
+  covered.lastReal = now + 8000;
+  S.frame(covered, now + 16000);
+  assert(covered.slots[0].stock === 6, "hire upstairs leaves the register empty");
+
+  var talk = S.fresh(now);
+  S.tickBlock(talk);
+  talk.phaseId = "night";
+  talk.player.place.sign = 1;
+  talk.player.place.lights = 1;
+  talk.world = { regular: { name: "Sera Keel", visits: 3, mood: 2 }, hours: "open", seen: {} };
+  var spoken = S.lifeBeat(talk, "regular").line;
+  assert(spoken.indexOf("rain") >= 0 && spoken.indexOf("sign is on") >= 0, "grammar line includes two true facts");
+
+  var book = S.fresh(now);
+  var start = book.player.capital;
+  var shift = S.workShift(book, now);
+  var slip = book.world.lastSlip;
+  assert(slip && start + slip.came - slip.rent - slip.bill === slip.left, "books slip totals match the shift");
+  assert(slip.left === book.player.capital, "books slip left is the drawer");
+  assert(slip.came === shift.pay, "books slip came in is the shift");
+})();
+
 console.log(ok + " passed, " + fails + " failed");
 if (fails) process.exit(1);

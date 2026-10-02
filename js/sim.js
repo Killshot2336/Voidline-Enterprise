@@ -315,6 +315,14 @@
     if (!w.wants.sera) w.wants.sera = "lights";
     if (!w.wants.juniper) w.wants.juniper = "lunch";
     if (!w.wants.landlord) w.wants.landlord = "building";
+    if (!w.block) w.block = {};
+    w.block.juniper = ensureShopBook(w.block.juniper, "open", 1, 12);
+    w.block.campus = ensureShopBook(w.block.campus, "open", 1, 8);
+    w.block.night = ensureShopBook(w.block.night, "closed", 1, 10);
+    if (w.spot !== "register" && w.spot !== "door" && w.spot !== "upstairs") w.spot = "register";
+    if (w.lastSlip === undefined) w.lastSlip = null;
+    if (w.thin === undefined) w.thin = null;
+    if (w.wallAward === undefined) w.wallAward = null;
     w.season = seasonOf(p.level);
     ensureEmployees(game);
   }
@@ -582,8 +590,13 @@
     ensureLife(game);
     var card = D.lifeById[id];
     if (!card) return null;
+    var line = fillLife(card.line, game);
+    if (id === "regular" || id === "landlord" || id === "rival" || id === "rival_flip" || id === "sera_dark") {
+      var spoken = grammarLine(game, id);
+      if (spoken) line = spoken;
+    }
     return {
-      line: fillLife(card.line, game),
+      line: line,
       rail: card.rail,
       action: card.a,
       label: fillLife(card.aLabel, game),
@@ -591,6 +604,185 @@
       altLabel: card.b ? fillLife(card.bLabel, game) : null,
       stamp: card.kicker
     };
+  }
+
+  function ensureShopBook(book, hours, busy, money) {
+    if (!book) book = {};
+    if (book.hours !== "open" && book.hours !== "closed") book.hours = hours;
+    if (book.busy == null || isNaN(book.busy)) book.busy = busy;
+    if (book.money == null || isNaN(book.money)) book.money = money;
+    return book;
+  }
+
+  function grammarLine(game, id) {
+    ensureLife(game);
+    var w = game.world;
+    var place = game.player.place || {};
+    var phase = game.phaseId || w.hoursPhase || "";
+    var night = phase === "night";
+    var signOn = !!place.sign;
+    var lightsOn = !!place.lights;
+    var heat = Math.round(game.player.heat || 0);
+    var reg = w.regular || {};
+    var rain = night ? "rain on the glass" : "";
+    if (id === "sera_dark") {
+      var who = reg.name || "Sera";
+      var beside = rain || (signOn ? "the sign is on" : "the sign is off");
+      return who + " almost didn't come. " + beside + ", and the lights were off.";
+    }
+    if (id === "regular") {
+      var bits = [(reg.name || "Sera") + " came back", "visit " + (reg.visits || 1)];
+      if (rain) bits.push(rain);
+      bits.push(signOn ? "the sign is on" : "the sign is off");
+      if (heat >= 20) bits.push("heat is " + heat);
+      bits.push(lightsOn ? "the lights are warm" : "the lights were off");
+      if (w.hours === "open") bits.push("you stayed open");
+      if (w.hours === "closed") bits.push("you closed");
+      if (w.rivalMemory) bits.push("she remembers " + w.rivalMemory);
+      return bits[0] + ". " + bits.slice(1, 4).join(", ") + ".";
+    }
+    if (id === "landlord") {
+      var second = (w.behind || 0) > 0 ? "rent is late" : (rain || (signOn ? "the sign is on" : "the sign is off"));
+      if (heat >= 45) second = "heat is " + heat;
+      return landlordTone(w) + " " + second + ", and rent is " + money(w.rentDue || 0) + ".";
+    }
+    if (id === "rival" || id === "rival_flip") {
+      var rival = w.rival || "Juniper";
+      var lead = id === "rival_flip" ? (rival + " copied the sign") : (rival + " opened across the street");
+      var signBit = signOn ? "the sign is on" : "the sign is off";
+      var second = w.rivalMemory ? ("she remembers " + w.rivalMemory) : (rain || "lunch is thinner");
+      if (!w.rivalMemory && w.hours === "open") second = "you stayed open";
+      if (!w.rivalMemory && w.hours === "closed") second = "you closed";
+      return lead + ". " + signBit + ", and " + second + ".";
+    }
+    return "";
+  }
+
+  function personPlace(game, who) {
+    ensureLife(game);
+    var w = game.world;
+    var open = !!(game.flags && game.flags.opened) && shopOpen(game);
+    if (who === "sera") {
+      if (!w.regular || !w.regularDue || !open) return "gone";
+      return "counter";
+    }
+    if (who === "landlord") return w.rentDue > 0 ? "door" : "gone";
+    if (who === "juniper") return w.rival ? "across" : "gone";
+    if (who === "hire") {
+      if (w.upstairsStaff) return "upstairs";
+      if (slotEmployee(game) && open) return "counter";
+      return "gone";
+    }
+    return "gone";
+  }
+
+  function stand(game, spot) {
+    ensureLife(game);
+    if (spot !== "register" && spot !== "door" && spot !== "upstairs") return { ok: false, reason: "spot" };
+    if (spot === "upstairs" && !game.world.floor) return { ok: false, reason: "floor" };
+    game.world.spot = spot;
+    game.rev += 1;
+    return { ok: true, spot: spot };
+  }
+
+  function juniperWinning(game) {
+    ensureLife(game);
+    var w = game.world;
+    if (!w.rival || w.truce) return false;
+    if (!game.player.place) return false;
+    return true;
+  }
+
+  function tickBlock(game) {
+    ensureLife(game);
+    var w = game.world;
+    var j = w.block.juniper;
+    var c = w.block.campus;
+    var n = w.block.night;
+    if (juniperWinning(game)) {
+      j.hours = "open";
+      j.busy = Math.min(8, (j.busy || 0) + 1);
+      j.money = Math.round((j.money || 0) + 6);
+    } else if (w.rival && w.truce) {
+      j.busy = Math.max(0, (j.busy || 0) - 1);
+      j.hours = j.busy > 0 ? "open" : "closed";
+    }
+    if (w.district === "campus") {
+      c.hours = "open";
+      c.busy = Math.min(6, (c.busy || 0) + 1);
+      c.money = Math.round((c.money || 0) + 4);
+    } else {
+      c.hours = "closed";
+      if ((c.busy || 0) > 0) c.busy -= 1;
+    }
+    if (w.district === "night") {
+      n.hours = "open";
+      n.busy = Math.min(6, (n.busy || 0) + 1);
+      n.money = Math.round((n.money || 0) + 4);
+    } else if ((game.phaseId || "") === "night") {
+      n.hours = "open";
+    } else {
+      n.hours = "closed";
+    }
+    return w.block;
+  }
+
+  function hireAtRegister(game) {
+    var w = game.world;
+    if (!w || w.upstairsStaff) return false;
+    if (!shopOpen(game)) return false;
+    return !!slotEmployee(game);
+  }
+
+  function registerCovered(game) {
+    ensureLife(game);
+    if (game.world.spot !== "upstairs") return true;
+    return hireAtRegister(game);
+  }
+
+  function writeBooksSlip(game, start) {
+    var left = game.player.capital;
+    var rent = 0;
+    var bill = 0;
+    var came = left - start + rent + bill;
+    var slip = {
+      came: came,
+      rent: rent,
+      bill: bill,
+      left: left,
+      text: "Came in " + money(came) + ". Rent took " + money(rent) + ". The bill took " + money(bill) + ". Left " + money(left) + "."
+    };
+    game.world.lastSlip = slip;
+    return slip;
+  }
+
+  function noteThin(game) {
+    ensureLife(game);
+    var w = game.world;
+    if (!w.rival || w.truce) {
+      w.thin = null;
+      return null;
+    }
+    var place = game.player.place || {};
+    var noSign = !place.sign;
+    var copied = w.rivalMemory === "copied";
+    if (!noSign && !copied && w.rivalMemory !== "thin") {
+      w.thin = null;
+      return null;
+    }
+    var cause = noSign ? "No sign" : (copied ? "Juniper copied the sign" : "Lunch went thin");
+    w.thin = { cause: cause, line: cause + ", and people crossed." };
+    return w.thin;
+  }
+
+  function builtBit(game) {
+    var place = game.player.place || {};
+    if (game.world && game.world.floor) return "the floor";
+    if (place.sign) return "the sign";
+    if (place.lights) return "the lights";
+    if (place.counter) return "the counter";
+    if (place.owned) return "the corner";
+    return "nothing yet";
   }
 
   function addRegular(game, person) {
@@ -699,6 +891,11 @@
       ensureLife(game);
       if (game.world.album.length < 12) game.world.album.push("Y" + game.player.level);
       pushLog(game, awardsLine(game));
+      game.world.wallAward = {
+        who: bestRegularName(game),
+        built: builtBit(game),
+        award: "Y" + game.player.level
+      };
       guard += 1;
     }
     if (leveled) {
@@ -1063,7 +1260,7 @@
     return pay;
   }
 
-  function runBusiness(game, now, ms, rng) {
+  function runBusiness(game, now, ms, rng, quiet) {
     var phase = phaseAt(now);
     var i;
     ensureSlots(game);
@@ -1075,7 +1272,7 @@
       var len = cycleSeconds(game);
       while (slot.bucket >= len && guard < 40) {
         slot.bucket -= len;
-        resolveCycle(game, slot, phase, rng);
+        resolveCycle(game, slot, phase, rng, now, !!quiet);
         guard += 1;
         len = cycleSeconds(game);
       }
@@ -1107,8 +1304,10 @@
           pushLog(game, catchLine);
         }
         if (shopOpen(game)) {
-          if (biz > 20000) bulkBusiness(game, now, biz, rng);
-          else runBusiness(game, now, biz, rng);
+          if (!registerCovered(game)) {
+            /* upstairs, and nobody is on the register this tick */
+          } else if (biz > 20000) bulkBusiness(game, now, biz, rng);
+          else runBusiness(game, now, biz, rng, true);
         }
         serviceEngines(game, now, wall);
       }
@@ -1119,6 +1318,8 @@
       offerLife(game, now);
     }
     if (game.flags.opened && phaseChanged) {
+      tickBlock(game);
+      if (phase.id === "lunch") noteThin(game);
       var blocked = spineOpen(game);
       if (!blocked && game.world.rival && game.world.notePhase !== phase.id) {
         game.world.notePhase = phase.id;
@@ -1293,6 +1494,7 @@
     game.flags.chosen = true;
     if (now - game.shiftAt < 350) return { ok: false, reason: "cooldown" };
     game.shiftAt = now;
+    var slipStart = game.player.capital;
     var phase = phaseAt(now);
     var bonus = recomputeBonus(game);
     var pay = Math.round((14 + game.player.level * 2) * phase.revenue * bonus.revenue);
@@ -1347,6 +1549,8 @@
     noteUnlocks(game);
     checkGoals(game);
     meetPeople(game, now);
+    noteThin(game);
+    writeBooksSlip(game, slipStart);
     game.rev += 1;
     markPulse(game, pay);
     return { ok: true, pay: pay };
@@ -3023,6 +3227,12 @@
     bookHas: bookHas,
     ensureSlots: ensureSlots,
     resolveCycle: resolveCycle,
-    runBusiness: runBusiness
+    runBusiness: runBusiness,
+    tickBlock: tickBlock,
+    personPlace: personPlace,
+    stand: stand,
+    grammarLine: grammarLine,
+    juniperWinning: juniperWinning,
+    registerCovered: registerCovered
   };
 })(typeof window !== "undefined" ? window : globalThis);
