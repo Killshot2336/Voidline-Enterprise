@@ -3236,7 +3236,7 @@
     }
     var signBox = SIGN_BOX[key] || SIGN_BOX.shopNoon;
     if (spec.cash != null) {
-      var cash = spec.rewind === 2 ? "SHORT" : S.money(spec.cash);
+      var cash = S.money(spec.cash);
       var cf = font(16, false, 700, true);
       ctx.font = cf;
       var tw = measure(ctx, cf, cash);
