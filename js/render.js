@@ -3288,8 +3288,8 @@
       }
     }
     if (ui && spec.thinLine) {
-      var rx = x + w - 78;
-      var ry = y + 8;
+      var rx = x + w - 150;
+      var ry = y + 48;
       ctx.fillStyle = ui.rewind ? LAMP : PAPER;
       ctx.fillRect(rx, ry, 64, 22);
       ctx.strokeStyle = INK;
@@ -4806,6 +4806,11 @@
     var plan = choicePlan(who, hero);
     ui.plan = plan;
     ui.screenSlip = true;
+    if (!ui.menu && !spec.dayOne) {
+      pushHit(ui, "stand:register", w * 0.08, top + cardH * 0.78, Math.max(44, w * 0.1), Math.max(28, cardH * 0.08));
+      pushHit(ui, "stand:door", w * 0.42, top + cardH * 0.78, Math.max(44, w * 0.1), Math.max(28, cardH * 0.08));
+      if (spec.floor && w >= 560) pushHit(ui, "stand:upstairs", w * 0.36, top + cardH * 0.22, Math.max(36, w * 0.08), Math.max(22, cardH * 0.06));
+    }
     bindCam(ui, w, cardH, top);
     ctx.save();
     ctx.shadowBlur = 0;
@@ -4821,13 +4826,21 @@
     var slip = drawScreenSlip(ctx, ui, w, slipWords(hero, spec), plan);
     if (slip && plan.slip) pushHit(ui, plan.slip.id, slip.x, slip.y, slip.w, slip.h);
     if (slip) pushHit(ui, "hdr:settings", slip.x, slip.y, 22, 22);
-    if (!ui.menu && plan.door && geo.door) pushWorld(ui, plan.door.id, geo.door.x, geo.door.y, geo.door.w, geo.door.h);
-    if (plan.person && geo.person) pushWorld(ui, plan.person.id, geo.person.x, geo.person.y, geo.person.w, geo.person.h);
-    if (!ui.menu && !spec.dayOne) {
-      pushWorld(ui, "stand:register", w * 0.16, top + cardH * 0.58, Math.max(44, w * 0.12), Math.max(36, cardH * 0.1));
-      pushWorld(ui, "stand:door", w * 0.38, top + cardH * 0.5, Math.max(44, w * 0.12), Math.max(40, cardH * 0.16));
-      if (spec.floor) pushWorld(ui, "stand:upstairs", w * 0.14, top + cardH * 0.15, Math.max(48, w * 0.14), Math.max(32, cardH * 0.12));
+    if (!ui.menu && plan.door && geo.door) {
+      pushWorld(ui, plan.door.id, geo.door.x, geo.door.y, geo.door.w, geo.door.h);
+      var doorHit = ui.hits[ui.hits.length - 1];
+      var doorCx = doorHit.x + doorHit.w * 0.5;
+      var doorCy = doorHit.y + doorHit.h * 0.5;
+      if (doorCx < 8 || doorCy < 8 || doorCx > w - 8 || doorCy > cardH - 8) {
+        var pinW = Math.min(150, w - 24);
+        var pinH = 36;
+        var pinX = 12;
+        var pinY = cardH - (L.dock || 96) - 52;
+        drawTag(ctx, pinX, pinY, pinW, pinH, plan.door.label, ui.hover === plan.door.id);
+        pushHit(ui, plan.door.id, pinX, pinY, pinW, pinH);
+      }
     }
+    if (plan.person && geo.person) pushWorld(ui, plan.person.id, geo.person.x, geo.person.y, geo.person.w, geo.person.h);
     ctx.textAlign = "left";
   }
 
@@ -5108,6 +5121,14 @@
     drawHeader(ctx, game, ui, L, now);
     noteCash(game, now, Math.min(120, w * 0.2), h * 0.62);
     drawDock(ctx, game, ui, L);
+    if (ui.menu === "scout") {
+      var backW = 84;
+      var backH = 32;
+      var backX = 16;
+      var backY = h - (L.dock || 96) - 46;
+      drawTag(ctx, backX, backY, backW, backH, "Back", ui.hover === "close");
+      pushHit(ui, "close", backX, backY, backW, backH);
+    }
     drawParts(ctx);
     drawPops(ctx, now);
     clearGlow(ctx);

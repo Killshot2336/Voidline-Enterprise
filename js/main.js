@@ -79,7 +79,14 @@
     if (id === "hdr:settings") { toggleMenu("settings"); return; }
     if (id === "close") { ui.menu = null; ui.look = ""; ui.lift = ""; return; }
     if (id.indexOf("look:") === 0) {
-      ui.look = id.substring(5);
+      var who = id.substring(5);
+      if (ui.menu === "scout" && ui.look === who) {
+        ui.menu = null;
+        ui.look = "";
+        ui.lift = "";
+        return;
+      }
+      ui.look = who;
       if (ui.menu !== "scout") {
         ui.menu = "scout";
         ui.scroll = 0;
