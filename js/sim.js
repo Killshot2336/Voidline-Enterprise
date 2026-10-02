@@ -228,6 +228,108 @@
       game.flags.chosen = !!game.flags.opened || (p.skills && p.skills.mind > 0) || (p.capital || 0) > 0;
     }
     if (!p.place) p.place = { owned: false, lights: 0, sign: 0, counter: 0 };
+    if (!game.world) game.world = { rentDue: 0, floor: 0, behind: 0, regular: null, regularDue: false, rival: "", showing: "", seen: {}, welcomed: false };
+    if (!game.world.seen) game.world.seen = {};
+  }
+
+  function fillLife(text, game) {
+    if (!text) return "";
+    var w = game.world || {};
+    var reg = w.regular || {};
+    return text
+      .replace(/\{rent\}/g, money(w.rentDue || 0))
+      .replace(/\{heat\}/g, String(Math.round(game.player.heat || 0)))
+      .replace(/\{rival\}/g, w.rival || "Someone")
+      .replace(/\{name\}/g, reg.name || "A regular")
+      .replace(/\{visits\}/g, String(reg.visits || 1))
+      .replace(/\{floor\}/g, money(D.ROOM.floor))
+      .replace(/\{year\}/g, String(game.player.level));
+  }
+
+  function templateOk(game, card) {
+    var skills = game.player.skills || {};
+    var place = game.player.place || {};
+    var w = game.world;
+    if (card.workMin && (skills.work || 0) < card.workMin) return false;
+    if (card.mindMin && (skills.mind || 0) < card.mindMin) return false;
+    if (card.sign && !place.sign) return false;
+    if (card.rival && !w.rival) return false;
+    if (card.floor && !w.floor) return false;
+    if (card.shady && !(game.flags && game.flags.shady)) return false;
+    return true;
+  }
+
+  function templateId(game, now) {
+    var phase = phaseAt(now).id;
+    var pool = [];
+    var i;
+    if (!D.LIFE) return null;
+    for (i = 0; i < D.LIFE.length; i++) {
+      var card = D.LIFE[i];
+      if (!card.when) continue;
+      if (card.when !== "any" && card.when !== phase) continue;
+      if (!templateOk(game, card)) continue;
+      if (card.once && game.world.seen[card.id] === game.player.level) continue;
+      pool.push(card);
+    }
+    if (!pool.length) return null;
+    var n = (game.player.level * 13 + phase.charCodeAt(0)) % pool.length;
+    return pool[n].id;
+  }
+
+  function currentLifeId(game, now) {
+    ensureLife(game);
+    var w = game.world;
+    var place = game.player.place || {};
+    if (w.rentDue > 0) return "landlord";
+    if (game.flags && game.flags.shady && (game.player.heat || 0) >= 45) return "heat";
+    if (w.rival && place.owned && !place.sign) return "rival";
+    if (w.regular && w.regularDue) return "regular";
+    if (place.owned && !w.floor && game.player.capital >= D.ROOM.floor) return "floor";
+    var slot = game.slots && game.slots[0];
+    if (slot && slot.stock > 0 && slot.stock <= 2) return "thin";
+    return templateId(game, now);
+  }
+
+  function offerLife(game, now) {
+    ensureLife(game);
+    if (!game.flags || !game.flags.opened) return false;
+    var id = currentLifeId(game, now);
+    if (!id || id === game.world.showing) return false;
+    var card = D.lifeById[id];
+    game.world.showing = id;
+    if (card && card.once) game.world.seen[id] = game.player.level;
+    pushLog(game, "* Life: " + id);
+    return true;
+  }
+
+  function lifeBeat(game, id) {
+    ensureLife(game);
+    var card = D.lifeById[id];
+    if (!card) return null;
+    return {
+      line: fillLife(card.line, game),
+      rail: card.rail,
+      action: card.a,
+      label: fillLife(card.aLabel, game),
+      alt: card.b || null,
+      altLabel: card.b ? fillLife(card.bLabel, game) : null,
+      stamp: card.kicker
+    };
+  }
+
+  function meetPeople(game, now) {
+    ensureLife(game);
+    if (game.player.shifts === 3 && !game.world.regular) {
+      game.world.regular = { name: D.FIRST[2] + " " + D.LAST[1], visits: 1, mood: 1 };
+      game.world.regularDue = true;
+    } else if (game.world.regular && game.player.shifts > 0 && game.player.shifts % 4 === 0) {
+      game.world.regularDue = true;
+    }
+    if (game.player.shifts === 6 && game.player.place && game.player.place.owned && !game.world.rival) {
+      game.world.rival = "Juniper Pike";
+    }
+    offerLife(game, now);
   }
 
   function isHeld(game, now) {
@@ -290,6 +392,12 @@
       }
       pushLog(game, "* Rank " + game.player.level + ". +1 Void Point. Next XP threshold " + Math.round(xpNeed(game.player.level)) + ".");
       guard += 1;
+    }
+    if (leveled && game.player.place && game.player.place.owned) {
+      ensureLife(game);
+      game.world.rentDue = 18 + game.player.level * 6;
+      game.world.showing = "";
+      offerLife(game, game.lastReal || 0);
     }
     return leveled;
   }
@@ -441,6 +549,8 @@
       if (game.player.place.counter) room += 0.07;
       gross *= room;
     }
+    if (game.world && game.world.floor) gross *= 1.08;
+    if (game.world && game.world.rival && game.player.place && !game.player.place.sign && phase.id === "lunch") gross *= 0.82;
     if (slot.jobId === "fast_food" && hasRid(game, 105)) gross *= 2;
     if (hasRid(game, 109)) gross *= 2;
     if (hasRid(game, 120)) gross *= 1.5;
@@ -662,8 +772,14 @@
       game.lastReal = now;
     }
     var phase = phaseAt(now);
+    if (game.flags.opened && !game.world.welcomed) {
+      game.world.welcomed = true;
+      offerLife(game, now);
+    }
     if (game.flags.opened && (!game.booted || phase.id !== game.phaseId)) {
-      pushLog(game, "Clock phase: " + phase.name + ". Revenue x" + phase.revenue.toFixed(2) + ".");
+      if (!offerLife(game, now) && !game.world.showing) {
+        pushLog(game, "Clock phase: " + phase.name + ". Revenue x" + phase.revenue.toFixed(2) + ".");
+      }
     }
     game.phaseId = phase.id;
     if (game.player.heat > 0 && now - (game.heatAt || 0) > 5000) {
@@ -847,6 +963,7 @@
     pushLog(game, "+ Shift closed. Paid " + money(pay) + ". Academic XP rose.");
     if (gotRaise) pushLog(game, "+ The counter noticed. You got a raise.");
     noteUnlocks(game);
+    meetPeople(game, now);
     game.rev += 1;
     markPulse(game, pay);
     return { ok: true, pay: pay };
@@ -915,6 +1032,91 @@
     if (part === "lights") pushLog(game, "+ Warm lights. The corner looks like a shop.");
     else if (part === "sign") pushLog(game, "+ A sign. People can find you.");
     else pushLog(game, "+ A real counter. The folding table is gone.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function payRent(game) {
+    ensureLife(game);
+    var due = game.world.rentDue;
+    if (!(due > 0)) return { ok: false, reason: "none" };
+    if (game.player.capital < due) {
+      pushLog(game, "! Rent is " + money(due) + ". The drawer is light.");
+      return { ok: false, reason: "capital" };
+    }
+    game.player.capital -= due;
+    game.world.rentDue = 0;
+    game.world.behind = 0;
+    game.world.showing = "";
+    pushLog(game, "+ You paid the landlord " + money(due) + ". The year is yours.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function stallRent(game) {
+    ensureLife(game);
+    if (!(game.world.rentDue > 0)) return { ok: false, reason: "none" };
+    game.world.behind += 1;
+    game.player.stress = clampStat(game.player.stress + 8);
+    game.world.showing = "";
+    if (game.world.behind >= 3 && game.player.place) {
+      game.player.place.lights = 0;
+      pushLog(game, "! You stalled too long. The landlord took the lights.");
+    } else {
+      pushLog(game, "! You stalled. Rent is still " + money(game.world.rentDue) + ".");
+    }
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function buyFloor(game) {
+    ensureLife(game);
+    if (!game.player.place || !game.player.place.owned) {
+      pushLog(game, "Rent the corner before you buy the floor.");
+      return { ok: false, reason: "rent" };
+    }
+    if (game.world.floor) return { ok: false, reason: "owned" };
+    var cost = D.ROOM.floor;
+    if (game.player.capital < cost) {
+      pushLog(game, "! The floor costs " + money(cost) + ".");
+      return { ok: false, reason: "capital" };
+    }
+    game.player.capital -= cost;
+    game.world.floor = 1;
+    game.world.showing = "";
+    pushLog(game, "+ The floor above is yours. The building got taller.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function compRegular(game) {
+    ensureLife(game);
+    var reg = game.world.regular;
+    if (!reg) return { ok: false, reason: "none" };
+    if (game.player.capital < 4) {
+      pushLog(game, "! A comp costs $4.");
+      return { ok: false, reason: "capital" };
+    }
+    game.player.capital -= 4;
+    reg.mood = Math.min(5, (reg.mood || 0) + 1);
+    reg.visits = (reg.visits || 1) + 1;
+    game.world.regularDue = false;
+    game.world.showing = "";
+    pushLog(game, "+ " + reg.name + " grins. You comped the meal.");
+    game.rev += 1;
+    return { ok: true };
+  }
+
+  function greetRegular(game) {
+    ensureLife(game);
+    var reg = game.world.regular;
+    if (!reg) return { ok: false, reason: "none" };
+    reg.visits = (reg.visits || 1) + 1;
+    reg.mood = Math.max(0, (reg.mood || 0) - 1);
+    game.world.regularDue = false;
+    game.world.showing = "";
+    game.player.capital += 3;
+    pushLog(game, "+ " + reg.name + " paid full price and went quiet.");
     game.rev += 1;
     return { ok: true };
   }
@@ -1569,6 +1771,7 @@
       book: game.book,
       crafted: game.crafted,
       flags: game.flags,
+      world: game.world,
       shiftAt: game.shiftAt,
       restAt: game.restAt,
       fx: game.fx,
@@ -1599,6 +1802,7 @@
     game.book = data.book || [];
     game.crafted = data.crafted || [];
     game.flags = data.flags || { insight: false };
+    if (data.world) game.world = data.world;
     game.uid = data.uid || 1;
     game.shiftAt = data.shiftAt || 0;
     game.restAt = data.restAt || 0;
@@ -1659,6 +1863,13 @@
     hobbyOpen: hobbyOpen,
     buyRoom: buyRoom,
     upgradeRoom: upgradeRoom,
+    payRent: payRent,
+    stallRent: stallRent,
+    buyFloor: buyFloor,
+    compRegular: compRegular,
+    greetRegular: greetRegular,
+    currentLifeId: currentLifeId,
+    lifeBeat: lifeBeat,
     skim: skim,
     score: score,
     rest: rest,

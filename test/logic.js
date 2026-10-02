@@ -345,5 +345,42 @@ function lastLog(game) {
   assert(slow.slots[0].stock === 5, "one sale in five seconds");
 })();
 
+(function lifeDeck() {
+  var now = Date.now();
+  var game = S.fresh(now);
+  game.player.capital = 200;
+  assert(S.buyRoom(game).ok, "room for rent");
+  game.player.xp = S.xpNeed(1) - 1;
+  assert(S.workShift(game, now).ok, "shift into rent year");
+  assert(game.player.level === 2, "year turned");
+  assert(game.world.rentDue === 18 + 2 * 6, "landlord wants rent");
+  var before = game.player.capital;
+  assert(S.payRent(game).ok, "rent paid");
+  assert(game.world.rentDue === 0, "rent cleared");
+  assert(game.player.capital === before - (18 + 12), "rent cash");
+  game.player.capital = 120;
+  assert(S.buyFloor(game).ok && game.world.floor === 1, "second floor");
+
+  var people = S.fresh(now);
+  var s;
+  for (s = 0; s < 3; s++) assert(S.workShift(people, now + 1000 * (s + 1)).ok, "shift for a regular");
+  assert(people.world.regular && people.world.regular.name === "Sera Keel", "regular remembers");
+  assert(S.compRegular(people).ok, "comp");
+  assert(people.world.regular.mood === 2, "mood up");
+  people.player.capital = 80;
+  assert(S.buyRoom(people).ok, "their corner");
+  for (s = 0; s < 3; s++) assert(S.workShift(people, now + 5000 * (s + 1)).ok, "more shifts");
+  assert(people.world.rival === "Juniper Pike", "rival across the street");
+  assert(S.currentLifeId(people, now) === "rival", "rival card wins");
+  var beat = S.lifeBeat(people, "rival");
+  assert(beat && beat.stamp === "RIVAL" && beat.line.indexOf("Juniper") >= 0, "rival copy");
+
+  var day = S.fresh(now);
+  day.flags.opened = true;
+  S.frame(day, now + 1000);
+  assert(day.world.showing, "a year card is up");
+  assert(S.lifeBeat(day, day.world.showing).label, "card has a choice");
+})();
+
 console.log(ok + " passed, " + fails + " failed");
 if (fails) process.exit(1);

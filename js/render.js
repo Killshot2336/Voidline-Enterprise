@@ -439,6 +439,7 @@
       "SETTINGS": "gear",
       "YOUR SHOPS": "shop",
       "YOUR CORNER": "shop",
+      "THE BLOCK": "people",
       "HOBBIES": "star",
       "RIGHT NOW": "flame",
       "JOBS YOU CAN OPEN": "shop",
@@ -540,6 +541,24 @@
         button(flow.ctx, ui, "upgrade:" + part, flow.x, ur.y, flow.w, 30, done ? parts[pi][1] + "  in" : parts[pi][1] + "  " + S.money(D.ROOM[part]), done, done || game.player.capital < D.ROOM[part]);
       }
     }
+    if (game.world && (game.world.rentDue || game.player.place.owned)) {
+      section(flow, "THE BLOCK");
+      if (game.world.rentDue) {
+        para(flow, "Rent due " + S.money(game.world.rentDue) + (game.world.behind ? ". You have stalled " + game.world.behind + " time" + (game.world.behind === 1 ? "" : "s") + "." : "."));
+        var rentRow = row(flow, 40);
+        if (rentRow.on) {
+          button(flow.ctx, ui, "rentpay", flow.x, rentRow.y, (flow.w - 8) * 0.48, 32, "Pay rent", false, game.player.capital < game.world.rentDue);
+          button(flow.ctx, ui, "rentstall", flow.x + (flow.w - 8) * 0.52, rentRow.y, (flow.w - 8) * 0.48, 32, "Stall", false, false);
+        }
+      }
+      if (game.player.place.owned && !game.world.floor) {
+        var floorRow = row(flow, 40);
+        if (floorRow.on) button(flow.ctx, ui, "floor", flow.x, floorRow.y, flow.w, 32, "Buy the floor  " + S.money(D.ROOM.floor), false, game.player.capital < D.ROOM.floor);
+      } else if (game.world.floor) para(flow, "The second floor is yours.");
+      if (game.world.regular) para(flow, game.world.regular.name + " · visits " + game.world.regular.visits + " · mood " + game.world.regular.mood);
+      if (game.world.rival) para(flow, game.world.rival + (game.player.place.sign ? " is across the street. Your sign is holding." : " is across the street. Lunch is thinner."));
+    }
+
     section(flow, "HOBBIES");
     var hi;
     for (hi = 0; hi < D.HOBBIES.length; hi++) {
@@ -1003,6 +1022,13 @@
       alt: stressed ? "rest" : (stockOut ? "stock:0" : null),
       altLabel: stressed ? "Take a break" : (stockOut ? "Restock" : null)
     };
+    if (low.indexOf("life:") >= 0) {
+      var idm = raw.match(/life:\s*([a-z_]+)/i);
+      if (idm && S.lifeBeat) {
+        var lived = S.lifeBeat(game, idm[1]);
+        if (lived) return lived;
+      }
+    }
     if (!raw || low.indexOf("you're broke") >= 0 || low.indexOf("zero dollars") >= 0) {
       beat.line = "Zero dollars. A shift pays tonight. A hobby pays less and teaches you.";
       beat.label = "Take a shift";
@@ -1367,8 +1393,9 @@
 
   function beatIcon(beat) {
     if (!beat) return "coin";
-    if (beat.stamp === "HEAT") return "alert";
-    if (beat.stamp === "ROOM") return "shop";
+    if (beat.stamp === "HEAT" || beat.stamp === "RENT" || beat.stamp === "RIVAL") return "alert";
+    if (beat.stamp === "REGULAR") return "people";
+    if (beat.stamp === "ROOM" || beat.stamp === "UPSTAIRS") return "shop";
     if (beat.stamp === "HOBBY" || beat.stamp === "RAISE") return "star";
     if (beat.action === "stock:0") return "box";
     if (beat.action === "rest") return "rest";
@@ -1522,7 +1549,7 @@
 
   function decorateOffer(game, hero) {
     if (!hero) return hero;
-    if (hero.stamp === "HEAT" || hero.stamp === "DAY ONE" || hero.action === "stock:0") return hero;
+    if (hero.stamp === "HEAT" || hero.stamp === "DAY ONE" || hero.stamp === "RENT" || hero.stamp === "RIVAL" || hero.stamp === "REGULAR" || hero.stamp === "UPSTAIRS" || hero.action === "stock:0") return hero;
     if (hero.alt === "skim" || hero.alt === "score") return hero;
     var place = game.player.place;
     if (place && !place.owned && game.player.capital >= D.ROOM.rent) {
@@ -1539,18 +1566,35 @@
     return hero;
   }
 
-  function drawStorefront(ctx, x, y, w, h, place) {
+  function drawStorefront(ctx, x, y, w, h, place, floor, rival) {
     var owned = !!(place && place.owned);
     clearGlow(ctx);
     round(ctx, x, y, w, h, 12);
     ctx.fillStyle = owned ? "#2c2418" : "#1c1814";
     ctx.fill();
     var win = owned && place.lights ? GOLD : "#3a342c";
+    var top = floor ? 18 : 10;
+    if (floor) {
+      round(ctx, x + 8, y + 6, w * 0.46, 12, 3);
+      ctx.fillStyle = "#3a3126";
+      ctx.fill();
+      round(ctx, x + 12, y + 8, 10, 7, 2);
+      ctx.fillStyle = win;
+      ctx.fill();
+      round(ctx, x + 26, y + 8, 10, 7, 2);
+      ctx.fillStyle = win;
+      ctx.fill();
+    }
     var ww = Math.min(36, (w - 40) / 3);
     var wi;
     for (wi = 0; wi < 3; wi++) {
-      round(ctx, x + 12 + wi * (ww + 8), y + 10, ww, h * 0.42, 4);
+      round(ctx, x + 12 + wi * (ww + 8), y + top, ww, Math.max(8, h * 0.42 - (floor ? 8 : 0)), 4);
       ctx.fillStyle = win;
+      ctx.fill();
+    }
+    if (rival) {
+      round(ctx, x + w - 18, y + h * 0.35, 8, h * 0.4, 2);
+      ctx.fillStyle = CRIMSON;
       ctx.fill();
     }
     if (owned && place.sign) {
@@ -1675,6 +1719,9 @@
       var placeBit = game.player.place;
       var roomBit = !placeBit || !placeBit.owned ? "Bare corner." : ((placeBit.lights ? "Warm lights" : "Bare bulb") + (placeBit.sign ? ", sign up" : "") + (placeBit.counter ? ", real counter" : "") + ".");
       scene = roomBit + " " + scene;
+      if (game.world && game.world.regular) scene += " " + game.world.regular.name.split(" ")[0] + " keeps coming back.";
+      if (game.world && game.world.rival && game.player.place && !game.player.place.sign) scene += " " + game.world.rival.split(" ")[0] + " is across the street.";
+      if (game.world && game.world.floor) scene += " Upstairs is yours.";
     }
     var sceneFont = font(15, false);
     ctx.font = sceneFont;
@@ -1682,7 +1729,7 @@
     ctx.fillText(clipText(ctx, sceneFont, scene, textW), textX, ly + 6);
     ly += 28;
     if (sh > 340 && ly + 78 < scy + sh - 80) {
-      drawStorefront(ctx, textX, ly, textW, 58, game.player.place);
+      drawStorefront(ctx, textX, ly, textW, 58, game.player.place, game.world && game.world.floor, game.world && game.world.rival && game.player.place && !game.player.place.sign);
       ly += 66;
     }
     if (sh > 250 && slot0) {

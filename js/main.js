@@ -77,6 +77,11 @@
     if (id === "hobby") { S.workHobby(game, now); return; }
     if (id.indexOf("hobby:") === 0) { S.workHobby(game, now, id.substring(6)); return; }
     if (id === "room") { S.buyRoom(game); return; }
+    if (id === "floor") { S.buyFloor(game); return; }
+    if (id === "rentpay") { S.payRent(game); return; }
+    if (id === "rentstall") { S.stallRent(game); return; }
+    if (id === "comp") { S.compRegular(game); return; }
+    if (id === "greet") { S.greetRegular(game); return; }
     if (id.indexOf("upgrade:") === 0) { S.upgradeRoom(game, id.substring(8)); return; }
     if (id === "skim") { S.skim(game, now); return; }
     if (id === "score") { S.score(game, now); return; }

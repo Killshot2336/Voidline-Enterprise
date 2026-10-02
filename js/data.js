@@ -103,6 +103,26 @@
     { id: "score", line: "shady", name: "Big Score", cost: 3, requires: "backroom", text: "One card. It can pay, or you sit out the clock." }
   ];
 
+  var LIFE = [
+    { id: "landlord", kicker: "RENT", rail: "#e23d3d", line: "The landlord is in the doorway. Rent is {rent}.", a: "rentpay", aLabel: "Pay {rent}", b: "rentstall", bLabel: "Stall" },
+    { id: "heat", kicker: "HEAT", rail: "#b44ac0", line: "Heat is {heat}. The room feels watched.", a: "rest", aLabel: "Lay low", b: "shift", bLabel: "Stay open" },
+    { id: "rival", kicker: "RIVAL", rail: "#e23d3d", line: "{rival} opened across the street. Lunch is thinner until you have a sign.", a: "upgrade:sign", aLabel: "Paint a sign", b: "shift", bLabel: "Work anyway" },
+    { id: "regular", kicker: "REGULAR", rail: "#3ec8d8", line: "{name} came back. Visit {visits}.", a: "comp", aLabel: "Comp a meal", b: "greet", bLabel: "Charge full" },
+    { id: "floor", kicker: "UPSTAIRS", rail: "#f5c542", line: "The floor above is empty. {floor} takes it.", a: "floor", aLabel: "Buy the floor", b: "shift", bLabel: "Not this year" },
+    { id: "thin", kicker: "RESTOCK", rail: "#e23d3d", line: "The shelf is almost bare. People are still in line.", a: "stock:0", aLabel: "Restock", b: "shift", bLabel: "Work anyway" },
+    { id: "morn_line", when: "morning", once: true, kicker: "MORNING", rail: "#f5c542", line: "Morning rush. Year {year}. Everyone wants food.", a: "shift", aLabel: "Work the rush", b: "rest", bLabel: "Breathe" },
+    { id: "lunch_line", when: "lunch", once: true, kicker: "LUNCH", rail: "#f5c542", line: "Lunch rush. The line is out the door.", a: "shift", aLabel: "Work the rush", b: "stock:0", bLabel: "Check stock" },
+    { id: "eve_line", when: "evening", once: true, kicker: "EVENING", rail: "#3ec8d8", line: "After school. The shop fills with people killing time.", a: "shift", aLabel: "Work it", b: "hobby", bLabel: "Tutor instead" },
+    { id: "night_line", when: "night", once: true, kicker: "NIGHT", rail: "#3ec8d8", line: "Late night. Regulars and weirdos, that's the crowd.", a: "shift", aLabel: "Stay open", b: "rest", bLabel: "Lock up" },
+    { id: "slow_line", when: "standard", once: true, kicker: "SLOW", rail: "#3ec8d8", line: "Slow hour. You can hear the fryer.", a: "hobby", aLabel: "Do a hobby", b: "shift", bLabel: "Work anyway" },
+    { id: "work_hands", when: "any", workMin: 2, once: true, kicker: "WORK", rail: "#f5c542", line: "Your hands know the counter. Year {year}.", a: "shift", aLabel: "Work it", b: "tab:job", bLabel: "See jobs" },
+    { id: "mind_spark", when: "any", mindMin: 3, once: true, kicker: "HOBBY", rail: "#3ec8d8", line: "What you taught is starting to stick.", a: "hobby:nightclass", aLabel: "Night class", b: "hobby", bLabel: "Tutor again" },
+    { id: "sign_holds", when: "any", sign: true, rival: true, once: true, kicker: "SIGN", rail: "#f5c542", line: "The sign is doing the talking. {rival}'s line looks thinner.", a: "shift", aLabel: "Work the rush", b: "rest", bLabel: "Enjoy it" },
+    { id: "upstairs_quiet", when: "any", floor: true, once: true, kicker: "UPSTAIRS", rail: "#f5c542", line: "Upstairs is yours. The building feels taller.", a: "shift", aLabel: "Work downstairs", b: "hobby", bLabel: "Use the quiet" },
+    { id: "street_quiet", when: "any", shady: true, once: true, kicker: "HEAT", rail: "#b44ac0", line: "The other tree is open. The street is watching a little.", a: "rest", aLabel: "Lay low", b: "shift", bLabel: "Stay legit" },
+    { id: "year_open", when: "any", once: true, kicker: "YEAR", rail: "#f5c542", line: "Year {year}. The corner is still here.", a: "shift", aLabel: "Work the year", b: "hobby", bLabel: "Learn something" }
+  ];
+
   var HOBBIES = [
     { id: "tutor", name: "Tutor", skill: "mind", needSkill: "mind", need: 0, pay: 6, xp: 8, text: "One lesson. A little cash, a little mind." },
     { id: "flip", name: "Flip a find", skill: "hustle", needSkill: "hustle", need: 0, pay: 5, xp: 6, text: "Resell a scrap. Hustle starts here." },
@@ -170,6 +190,8 @@
   for (i = 0; i < SCOUTS.length; i++) scoutById[SCOUTS[i].id] = SCOUTS[i];
   var hobbyById = {};
   for (i = 0; i < HOBBIES.length; i++) hobbyById[HOBBIES[i].id] = HOBBIES[i];
+  var lifeById = {};
+  for (i = 0; i < LIFE.length; i++) lifeById[LIFE[i].id] = LIFE[i];
 
   root.VoidData = {
     ITEMS: ITEMS,
@@ -180,7 +202,9 @@
     SCOUTS: SCOUTS,
     HOBBIES: HOBBIES,
     hobbyById: hobbyById,
-    ROOM: { rent: 40, lights: 25, sign: 30, counter: 45 },
+    ROOM: { rent: 40, lights: 25, sign: 30, counter: 45, floor: 120 },
+    LIFE: LIFE,
+    lifeById: lifeById,
     TRAITS: TRAITS,
     FIRST: FIRST,
     LAST: LAST,
