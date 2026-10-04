@@ -5421,13 +5421,17 @@
     }
     var places = spec.places || {};
     if (places.hire === "counter" || places.sera === "counter") {
-      var px = x + w * 0.62;
-      var foot = y + pictureH - 4;
-      ctx.fillStyle = places.sera === "counter" ? BRICK : "#3a2a22";
-      ctx.fillRect(px - 4, foot - 12, 8, 12);
+      var px = x + w * 0.56;
+      var foot = y + pictureH - 5;
+      ctx.fillStyle = "#e4c2a4";
       ctx.beginPath();
-      ctx.arc(px, foot - 16, 4, 0, Math.PI * 2);
+      ctx.arc(px, foot - 16, 4.5, 0, Math.PI * 2);
       ctx.fill();
+      ctx.fillStyle = places.sera === "counter" ? BRICK : "#243044";
+      ctx.fillRect(px - 5, foot - 11, 10, 11);
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(px - 5, foot - 11, 10, 11);
     }
     var second = (game.slots && game.slots.length > 1) || (game.world && game.world.secondLot);
     if (second) {
@@ -5743,21 +5747,36 @@
       ty: to.y,
       t: 0,
       dur: small ? 280 : 520,
-      r: small ? 4.5 : 7,
+      r: small ? 5 : 8,
       small: small,
-      landed: false
+      landed: false,
+      w: ui.w || (L && L.w) || 0,
+      h: ui.h || (L && L.h) || 0
     };
     ui.payKind = "";
   }
 
-  function drawCoin(ctx, coin) {
-    if (!coin) return;
+  function coinSpot(coin) {
     var u = coin.dur > 0 ? coin.t / coin.dur : 1;
     if (u < 0) u = 0;
     if (u > 1) u = 1;
     var e = 1 - Math.pow(1 - u, 3);
     var x = coin.sx + (coin.tx - coin.sx) * e;
-    var y = coin.sy + (coin.ty - coin.sy) * e - Math.sin(u * Math.PI) * (coin.small ? 16 : 34);
+    var y = coin.sy + (coin.ty - coin.sy) * e;
+    x -= Math.sin(e * Math.PI) * (coin.small ? 20 : 46);
+    var pad = (coin.r || 6) + 3;
+    if (x < pad) x = pad;
+    if (y < pad) y = pad;
+    if (coin.w > pad * 2 && x > coin.w - pad) x = coin.w - pad;
+    if (coin.h > pad * 2 && y > coin.h - pad) y = coin.h - pad;
+    return { x: x, y: y };
+  }
+
+  function drawCoin(ctx, coin) {
+    if (!coin) return;
+    var spot = coinSpot(coin);
+    var x = spot.x;
+    var y = spot.y;
     ctx.save();
     ctx.shadowBlur = 0;
     ctx.beginPath();
