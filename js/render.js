@@ -111,7 +111,7 @@
 
   var SHOP_BIAS = 0.16;
 
-  function blitCover(ctx, key, x, y, w, h, biasX) {
+  function blitCover(ctx, key, x, y, w, h, biasX, biasY) {
     var img = painted(key);
     if (!img || w < 2 || h < 2) return false;
     var ir = img.naturalWidth / img.naturalHeight;
@@ -125,7 +125,7 @@
       sx = (img.naturalWidth - sw) * (biasX == null ? 0.5 : biasX);
     } else {
       sh = sw / r;
-      sy = (img.naturalHeight - sh) * 0.28;
+      sy = (img.naturalHeight - sh) * (biasY == null ? 0.28 : biasY);
     }
     ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
     return true;
@@ -611,7 +611,7 @@
 
   function row(flow, h) {
     var screen = flow.rect.y + flow.cy - flow.scroll;
-    var on = screen + h > flow.top && screen < flow.bottom;
+    var on = screen >= flow.top - 1 && screen + h <= flow.bottom + 1;
     flow.cy += h;
     return { y: screen, h: h, on: on };
   }
@@ -1142,28 +1142,37 @@
 
   function drawPeopleRow(flow, game) {
     var who = ["sera", "landlord", "juniper", "hire"];
-    var r = row(flow, 168);
+    var r = row(flow, 214);
     if (!r.on) return;
     var ctx = flow.ctx;
     var gap = 8;
     var bw = (flow.w - gap * 3) / 4;
+    var ph = 156;
     var i;
     ctx.save();
     ctx.shadowBlur = 0;
     for (i = 0; i < 4; i++) {
       var bx = flow.x + i * (bw + gap);
-      ctx.fillStyle = PAPER;
-      ctx.fillRect(bx, r.y, bw, 112);
-      blitCover(ctx, who[i], bx, r.y, bw, 112);
+      var pw = Math.min(bw - 16, Math.round(ph * 0.46));
+      var px = bx + (bw - pw) * 0.5;
+      ctx.fillStyle = "#1c1612";
+      ctx.fillRect(px, r.y, pw, ph);
+      if (!blitContain(ctx, who[i], px, r.y, pw, ph)) {
+        ctx.fillStyle = PAPER;
+        ctx.fillRect(px, r.y, pw, ph);
+      }
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(px, r.y, pw, ph);
       ctx.font = font(15, false, 500, true);
       ctx.fillStyle = INK;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       var line = personWant(game, who[i]);
-      var bits = wrapLines(ctx, font(15, false, 500, true), line, bw - 4, 2);
-      ctx.fillText(bits[0] || "", bx + bw * 0.5, r.y + 118);
-      if (bits[1]) ctx.fillText(bits[1], bx + bw * 0.5, r.y + 136);
-      if (flow.ui) pushHit(flow.ui, "look:" + who[i], bx, r.y, bw, 112);
+      var bits = wrapLines(ctx, font(15, false, 500, true), line, bw - 8, 2);
+      ctx.fillText(bits[0] || "", bx + bw * 0.5, r.y + ph + 8);
+      if (bits[1]) ctx.fillText(bits[1], bx + bw * 0.5, r.y + ph + 26);
+      if (flow.ui) pushHit(flow.ui, "look:" + who[i], bx, r.y, bw, ph + 48);
     }
     ctx.restore();
     ctx.textAlign = "left";
@@ -3638,7 +3647,7 @@
         continue;
       }
       var u = age / p.life;
-      var py = p.y - u * 62;
+      var py = p.y - u * 16;
       var popFont = font(30, true, 800);
       ctx.font = popFont;
       var tw = measure(ctx, popFont, p.text);
@@ -5242,7 +5251,7 @@
     else if (closed) bits.push("Shop closed");
     else if (slot && slot.stock <= 0) bits.push("Shop open. Out of stock");
     else bits.push("Shop open. Selling");
-    if (opened && game.pulse && game.lastNet) bits.push("last " + S.money(game.lastNet));
+    if (opened && !closed && game.pulse && game.lastNet) bits.push("last " + S.money(game.lastNet));
     if (game.degree && game.degree.left != null) {
       var def = D.degreeById[game.degree.id];
       bits.push((def ? def.name : "Class") + " " + S.fmtMs(game.degree.left));
@@ -5491,7 +5500,9 @@
       drawIdleBar(ctx, game, x, y, w, now);
       y += 36;
     }
-    var logH = floor - y;
+    var lines = Math.min(5, Math.max(game.logN || 1, 1));
+    var want = 36 + lines * 20;
+    var logH = Math.min(Math.max(0, floor - y), want);
     if (logH >= 52) drawLogPanel(ctx, game, ui, x, y, w, logH);
     else {
       ui.logTop = null;
@@ -5594,7 +5605,7 @@
     if (!ui.menu) drawLifeBody(ctx, game, ui, L, now);
     if (ui.menu) drawMenu(ctx, game, ui, L);
     drawDock(ctx, game, ui, L);
-    noteCash(game, now, ui.cashX || (w - 80), L.header * 0.5);
+    noteCash(game, now, Math.max(140, (ui.cashX || w - 180) - 170), Math.max(28, L.header * 0.55));
     drawParts(ctx);
     drawPops(ctx, now);
     clearGlow(ctx);

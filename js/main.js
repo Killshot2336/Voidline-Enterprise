@@ -57,7 +57,6 @@
       ui.scroll = 0;
       ui.pick = null;
       ui.resetArm = false;
-      if (name === "scout" && !ui.look) ui.look = "sera";
     }
   }
 
