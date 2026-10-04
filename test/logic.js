@@ -1252,5 +1252,103 @@ function memStorage() {
   assert(corner.slots[0].name === "The Corner" && corner.player.shop === "", "blank save gets The Corner");
 })();
 
+(function majorDay() {
+  var now = new Date(2026, 5, 2, 18, 0, 0).getTime();
+  assert(S.cleanShopName("  My\nShop\u0007  ") === "MyShop", "custom name strips controls and space");
+  assert(S.cleanShopName("abcdefghijklmnopqrstuvwxyz") === "abcdefghijklmnopqrstuv", "custom name caps at 22");
+  assert(S.cleanShopName("   ") === "", "blank name stays blank");
+
+  var named = S.fresh(now);
+  var custom = S.setShopName(named, 0, "  Night Window  ");
+  assert(custom.ok && custom.name === "Night Window", "custom name stores cleaned text");
+  assert(named.slots[0].name === "Night Window" && named.player.place.name === "Night Window", "name sits on the slot and the place");
+  assert(named.player.shop === "Night Window", "custom name is the brand");
+  assert(named.player.capital === 0 && named.flags.opened === false, "a custom name does not open the shop");
+  var store = memStorage();
+  S.save(named, store);
+  var raw = JSON.parse(store.mem[D.SAVE_KEY]);
+  delete raw.settings.clock;
+  delete raw.player.place.shut;
+  store.mem[D.SAVE_KEY] = JSON.stringify(raw);
+  var loaded = S.load(now + 20, store);
+  assert(loaded.slots[0].name === "Night Window" && loaded.player.place.name === "Night Window", "custom name survives the save");
+  assert(loaded.settings.clock === 1, "missing clock migrates to 1x");
+  assert(loaded.player.place.shut === false, "missing shut flag migrates closed-off");
+
+  var shut = S.fresh(now);
+  S.chapterNow(shut);
+  shut.flags.opened = true;
+  shut.flags.chosen = true;
+  shut.lastReal = now;
+  shut.booted = true;
+  shut.phaseId = S.phaseAt(now).id;
+  shut.slots[0].stock = 6;
+  shut.world.hours = "open";
+  shut.world.hoursHold = true;
+  shut.world.hoursPhase = shut.phaseId;
+  assert(S.setDoor(shut, false, now).ok && shut.player.place.shut === true && shut.world.hours === "closed", "close shuts the door");
+  var beforeShut = shut.player.capital;
+  S.frame(shut, now + 8000);
+  assert(shut.slots[0].stock === 6 && shut.player.capital === beforeShut, "a shut door does not sell");
+  shut.world.hours = "open";
+  shut.lastReal = now + 8000;
+  S.frame(shut, now + 16000);
+  assert(shut.slots[0].stock === 6, "shut still blocks a sale after hours flip open");
+  assert(S.setDoor(shut, true, now).ok && shut.player.place.shut === false, "open clears the shut flag");
+
+  var sleep = S.fresh(now);
+  sleep.player.capital = 15;
+  sleep.slots[0].stock = 4;
+  var slept = S.sleepToMorning(sleep, now);
+  assert(sleep.player.capital === 15 && slept.same, "sleep does not mint money");
+  assert(S.phaseAt(slept.land).id === "morning", "sleep lands on Morning Rush");
+  assert(slept.skipped >= 1, "sleep writes a plate per skipped phase");
+  assert(countText(sleep, "in the drawer") === slept.skipped, "each skipped phase names the drawer");
+  assert(countText(sleep, "on the shelf") === slept.skipped, "each skipped phase names the shelf");
+
+  var payA = S.fresh(now);
+  var payB = S.fresh(now);
+  payB.settings.clock = 2;
+  var a = S.workShift(payA, now).pay;
+  var b = S.workShift(payB, now).pay;
+  assert(a === b && a > 0, "clock speed does not change a shift");
+  var book = S.dayLedger(payA);
+  assert(book.inn === a && book.out === 0 && book.left === payA.player.capital && book.from === "log", "day ledger reads the shift line");
+
+  var fresh = S.fresh(now);
+  assert(S.chapterNow(fresh).id === "bare", "chapter starts at the bare corner");
+  fresh.flags.opened = true;
+  assert(S.chapterNow(fresh).id === "shift", "first shift is a chapter");
+  fresh.slots[0].employee = { name: "Ada", salary: 8, traits: [], mood: 2 };
+  assert(S.chapterNow(fresh).id === "hire", "first hire is a chapter");
+  fresh.world.rival = "Juniper Pike";
+  assert(S.chapterNow(fresh).id === "rival", "a rival is a chapter");
+  fresh.world.floor = 1;
+  assert(S.chapterNow(fresh).id === "floor", "an owned floor is a chapter");
+
+  assert(S.rushCrowd(S.phaseAt(new Date(2026, 5, 2, 12, 0, 0).getTime())) === 3, "lunch draws the most customers");
+  assert(S.rushCrowd(S.phaseAt(new Date(2026, 5, 2, 8, 0, 0).getTime())) === 2, "morning draws a smaller rush");
+  assert(S.rushCrowd(S.phaseAt(new Date(2026, 5, 2, 2, 0, 0).getTime())) === 0, "night is not a rush");
+
+  var up = S.fresh(now);
+  S.chapterNow(up);
+  up.flags.opened = true;
+  up.world.hours = "open";
+  up.world.spot = "upstairs";
+  assert(S.registerWatch(up).id === "nobody", "an empty register is nobody");
+  up.slots[0].employee = { name: "Ada", salary: 8, traits: [], mood: 2 };
+  assert(S.registerWatch(up).id === "hire" && S.registerWatch(up).name === "Ada", "the hire covers the register");
+
+  var mem = S.fresh(now);
+  S.chapterNow(mem);
+  mem.world.regular = { name: "Sera Keel", visits: 4, mood: 2 };
+  assert(S.memoryClause(mem) === "Visit 4", "memory uses the visit count");
+  mem.world.behind = 2;
+  mem.world.regular = null;
+  assert(S.memoryClause(mem).indexOf("2 behind") >= 0, "memory uses rent that is behind");
+  var land = S.lifeBeat(mem, "landlord").line;
+  assert(land.indexOf("2 behind") >= 0, "the landlord plate shows the count");
+})();
+
 console.log(ok + " passed, " + fails + " failed");
 if (fails) process.exit(1);

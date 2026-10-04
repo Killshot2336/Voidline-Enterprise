@@ -167,7 +167,7 @@
         heldUntil: 0,
         skills: { work: 0, mind: 0, hustle: 0, clout: 0 }
       },
-      settings: { highFX: true, fpsCap: 60, performanceMode: false, muted: false },
+      settings: { highFX: true, fpsCap: 60, performanceMode: false, muted: false, clock: 1 },
       log: new Array(D.LOG_CAP),
       logN: 0,
       logHead: 0,
@@ -258,11 +258,15 @@
     if (game) ensureLife(game);
     var open = !!(game && game.flags && game.flags.opened) && shopOpen(game);
     var id = phase && phase.id;
-    if (id === "morning") return open ? "Morning Rush. The street is already hungry." : "Morning Rush. The shop is still dark.";
-    if (id === "lunch") return open ? "Lunch Hour. Plates are moving." : "Lunch Hour. The counter is quiet.";
-    if (id === "evening") return open ? "Evening Trade. People are killing time." : "Evening Trade. The door is shut.";
-    if (id === "night") return open ? "Night Drift. Regulars and weirdos." : "Night Drift. The street is quiet.";
-    return open ? "Standard Watch. The shop can wait." : "Standard Watch. Nothing is selling.";
+    var line = "";
+    if (id === "morning") line = open ? "Morning Rush. The street is already hungry." : "Morning Rush. The shop is still dark.";
+    else if (id === "lunch") line = open ? "Lunch Hour. Plates are moving." : "Lunch Hour. The counter is quiet.";
+    else if (id === "evening") line = open ? "Evening Trade. People are killing time." : "Evening Trade. The door is shut.";
+    else if (id === "night") line = open ? "Night Drift. Regulars and weirdos." : "Night Drift. The street is quiet.";
+    else line = open ? "Standard Watch. The shop can wait." : "Standard Watch. Nothing is selling.";
+    var named = game && game.slots && game.slots[0] && game.slots[0].name;
+    if (named) line = line.replace(/\s+$/, "").replace(/\.$/, "") + ". " + named + ".";
+    return line;
   }
 
   function describeLine(text, game) {
@@ -279,7 +283,7 @@
       art = "shopClosed";
     }
     if (!art && (low.indexOf("while you were out") >= 0 || low.indexOf("covered the quiet") >= 0 || low.indexOf("catch-up") >= 0)) {
-      var openArt = !!(game && game.flags && game.flags.opened) && (!game.world || game.world.hours !== "closed");
+      var openArt = !!(game && game.flags && game.flags.opened) && shopOpen(game);
       var pid = (game && game.phaseId) || "";
       if (!openArt) art = "shopClosed";
       else if (pid === "morning") art = "shopMorning";
@@ -301,13 +305,20 @@
     else if (low.indexOf("plant") >= 0) object = "plant";
     else if (low.indexOf("warm lights") >= 0 || low.indexOf("bulb") >= 0) object = "bulb";
     else if (low.indexOf("pack") >= 0 || low.indexOf("shelf") >= 0 || low.indexOf("stock") >= 0) object = "stock";
+    if (low.indexOf("register is empty") >= 0) portrait = "";
     if (!art && !portrait && !object && low.indexOf("took in") >= 0) object = "stock";
+    if (low.indexOf("in the drawer") >= 0 && low.indexOf("on the shelf") >= 0) {
+      art = "";
+      object = "";
+      portrait = "";
+    }
     var stamp = "";
     var sentence = voice;
     if (phase && voice.indexOf(". ") > 0) {
       stamp = voice.split(". ")[0];
       sentence = voice.slice(stamp.length + 2);
     }
+    if (portrait && game) sentence = attachMemory(sentence, game);
     var tags = [];
     var notebook = low.indexOf("night class") >= 0 || low.indexOf("degree") >= 0 || low.indexOf("certificate") >= 0 || low.indexOf("hobby paid") >= 0 || low.indexOf("tutor") >= 0;
     var crate = low.indexOf("scout") >= 0;
@@ -384,6 +395,10 @@
       note.cover = phase.id;
       pushLog(game, hireName(game) + " has the register.");
     }
+    if (open && !registerCovered(game) && note.empty !== phase.id) {
+      note.empty = phase.id;
+      pushLog(game, "The register is empty.");
+    }
     return note;
   }
 
@@ -399,6 +414,7 @@
     var p = game.player;
     if (!game.settings) game.settings = { highFX: true, fpsCap: 60, performanceMode: false, muted: false };
     if (game.settings.muted == null) game.settings.muted = false;
+    if (game.settings.clock !== 0 && game.settings.clock !== 1 && game.settings.clock !== 2) game.settings.clock = 1;
     if (!p.skills) p.skills = { work: 0, mind: 0, hustle: 0, clout: 0 };
     if (p.heat == null) p.heat = 0;
     if (p.heldUntil == null) p.heldUntil = 0;
@@ -423,6 +439,7 @@
     if (place.speaker == null) place.speaker = 0;
     if (place.plant == null) place.plant = 0;
     if (place.neon == null) place.neon = 0;
+    if (place.shut == null) place.shut = false;
     if (!game.world) game.world = {};
     var w = game.world;
     if (w.rentDue == null) w.rentDue = 0;
@@ -482,6 +499,7 @@
     if (w.landlordMood == null) w.landlordMood = 2;
     if (w.rivalMemory == null) w.rivalMemory = "";
     if (w.hours == null) w.hours = "";
+    if (!w.chapterTold) w.chapterTold = {};
     if (w.hoursHold == null) w.hoursHold = false;
     if (w.hoursPhase == null) w.hoursPhase = "";
     if (w.upstairsStaff == null) w.upstairsStaff = "";
@@ -807,6 +825,7 @@
       var spoken = grammarLine(game, id);
       if (spoken) line = spoken;
     }
+    line = attachMemory(line, game);
     return {
       line: line,
       rail: card.rail,
@@ -854,7 +873,7 @@
       return bits[0] + ". " + bits.slice(1, 4).join(", ") + ".";
     }
     if (id === "landlord") {
-      var second = (w.behind || 0) > 0 ? "rent is late" : (rain || (signOn ? "the sign is on" : "the sign is off"));
+      var second = (w.behind || 0) > 0 ? ("rent is " + w.behind + " behind") : (rain || (signOn ? "the sign is on" : "the sign is off"));
       if (heat >= 45) second = "heat is " + heat;
       return landlordTone(w) + " " + second + ", and rent is " + money(w.rentDue || 0) + ".";
     }
@@ -1567,6 +1586,7 @@
     if (game.fx && now < game.fx.visLockUntil) game.player.visibility = 100;
     game.booted = true;
     noteDay(game, now, daySnap);
+    noteChapter(game);
     return phase;
   }
 
@@ -3058,9 +3078,11 @@
     game.world.hours = mode;
     game.world.hoursHold = true;
     game.world.hoursPhase = phase;
+    if (mode === "open" && game.player.place) game.player.place.shut = false;
     finishCard(game, mode === "open" ? "hours:open" : "hours:close");
     game.world.showing = "";
-    pushLog(game, mode === "open" ? "+ Staying open." : "+ The shop is closed.");
+    var shopName = (game.slots && game.slots[0] && game.slots[0].name) || "The shop";
+    pushLog(game, mode === "open" ? ("+ You opened the door. " + shopName + ".") : ("+ You closed the door. " + shopName + "."));
     game.rev += 1;
     return { ok: true, hours: mode };
   }
@@ -3081,6 +3103,7 @@
   }
 
   function shopOpen(game) {
+    if (game && game.player && game.player.place && game.player.place.shut) return false;
     return !game.world || game.world.hours !== "closed";
   }
 
@@ -3476,11 +3499,201 @@
       highFX: game.settings.highFX,
       fpsCap: game.settings.fpsCap,
       performanceMode: game.settings.performanceMode,
-      muted: !!game.settings.muted
+      muted: !!game.settings.muted,
+      clock: game.settings.clock === 0 || game.settings.clock === 2 ? game.settings.clock : 1
     };
     var next = fresh(now);
     next.settings = settings;
     return next;
+  }
+
+  function memoryClause(game) {
+    if (!game) return "";
+    ensureLife(game);
+    var w = game.world || {};
+    var reg = w.regular;
+    if (reg && (reg.visits || 0) > 0) return "Visit " + reg.visits;
+    var emp = slotEmployee(game);
+    if (emp && emp.mood != null) return "Mood " + emp.mood;
+    if ((w.behind || 0) > 0) return "Rent is " + w.behind + " behind";
+    if (w.rival) return w.rival + " is across the street";
+    return "";
+  }
+
+  function attachMemory(line, game) {
+    var clause = memoryClause(game);
+    if (!clause || !line) return line || "";
+    var low = String(line).toLowerCase();
+    var bit = clause.toLowerCase();
+    if (low.indexOf(bit) >= 0) return line;
+    if (bit.indexOf("visit") === 0 && low.indexOf("visit") >= 0) return line;
+    if (bit.indexOf("mood") === 0 && low.indexOf("mood") >= 0) return line;
+    if (bit.indexOf("rent is") === 0 && (low.indexOf("behind") >= 0 || low.indexOf("rent is") >= 0)) return line;
+    if (bit.indexOf("across the street") >= 0 && low.indexOf("across") >= 0) return line;
+    var base = String(line).replace(/\s+$/, "");
+    if (base.charAt(base.length - 1) === ".") return base + " " + clause + ".";
+    return base + ". " + clause + ".";
+  }
+
+  function cleanShopName(text) {
+    var s = String(text == null ? "" : text).replace(/[\u0000-\u001F\u007F]/g, "");
+    s = s.replace(/\s+/g, " ").trim();
+    if (s.length > 22) s = s.slice(0, 22).trim();
+    return s;
+  }
+
+  function setShopName(game, slotIndex, text) {
+    ensureLife(game);
+    ensureSlots(game);
+    var index = slotIndex == null ? 0 : Number(slotIndex);
+    var slot = game.slots[index];
+    if (!slot) return { ok: false, reason: "slot" };
+    var next = cleanShopName(text);
+    if (!next) return { ok: false, reason: "empty" };
+    if (next === slot.name) return { ok: true, name: next, same: true };
+    slot.name = next;
+    if (index === 0) {
+      if (game.player.place) game.player.place.name = next;
+      game.player.shop = next === "The Corner" ? "" : next;
+    }
+    pushLog(game, "+ The shop is " + next + ".");
+    game.rev += 1;
+    return { ok: true, name: next };
+  }
+
+  function setDoor(game, open, now) {
+    ensureLife(game);
+    var shut = !open;
+    var hours = game.world.hours;
+    if (!!game.player.place.shut === shut && ((open && hours === "open") || (!open && hours === "closed"))) {
+      return { ok: false, reason: "same" };
+    }
+    var res = setHours(game, open ? "open" : "closed", now || game.lastReal || 0);
+    game.player.place.shut = shut;
+    if (!res || res.ok === false) return res;
+    return { ok: true, shut: shut, hours: game.world.hours };
+  }
+
+  function sleepLine(game, phase) {
+    ensureLife(game);
+    var open = !!(game.flags && game.flags.opened) && shopOpen(game);
+    var slot = game.slots && game.slots[0];
+    var stock = slot ? (slot.stock || 0) : 0;
+    var name = (slot && slot.name) || "The shop";
+    var bits = [(phase && phase.name) || "Watch"];
+    bits[0] += ".";
+    bits.push(open ? "The shop is open." : "The shop is closed.");
+    bits.push(money(game.player.capital || 0) + " in the drawer.");
+    bits.push(stock + " on the shelf.");
+    if (slot && slot.employee && slot.employee.name) bits.push(slot.employee.name + " is hired.");
+    bits.push(name + ".");
+    return bits.join(" ");
+  }
+
+  function anchorMorning(ms) {
+    var d = new Date(ms);
+    d.setHours(7, 0, 0, 0);
+    return d.getTime();
+  }
+
+  function sleepPlan(fromMs) {
+    var skipped = [];
+    var cursor = fromMs || 0;
+    var last = phaseAt(cursor).id;
+    var startMorning = last === "morning";
+    var moved = false;
+    var guard = 0;
+    var land = anchorMorning(cursor + (startMorning ? 20 * 3600000 : 0));
+    while (guard < 160) {
+      cursor += 15 * 60000;
+      guard += 1;
+      var ph = phaseAt(cursor);
+      if (ph.id === last) continue;
+      if (ph.id === "morning" && (moved || !startMorning)) {
+        land = anchorMorning(cursor);
+        break;
+      }
+      last = ph.id;
+      moved = true;
+      if (ph.id !== "morning") skipped.push({ id: ph.id, name: ph.name });
+    }
+    return { skipped: skipped, land: land };
+  }
+
+  function sleepToMorning(game, fromMs) {
+    ensureLife(game);
+    var before = game.player.capital;
+    var plan = sleepPlan(fromMs || game.lastReal || 0);
+    var i;
+    for (i = 0; i < plan.skipped.length; i++) pushLog(game, sleepLine(game, plan.skipped[i]));
+    return {
+      ok: true,
+      land: plan.land,
+      skipped: plan.skipped.length,
+      capital: game.player.capital,
+      same: game.player.capital === before
+    };
+  }
+
+  function dayLedger(game) {
+    ensureLife(game);
+    var inn = 0;
+    var out = 0;
+    var i;
+    for (i = 0; i < (game.logN || 0); i++) {
+      var text = String(logLine(game, i) || "");
+      var amt = moneyIn(text);
+      if (amt == null) continue;
+      var n = Math.abs(Math.round(amt));
+      if (!n) continue;
+      var low = text.toLowerCase();
+      var incoming = low.indexOf("took in") >= 0 || low.indexOf("shift paid") >= 0 || low.indexOf("hobby paid") >= 0 || low.indexOf("scout returned") >= 0 || low.indexOf("got a raise") >= 0;
+      var outgoing = low.indexOf("rented the corner") >= 0 || low.indexOf("paid the landlord") >= 0 || low.indexOf("night class") >= 0 || low.indexOf("costs") >= 0 || low.indexOf("unexplained loss") >= 0 || low.indexOf("loss ") >= 0;
+      if (incoming && !outgoing) inn += n;
+      else if (outgoing && !incoming) out += n;
+    }
+    return { inn: inn, out: out, left: Math.round(game.player.capital || 0), from: "log" };
+  }
+
+  function chapterNow(game) {
+    ensureLife(game);
+    var hired = false;
+    var i;
+    var slots = game.slots || [];
+    for (i = 0; i < slots.length; i++) if (slots[i] && slots[i].employee) hired = true;
+    if (game.world.floor) return { id: "floor", label: "Floor owned" };
+    if (game.world.rival) return { id: "rival", label: "Rival on the block" };
+    if (hired) return { id: "hire", label: "First hire" };
+    if (game.flags && game.flags.opened) return { id: "shift", label: "First shift" };
+    return { id: "bare", label: "Bare corner" };
+  }
+
+  function noteChapter(game) {
+    var ch = chapterNow(game);
+    if (!game.world.chapterTold) game.world.chapterTold = {};
+    if (ch.id === "bare" || game.world.chapterTold[ch.id]) return ch;
+    game.world.chapterTold[ch.id] = true;
+    pushLog(game, ch.label + ".");
+    return ch;
+  }
+
+  function rushCrowd(phase) {
+    if (!phase) return 0;
+    if (phase.id !== "morning" && phase.id !== "lunch" && phase.id !== "evening") return 0;
+    var r = phase.revenue || 0;
+    if (r >= 1.6) return 3;
+    if (r >= 1.2) return 2;
+    return 1;
+  }
+
+  function registerWatch(game) {
+    ensureLife(game);
+    if (hireAtRegister(game)) {
+      var emp = slotEmployee(game);
+      return { id: "hire", name: emp && emp.name ? emp.name : "Hire" };
+    }
+    if (!registerCovered(game)) return { id: "nobody", name: "Nobody" };
+    return { id: "you", name: "You" };
   }
 
   root.VoidSim = {
@@ -3593,6 +3806,17 @@
     stand: stand,
     grammarLine: grammarLine,
     juniperWinning: juniperWinning,
-    registerCovered: registerCovered
+    registerCovered: registerCovered,
+    shopOpen: shopOpen,
+    cleanShopName: cleanShopName,
+    setShopName: setShopName,
+    setDoor: setDoor,
+    sleepToMorning: sleepToMorning,
+    sleepPlan: sleepPlan,
+    dayLedger: dayLedger,
+    chapterNow: chapterNow,
+    rushCrowd: rushCrowd,
+    registerWatch: registerWatch,
+    memoryClause: memoryClause
   };
 })(typeof window !== "undefined" ? window : globalThis);
