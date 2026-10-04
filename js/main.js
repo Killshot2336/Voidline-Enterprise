@@ -481,7 +481,6 @@
       ui.seenPulse = game.pulse;
       hearCoin();
       hearClocks();
-      if (game.player.level > ui.seenLevel) R.shake(3);
       ui.seenLevel = game.player.level;
       document.body.classList.toggle("perf", !!game.settings.performanceMode);
       var cap = game.settings.fpsCap === 30 ? 30 : 60;

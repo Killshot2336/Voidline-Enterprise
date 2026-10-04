@@ -144,6 +144,28 @@
     return (weight || 600) + " " + px + "px " + face;
   }
 
+  function textFace(px, role) {
+    if (role === "num") return "600 " + px + "px " + MONO;
+    if (role === "title") return "700 " + px + "px " + SERIF;
+    return "500 " + px + "px " + SERIF;
+  }
+
+  function phaseGround(phase) {
+    if (phase === "morning") return "#3a2c28";
+    if (phase === "lunch") return "#24323a";
+    if (phase === "evening") return "#3a261c";
+    if (phase === "standard") return "#2a2836";
+    return "#1a2744";
+  }
+
+  function hexA(hex, a) {
+    var n = parseInt(String(hex || "#000000").slice(1), 16);
+    var r = (n >> 16) & 255;
+    var g = (n >> 8) & 255;
+    var b = n & 255;
+    return "rgba(" + r + "," + g + "," + b + "," + a + ")";
+  }
+
   function glowOk() {
     var g = frameGame;
     if (!g || !g.settings) return false;
@@ -345,8 +367,8 @@
   }
 
   function layout(w, h) {
-    var dock = h < 640 ? 60 : (w < 560 ? 68 : 76);
-    var header = h < 520 ? 70 : (h < 640 ? 76 : 86);
+    var dock = h < 640 ? 64 : 72;
+    var header = h < 520 ? 80 : 96;
     return {
       w: w,
       h: h,
@@ -574,14 +596,15 @@
       ctx.fillStyle = "rgba(28,22,18,0.05)";
       ctx.fillRect(x, y, w, h);
     }
-    var f = font(h < 28 ? 15 : 17, false, 700, true);
+    var dark = tone === "dark";
+    var f = textFace(15, dark ? "body" : "title");
     ctx.font = f;
-    ctx.fillStyle = faint ? "#a3988c" : ink;
+    ctx.fillStyle = faint ? "#6e665c" : (dark ? PAPER : ink);
     ctx.globalAlpha = faint ? 0.8 : 1;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(clipText(ctx, f, label, w - 12), x + w * 0.5, y + h * 0.46);
-    ctx.strokeStyle = faint ? "#a3988c" : ink;
+    ctx.strokeStyle = faint ? "#6e665c" : (dark ? "rgba(239,230,212,0.28)" : ink);
     ctx.lineWidth = on ? 1.6 : 1;
     ctx.beginPath();
     ctx.moveTo(x + 8, y + h - 3);
@@ -653,20 +676,22 @@
   function section(flow, text) {
     var shadyName = text === "SHADY" || text === "STREET";
     var locked = shadyName && sheetLock;
-    var r = row(flow, 34);
+    var r = row(flow, 32);
     if (!r.on) return;
     var ctx = flow.ctx;
     ctx.save();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = "rgba(239,230,212,0.94)";
-    ctx.fillRect(flow.x - 6, r.y, flow.w + 12, 30);
-    var f = font(18, false, 700, true);
+    if (buttonTone !== "dark") {
+      ctx.fillStyle = "rgba(239,230,212,0.94)";
+      ctx.fillRect(flow.x - 6, r.y, flow.w + 12, 30);
+    }
+    var f = textFace(18, "title");
     ctx.font = f;
-    ctx.fillStyle = locked ? "#a3988c" : INK;
+    ctx.fillStyle = buttonTone === "dark" ? PAPER : (locked ? "#a3988c" : INK);
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillText(locked && shadyName ? "Tied cards" : text, flow.x, r.y + 14);
-    ctx.strokeStyle = "rgba(28,22,18,0.45)";
+    ctx.strokeStyle = buttonTone === "dark" ? "rgba(239,230,212,0.22)" : "rgba(28,22,18,0.45)";
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(flow.x, r.y + 28);
@@ -685,10 +710,12 @@
       var ctx = flow.ctx;
       ctx.save();
       ctx.shadowBlur = 0;
-      ctx.fillStyle = "rgba(239,230,212,0.92)";
-      ctx.fillRect(flow.x - 6, r.y, flow.w + 12, 20);
+      if (buttonTone !== "dark") {
+        ctx.fillStyle = "rgba(239,230,212,0.92)";
+        ctx.fillRect(flow.x - 6, r.y, flow.w + 12, 20);
+      }
       ctx.font = f;
-      ctx.fillStyle = INK;
+      ctx.fillStyle = buttonTone === "dark" ? PAPER : INK;
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
       ctx.fillText(lines[i], flow.x, r.y + 10);
@@ -723,21 +750,21 @@
   }
 
   function darkTitle(flow, text) {
-    var r = row(flow, 26);
+    var r = row(flow, 32);
     if (!r.on) return;
     var ctx = flow.ctx;
     ctx.save();
     ctx.shadowBlur = 0;
-    ctx.font = font(12, false, 700, true);
-    ctx.fillStyle = LAMP;
+    ctx.font = textFace(18, "title");
+    ctx.fillStyle = PAPER;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(String(text || "").toUpperCase(), flow.x, r.y + 12);
+    ctx.fillText(String(text || ""), flow.x, r.y + 16);
     ctx.restore();
   }
 
   function darkNote(flow, text) {
-    var f = font(14, false, 500, true);
+    var f = textFace(13, "body");
     var lines = wrapLines(flow.ctx, f, text, flow.w, 3);
     var i;
     for (i = 0; i < lines.length; i++) {
@@ -761,7 +788,7 @@
     var ctx = flow.ctx;
     ctx.save();
     ctx.shadowBlur = 0;
-    ctx.font = font(11, false, 700, true);
+    ctx.font = textFace(11, "title");
     ctx.fillStyle = "#9aa1ad";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
@@ -770,38 +797,36 @@
   }
 
   function darkLine(flow, id, label, meta, disabled) {
-    var r = row(flow, 26);
+    var r = row(flow, 32);
     if (!r.on) return;
     var ctx = flow.ctx;
     var ui = flow.ui;
     var hot = !disabled && ui && id && ui.hover === id;
-    var metaFont = font(13, false, 600, true);
-    var labFont = font(15, false, 600, true);
+    var metaText = meta || "";
+    var metaFont = metaText.charAt(0) === "$" ? textFace(13, "num") : textFace(13, "body");
+    var labFont = textFace(15, "body");
     ctx.save();
     ctx.shadowBlur = 0;
     if (hot) {
       ctx.fillStyle = "rgba(240,195,106,0.10)";
-      ctx.fillRect(flow.x, r.y, flow.w, 24);
+      ctx.fillRect(flow.x, r.y, flow.w, 28);
     }
-    var metaW = meta ? measure(ctx, metaFont, meta) + 14 : 0;
-    var lab = clipText(ctx, labFont, label || "", Math.max(24, flow.w - metaW - 4));
+    var metaW = metaText ? measure(ctx, metaFont, metaText) : 0;
+    var nameMax = Math.max(24, flow.w - metaW - 16);
+    var lab = clipText(ctx, labFont, label || "", nameMax);
     ctx.font = labFont;
     ctx.fillStyle = disabled ? "#6e665c" : PAPER;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(lab, flow.x + 2, r.y + 12);
-    if (meta) {
-      var labW = measure(ctx, labFont, lab);
-      var mx = flow.x + 2 + labW + 12;
-      var maxX = flow.x + flow.w - metaW + 2;
-      if (mx > maxX) mx = maxX;
+    ctx.fillText(lab, flow.x, r.y + 16);
+    if (metaText) {
       ctx.font = metaFont;
-      ctx.fillStyle = disabled ? "#6e665c" : LAMP;
-      ctx.textAlign = "left";
-      ctx.fillText(meta, mx, r.y + 12);
+      ctx.fillStyle = disabled ? "#6e665c" : PAPER;
+      ctx.textAlign = "right";
+      ctx.fillText(metaText, flow.x + flow.w, r.y + 16);
     }
     ctx.restore();
-    if (id && !disabled && ui) pushHit(ui, id, flow.x, r.y, flow.w, 24);
+    if (id && !disabled && ui) pushHit(ui, id, flow.x, r.y, flow.w, 28);
   }
 
   function darkFeature(flow, id, label, price, fill, disabled) {
@@ -821,8 +846,8 @@
     ctx.fillRect(flow.x, r.y, flow.w, boxH);
     ctx.fillStyle = LAMP;
     ctx.fillRect(flow.x, r.y, 3, boxH);
-    var nameFont = font(16, false, 700, true);
-    var priceFont = font(14, false, 700, true);
+    var nameFont = textFace(15, "title");
+    var priceFont = textFace(13, "num");
     var priceW = price ? measure(ctx, priceFont, price) + 16 : 0;
     var textY = showBar ? r.y + 20 : r.y + boxH * 0.5;
     ctx.font = nameFont;
@@ -904,8 +929,21 @@
     return best;
   }
 
+  function screenGoal(game) {
+    var w = game.world || {};
+    var cap = (game.player && game.player.capital) || 0;
+    if (w.locked >= 3 && w.rentDue > 0) {
+      return { id: "rent", label: "Pay rent", cost: w.rentDue, price: S.money(w.rentDue), fill: cap / w.rentDue };
+    }
+    var life = S.currentLifeId ? S.currentLifeId(game, game.lastReal || 0) : "";
+    if (life === "landlord" && w.rentDue > 0) {
+      return { id: "rent", label: "Pay rent", cost: w.rentDue, price: S.money(w.rentDue), fill: cap / w.rentDue };
+    }
+    return S.nextSpend ? S.nextSpend(game) : null;
+  }
+
   function closestRoom(game) {
-    var goal = S.nextSpend ? S.nextSpend(game) : null;
+    var goal = screenGoal(game);
     var action = goal ? roomAction(goal.id) : "";
     var cap = (game.player && game.player.capital) || 0;
     if (action && partOpen(game, goal.id)) {
@@ -1027,33 +1065,56 @@
     var now = (ui && ui.now) || game.lastReal || Date.now();
     var running = game.degree;
     var def = running && D.degreeById ? D.degreeById[running.id] : null;
-    var pct = def ? (1 - running.left / running.total) : dayHand(now);
-    if (pct < 0) pct = 0;
-    if (pct > 1) pct = 1;
-    var viewH = Math.max(120, flow.bottom - flow.top);
-    var face = Math.min(108, flow.w * 0.22, viewH * 0.26);
-    if (face < 68) face = 68;
-    var block = row(flow, face * 2 + 52);
+    var remain = 0;
+    if (def && running.total) remain = running.left / running.total;
+    if (remain < 0) remain = 0;
+    if (remain > 1) remain = 1;
+    var viewH = Math.max(160, flow.bottom - flow.top);
+    var r = Math.min(88, flow.w * 0.2, viewH * 0.2);
+    if (r < 64) r = 64;
+    var block = row(flow, r * 2 + 48);
     if (!block.on) return;
     var ctx = flow.ctx;
     var cx = flow.x + flow.w * 0.5;
-    var cy = block.y + face + 2;
-    paintClock(ctx, cx, cy, face, pct);
+    var cy = block.y + r + 4;
     ctx.save();
     ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(239,230,212,0.22)";
+    ctx.lineWidth = 8;
+    ctx.stroke();
+    if (def && remain > 0.004) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * remain);
+      ctx.strokeStyle = LAMP;
+      ctx.lineWidth = 8;
+      ctx.stroke();
+    }
+    var hand = def ? (1 - remain) : dayHand(now);
+    var ang = -Math.PI / 2 + Math.PI * 2 * hand;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(ang) * (r - 18), cy + Math.sin(ang) * (r - 18));
+    ctx.strokeStyle = PAPER;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    var nameFace = textFace(15, "title");
+    var name = def ? def.name : "School";
+    var nameLines = wrapLines(ctx, nameFace, name, Math.max(48, r * 1.5), 2);
+    ctx.font = nameFace;
+    ctx.fillStyle = PAPER;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    var nameFont = font(15, false, 700, true);
-    ctx.font = nameFont;
-    ctx.fillStyle = PAPER;
-    ctx.fillText(clipText(ctx, nameFont, def ? def.name : "Not in class", flow.w - 8), cx, cy + face + 16);
-    var subFont = font(13, false, 600, true);
-    ctx.font = subFont;
+    var i;
+    for (i = 0; i < nameLines.length; i++) ctx.fillText(nameLines[i], cx, cy + (i - (nameLines.length - 1) * 0.5) * 18);
+    ctx.font = textFace(13, "num");
     ctx.fillStyle = LAMP;
-    var sub = def ? (S.fmtMs(running.left) + " left") : S.clockLabel(now);
-    ctx.fillText(clipText(ctx, subFont, sub, flow.w - 8), cx, cy + face + 34);
+    var sub = def ? S.fmtMs(running.left) : S.clockLabel(now);
+    ctx.fillText(clipText(ctx, textFace(13, "num"), sub, flow.w - 8), cx, cy + r + 18);
     ctx.restore();
   }
+
 
   function drawDegreeRail(flow, game, ui) {
     var degs = D.DEGREES || [];
@@ -1081,13 +1142,13 @@
         ctx.fillStyle = LAMP;
         ctx.fillRect(x + 4, r.y + 14, Math.max(8, bw - 8), 2);
       }
-      var nameFont = font(bw < 78 ? 10 : 12, false, 700, true);
+      var nameFont = textFace(11, "title");
       ctx.font = nameFont;
       ctx.fillStyle = done ? "#6e665c" : PAPER;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(clipText(ctx, nameFont, deg.name, bw - 4), x + bw * 0.5, r.y + 30);
-      var metaFont = font(11, false, 600, true);
+      var metaFont = textFace(11, "num");
       ctx.font = metaFont;
       ctx.fillStyle = done ? "#6e665c" : LAMP;
       var meta = done ? "Filed" : (live ? "Now" : S.money(deg.cost));
@@ -1467,27 +1528,30 @@
     }
   }
 
-  function drawNavTab(ctx, ui, id, x, y, w, h, label, on) {
+  function drawNavTab(ctx, ui, id, x, y, w, h, label, on, mark, clock) {
     if (!id || w < 8 || h < 8) return;
-    var hot = ui.hover === id;
+    var sink = pressSink(ui, id);
+    var cx = x + w * 0.5;
+    var wordY = y + h * 0.62 + sink;
     ctx.save();
     ctx.shadowBlur = 0;
-    if (on) {
-      var pillH = Math.min(34, h - 14);
-      if (pillH < 22) pillH = Math.max(16, h - 8);
-      var pillY = y + (h - pillH) * 0.5;
-      ctx.fillStyle = LAMP;
-      ctx.fillRect(x + 4, pillY, w - 8, pillH);
-    }
-    var f = font(w < 84 ? 12 : 14, false, on ? 700 : 600, true);
+    if (clock != null) miniHand(ctx, cx, y + h * 0.3 + sink, 9, clock);
+    else if (mark) icon(ctx, mark, cx, y + h * 0.28 + sink, Math.min(16, h * 0.34), on ? LAMP : "#8a8178");
+    var f = textFace(13, on ? "title" : "body");
     ctx.font = f;
-    ctx.fillStyle = on ? INK : (hot ? PAPER : "#b7aea3");
+    ctx.fillStyle = on ? LAMP : "#8a8178";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(clipText(ctx, f, label || "", w - 12), x + w * 0.5, y + h * 0.5);
+    ctx.fillText(clipText(ctx, f, label || "", w - 8), cx, wordY);
+    if (on) {
+      var tw = Math.min(w - 16, measure(ctx, f, label || ""));
+      ctx.fillStyle = LAMP;
+      ctx.fillRect(cx - tw * 0.5, wordY + 10, tw, 2);
+    }
     ctx.restore();
     pushHit(ui, id, x, y, w, h);
   }
+
 
   function drawTabGround(ctx, game, ui, L, which) {
     var y = L.header;
@@ -1495,13 +1559,16 @@
     if (h < 40) return;
     ctx.save();
     ctx.shadowBlur = 0;
-    var body = { x: 8, y: y + 4, w: L.w - 16, h: h - 8 };
+    var body = { x: 8, y: y + 8, w: L.w - 16, h: h - 16 };
     ui.clip = body;
+    buttonTone = "dark";
     var flow = openFlow(ctx, ui, body, ui.scroll || 0);
     if (which === "job") drawOccupation(flow, game, ui);
     else if (which === "edu") drawEducation(flow, game, ui);
     else if (which === "scout") drawScouts(flow, game);
     else if (which === "lab") drawLab(flow, game, ui);
+    else if (which === "settings") drawSettings(flow, game, ui);
+    else if (which === "journal") drawJournal(flow, game, ui);
     ui.contentH = flow.cy + 16;
     ctx.restore();
     ctx.restore();
@@ -1510,10 +1577,13 @@
     if (max < 0) max = 0;
     if (ui.scroll < 0) ui.scroll = 0;
     if (ui.scroll > max) ui.scroll = max;
+    paintScrollFade(ctx, body, ui);
     ctx.textAlign = "left";
     ctx.globalAlpha = 1;
     ctx.shadowBlur = 0;
+    buttonTone = "";
   }
+
 
 
   function drawOccupation(flow, game, ui) {
@@ -1522,27 +1592,49 @@
     var focus = ui && ui.focusSlot != null ? ui.focusSlot : 0;
     if (!slots[focus]) focus = 0;
     var slot = slots[focus] || null;
-    var place = (game.player && game.player.place) || {};
     var cap = (game.player && game.player.capital) || 0;
-    darkTitle(flow, "Work");
-    var shopW = Math.min(flow.w, 520);
-    var pictureH = Math.round(shopW * 720 / 1280);
-    var shopH = pictureH + 16;
-    if (shopH > 292) {
-      shopH = 292;
-      pictureH = shopH - 16;
-      shopW = Math.round(pictureH * 1280 / 720);
-    }
-    var shopRow = row(flow, shopH + 8);
+    var viewH = Math.max(200, flow.bottom - flow.top);
+    var half = Math.floor(viewH * 0.5 / 8) * 8;
+    var shopH = Math.max(128, half);
+    var shopRow = row(flow, shopH);
     if (shopRow.on) {
-      var shopX = flow.x + (flow.w - shopW) * 0.5;
-      drawMiniShop(flow.ctx, game, ui, shopX, shopRow.y, shopW, shopH, now);
+      var ratio = 1280 / 720;
+      var pictureH = shopH - 8;
+      var pictureW = Math.round(pictureH * ratio);
+      if (pictureW > flow.w) {
+        pictureW = Math.floor(flow.w / 8) * 8;
+        pictureH = Math.round(pictureW / ratio);
+      }
+      var shopX = flow.x + Math.round((flow.w - pictureW) * 0.5);
+      var shopY = shopRow.y + Math.round((shopH - pictureH) * 0.5);
+      drawMiniShop(flow.ctx, game, ui, shopX, shopY, pictureW, pictureH, now);
     }
-    darkNote(flow, shopStatusLine(game, slot, now));
-    var goal = closestRoom(game);
-    darkKicker(flow, "Closest");
-    if (goal) darkFeature(flow, goal.action, goal.label, goal.price, goal.fill, cap < goal.cost);
-    else darkNote(flow, "The room is finished.");
+    var rateRow = row(flow, 40);
+    if (rateRow.on) {
+      var ctx = flow.ctx;
+      var open = shopSelling(game);
+      ctx.save();
+      ctx.shadowBlur = 0;
+      ctx.font = textFace(flow.w < 420 ? 18 : 28, "num");
+      ctx.fillStyle = open ? LAMP : "#6e665c";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(S.money(game.lastNet || 0), flow.x, rateRow.y + 20);
+      if (slot && slot.stock <= 0) {
+        ctx.font = textFace(13, "body");
+        ctx.fillStyle = "#6e665c";
+        ctx.textAlign = "right";
+        ctx.fillText("Shelf empty", flow.x + flow.w, rateRow.y + 20);
+      }
+      ctx.restore();
+    }
+    drawUpgradeRow(flow, game, ui);
+    var goal = screenGoal(game);
+    if (goal) {
+      var act = goalAction(goal);
+      var short = goal.cost > 0 && cap < goal.cost;
+      darkLine(flow, act, goal.label || "", goal.price || "", short);
+    }
 
     var i;
     for (i = 0; i < slots.length; i++) {
@@ -1553,37 +1645,16 @@
         darkLine(flow, "focus:" + i, shopName, i === focus ? "Here" : "Open", false);
       }
       if (slots.length === 1 || i === focus) {
-        darkLine(flow, "stock:" + i, "Buy stock", (one.stock || 0) + "/" + S.stockCap(game), false);
-        darkLine(flow, "cam:" + i, one.camera ? "Camera on" : "Add camera", one.camera ? "On" : S.money(D.CAM_COST), !!one.camera);
-        if (one.employee) {
-          var bust = one.employee.caught ? "  Busted" : "";
-          darkLine(flow, "fire:" + i, one.employee.name, S.money(one.employee.salary) + bust, false);
+        if (!(goal && goal.id === "stock" && i === 0)) {
+          darkLine(flow, "stock:" + i, "Buy stock", (one.stock || 0) + "/" + S.stockCap(game), false);
         }
+        darkLine(flow, "cam:" + i, one.camera ? "Camera on" : "Add camera", one.camera ? "On" : S.money(D.CAM_COST), !!one.camera);
       }
     }
-
-    darkKicker(flow, "The rest");
-    var catalog = roomCatalog();
-    var ownedBits = [];
-    var pi;
-    for (pi = 0; pi < catalog.length; pi++) {
-      var part = catalog[pi];
-      if (partOwned(game, part[0])) {
-        if (part[0] !== "room" && part[0] !== "floor") ownedBits.push(part[1]);
-        continue;
-      }
-      if (!partOpen(game, part[0])) continue;
-      if (goal && goal.id === part[0]) continue;
-      var cost = roomCost(part[0]);
-      darkLine(flow, roomAction(part[0]), part[1], S.money(cost), cap < cost);
-    }
-    if (ownedBits.length) darkNote(flow, "In the room  ·  " + ownedBits.join(", "));
-    if (game.world && game.world.rentDue) {
+    if (game.world && game.world.rentDue && !(goal && goal.id === "rent")) {
       darkLine(flow, "rentpay", "Pay rent", S.money(game.world.rentDue), cap < game.world.rentDue);
       darkLine(flow, "rentstall", "Stall", "", false);
     }
-    if (place.owned && game.world && game.world.floor) darkNote(flow, "The second floor is yours.");
-
     darkKicker(flow, "Hobbies");
     var hi;
     for (hi = 0; hi < D.HOBBIES.length; hi++) {
@@ -1593,7 +1664,6 @@
       darkLine(flow, "hobby:" + hobby.id, hobby.name, meta, !openH);
     }
     if (S.slotCap(game) < 2) darkNote(flow, "A second shop opens after Operations Bachelor or the Server Rack.");
-
     darkKicker(flow, "Open a chair");
     var lockedShown = false;
     for (i = 0; i < D.JOBS.length; i++) {
@@ -1610,6 +1680,7 @@
     }
     darkLine(flow, "shift", "Work the rush", "", false);
   }
+
 
 
 
@@ -1636,20 +1707,11 @@
   }
 
   function drawEducation(flow, game, ui) {
-    darkTitle(flow, "School");
     drawSchoolClock(flow, game, ui);
-    var need = S.xpNeed(game.player.level);
-    darkNote(flow, "Year " + (game.player.level || 1) + "  ·  " + Math.floor(game.player.xp || 0) + " / " + Math.round(need) + " XP");
     var next = nextDegree(game);
-    if (game.degree) {
-      var running = D.degreeById[game.degree.id];
-      darkKicker(flow, "In class");
-      darkNote(flow, (running ? running.name : "Class") + "  ·  " + S.fmtMs(game.degree.left) + " left");
-    }
     if (next) {
-      darkKicker(flow, "Next class");
-      darkNote(flow, next.name + "  ·  " + S.money(next.cost));
-      if (next.text) darkNote(flow, next.text);
+      var afford = (game.player.capital || 0) >= next.cost;
+      darkLine(flow, "deg:" + next.id, next.name, S.money(next.cost), !afford);
     } else if (!game.degree) darkNote(flow, "Nothing left to start.");
     darkKicker(flow, "Classes");
     drawDegreeRail(flow, game, ui);
@@ -1662,6 +1724,7 @@
       if (held.length) darkNote(flow, "Graduated  ·  " + held.join(", "));
     }
   }
+
 
 
 
@@ -1707,12 +1770,8 @@
   function drawLab(flow, game, ui) {
     var shadyOpen = !!(game.flags && game.flags.shady);
     darkTitle(flow, "Stuff");
-    var nxt = nextShelfBuy(game);
-    darkKicker(flow, "Next");
-    drawNextBuy(flow, game, ui, nxt);
-    darkKicker(flow, "Shelf");
-    drawShelfBoard(flow, game, ui);
-    drawBuyChips(flow, game, ui, nxt && !nxt.locked ? nxt.item.id : "");
+    drawOwnedShelf(flow, game, ui);
+    drawShelfList(flow, game, ui);
 
     darkKicker(flow, "Send someone");
     if (!game.nodes || !game.nodes.charter) darkNote(flow, "Scout Charter is still locked.");
@@ -1830,18 +1889,101 @@
 
   function drawScouts(flow, game) {
     var ui = flow.ui;
-    darkTitle(flow, "People");
+    var cast = ["sera", "landlord", "juniper", "hire"];
     var look = ui && ui.look;
-    var shown = look || (personHere(game, "hire") ? "hire" : "");
-    drawPeopleBand(flow, game, ui, shown);
-    var choice = shown ? personChoice(game, shown, ui) : { line: "Nobody is on the clock.", action: "applicants", label: "Find people", price: "" };
-    if (choice.line) darkNote(flow, choice.line);
-    if (choice.action) darkFeature(flow, choice.action, choice.label, choice.price || "", choice.fill, !!choice.disabled);
+    if (!look || cast.indexOf(look) < 0) {
+      look = "sera";
+      var pick;
+      for (pick = 0; pick < cast.length; pick++) {
+        if (personHere(game, cast[pick])) { look = cast[pick]; break; }
+      }
+    }
+    var caught = null;
+    var hireIdx = hireSlot(game, ui);
+    var hireEmp = game.slots && game.slots[hireIdx] && game.slots[hireIdx].employee;
+    if (hireEmp && hireEmp.caught) caught = hireEmp;
+    var viewH = Math.max(220, flow.bottom - flow.top);
+    var ph = Math.min(320, Math.max(180, Math.floor(viewH * 0.42 / 8) * 8));
+    var pw = Math.round(ph * 0.32);
+    if (pw > flow.w - 16) {
+      pw = flow.w - 16;
+      ph = Math.round(pw / 0.32);
+    }
+    var hero = row(flow, ph + 32);
+    if (hero.on) {
+      var ctx = flow.ctx;
+      var px = flow.x + (flow.w - pw) * 0.5;
+      var busted = look === "hire" && !!caught;
+      ctx.save();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = busted ? 0.35 : 1;
+      ctx.fillStyle = "#14110e";
+      ctx.fillRect(px, hero.y, pw, ph);
+      blitContain(ctx, look, px, hero.y, pw, ph);
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = "rgba(239,230,212,0.35)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(px + 0.5, hero.y + 0.5, pw - 1, ph - 1);
+      ctx.font = textFace(15, "title");
+      ctx.fillStyle = busted ? "#6e665c" : PAPER;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(busted ? "Busted" : personCaption(game, look, ui), flow.x + flow.w * 0.5, hero.y + ph + 8);
+      ctx.restore();
+      if (ui) pushHit(ui, "look:" + look, px, hero.y, pw, ph + 28);
+    }
+    var choice = personChoice(game, look, ui);
+    if (choice && choice.action) {
+      var chip = row(flow, 48);
+      if (chip.on && ui) {
+        var words = choice.label || "";
+        if (choice.price) words += "  " + choice.price;
+        var lines = choiceLines(flow.ctx, words, flow.w);
+        if (choice.disabled) flow.ctx.globalAlpha = 0.5;
+        chipControl(flow.ctx, ui, choice.disabled ? "" : choice.action, flow.x, chip.y, flow.w, Math.max(40, lines.h), lines.lines, choice.disabled ? "dark" : "lamp");
+        flow.ctx.globalAlpha = 1;
+      }
+    } else if (choice && choice.line) darkNote(flow, choice.line);
+
+    var others = [];
+    var oi;
+    for (oi = 0; oi < cast.length; oi++) if (cast[oi] !== look) others.push(cast[oi]);
+    var small = row(flow, 104);
+    if (small.on) {
+      var gap = 8;
+      var bw = (flow.w - gap * (others.length - 1)) / others.length;
+      var ctx2 = flow.ctx;
+      ctx2.save();
+      ctx2.shadowBlur = 0;
+      for (oi = 0; oi < others.length; oi++) {
+        var who = others[oi];
+        var bx = flow.x + oi * (bw + gap);
+        var sph = 72;
+        var spw = Math.min(bw - 8, Math.round(sph * 0.32));
+        var sx = bx + (bw - spw) * 0.5;
+        var dim = who === "hire" && !!caught;
+        ctx2.globalAlpha = dim ? 0.35 : (personHere(game, who) ? 1 : 0.4);
+        ctx2.fillStyle = "#14110e";
+        ctx2.fillRect(sx, small.y, spw, sph);
+        blitContain(ctx2, who, sx, small.y, spw, sph);
+        ctx2.globalAlpha = 1;
+        ctx2.strokeStyle = "rgba(239,230,212,0.28)";
+        ctx2.strokeRect(sx + 0.5, small.y + 0.5, spw - 1, sph - 1);
+        ctx2.font = textFace(11, "body");
+        ctx2.fillStyle = dim ? "#6e665c" : PAPER;
+        ctx2.textAlign = "center";
+        ctx2.textBaseline = "top";
+        var capName = dim ? "Busted" : personCaption(game, who, ui);
+        ctx2.fillText(clipText(ctx2, textFace(11, "body"), capName, bw - 4), bx + bw * 0.5, small.y + sph + 6);
+        if (ui) pushHit(ui, "look:" + who, bx, small.y, bw, sph + 24);
+      }
+      ctx2.restore();
+    }
 
     var slots = game.slots || [];
     var showed = false;
     var i;
-    var featuredFire = choice.action && choice.action.indexOf("fire:") === 0 ? choice.action : "";
+    var featuredFire = choice && choice.action && choice.action.indexOf("fire:") === 0 ? choice.action : "";
     for (i = 0; i < slots.length; i++) {
       var emp = slots[i].employee;
       if (!emp) continue;
@@ -1852,21 +1994,25 @@
         showed = true;
       }
       var meta = S.money(emp.salary);
-      if (emp.caught) meta += "  Busted";
+      if (emp.caught) meta = "Busted";
       darkLine(flow, fireId, emp.name, meta, false);
     }
-
     darkKicker(flow, "Asking");
     var resumes = game.resumes || [];
     if (!resumes.length) darkNote(flow, "Nobody's waiting.");
-    if (choice.action !== "applicants") darkLine(flow, "applicants", "Find people", "", false);
+    if (!choice || choice.action !== "applicants") darkLine(flow, "applicants", "Find people", "", false);
     for (i = 0; i < resumes.length; i++) {
       var card = resumes[i];
       var selected = ui && ui.selected === card.id;
       darkLine(flow, "resume:" + card.id, card.name, S.money(card.ask), !!card.dying);
       if (selected && !card.dying && ui) drawDarkKeypad(flow, ui);
     }
+    if (game.flags && game.flags.shady && (game.player.heat || 0) > 0) darkNote(flow, "Heat " + Math.round(game.player.heat));
+    var reg = game.world && game.world.regular;
+    if (reg && reg.name && reg.mood != null && look !== "sera") darkNote(flow, reg.name + " mood " + reg.mood);
+    if (game.world && game.world.rival && look !== "juniper") darkNote(flow, game.world.rival);
   }
+
 
 
 
@@ -1905,35 +2051,30 @@
       for (k = 0; k < game.crafted.length; k++) if (game.crafted[k].key === key) active = true;
       var jr = row(flow, 48);
       if (!jr.on) continue;
-      flow.ctx.font = font(16, false, 700, true);
-      flow.ctx.fillStyle = INK;
+      flow.ctx.font = textFace(15, "title");
+      flow.ctx.fillStyle = buttonTone === "dark" ? PAPER : INK;
       flow.ctx.textAlign = "left";
       flow.ctx.textBaseline = "middle";
-      flow.ctx.fillText(clipText(flow.ctx, font(16, false, 700, true), name, flow.w - 110), flow.x, jr.y + 14);
-      flow.ctx.font = font(15, false, 500, true);
-      flow.ctx.fillStyle = "#5c5348";
+      flow.ctx.fillText(clipText(flow.ctx, textFace(15, "title"), name, flow.w - 110), flow.x, jr.y + 14);
+      flow.ctx.font = textFace(13, "body");
+      flow.ctx.fillStyle = buttonTone === "dark" ? "#8a8178" : "#5c5348";
       flow.ctx.fillText(clipText(flow.ctx, font(15, false, 500, true), bits.join(" + "), flow.w - 110), flow.x, jr.y + 32);
       button(flow.ctx, ui, "craft:" + key, flow.x + flow.w - 100, jr.y + 8, 100, 28, active ? "Active" : "Craft", active, active || !have);
     }
   }
 
   function drawSettings(flow, game, ui) {
-    section(flow, "HOW IT RUNS");
-    para(flow, "Built for a school laptop. The clock keeps going even when the picture slows down.");
-    var r1 = row(flow, 40);
-    if (r1.on) button(flow.ctx, ui, "opt:fx", flow.x, r1.y, flow.w, 32, "Particle bursts: " + (game.settings.highFX ? "On" : "Off"), game.settings.highFX, false);
-    var r2 = row(flow, 40);
-    if (r2.on) button(flow.ctx, ui, "opt:fps", flow.x, r2.y, flow.w, 32, "Draw cap: " + (game.settings.fpsCap === 30 ? "30 Hz" : "60 Hz"), false, false);
-    var r3 = row(flow, 40);
-    if (r3.on) button(flow.ctx, ui, "opt:perf", flow.x, r3.y, flow.w, 32, "Performance mode: " + (game.settings.performanceMode ? "On" : "Off"), game.settings.performanceMode, false);
-    var rSound = row(flow, 40);
-    if (rSound.on) button(flow.ctx, ui, "opt:sound", flow.x, rSound.y, flow.w, 32, "Sound: " + (game.settings.muted ? "Off" : "On"), !game.settings.muted, false);
-    para(flow, "Performance mode and the 30 Hz cap skip the click sparks.");
-    section(flow, "START OVER");
-    var r4 = row(flow, 40);
-    if (r4.on) button(flow.ctx, ui, ui.resetArm ? "reset:yes" : "reset", flow.x, r4.y, flow.w, 32, ui.resetArm ? "Yes, wipe it" : "Reset save", false, false);
-    if (ui.resetArm) para(flow, "This deletes your save and keeps these settings.");
+    darkTitle(flow, "Settings");
+    var r = row(flow, 40);
+    if (r.on) drawSoundSwitch(flow.ctx, ui, flow.x, r.y, flow.w, !(game.settings && game.settings.muted));
+    darkLine(flow, "opt:fx", "Particle bursts", game.settings.highFX ? "On" : "Off", false);
+    darkLine(flow, "opt:fps", "Draw cap", game.settings.fpsCap === 30 ? "30 Hz" : "60 Hz", false);
+    darkLine(flow, "opt:perf", "Performance", game.settings.performanceMode ? "On" : "Off", false);
+    darkNote(flow, "Performance mode and the 30 Hz cap skip the click sparks.");
+    darkLine(flow, ui.resetArm ? "reset:yes" : "reset", ui.resetArm ? "Yes, wipe it" : "Reset save", "", false);
+    if (ui.resetArm) darkNote(flow, "This deletes your save and keeps these settings.");
   }
+
 
   function easeToward(cur, target, dt, ms) {
     if (cur == null) return target;
@@ -2258,8 +2399,18 @@
     ui.door = easeToward(ui.door || 0, doorTarget, dt, 380);
     var cash = game.player ? game.player.capital : 0;
     if (ui.cashShown == null) ui.cashShown = cash;
-    var cashTarget = ui.cashHold != null ? ui.cashHold : cash;
-    ui.cashShown = easeToward(ui.cashShown, cashTarget, dt, 280);
+    if (ui.cashHold != null) ui.cashShown = ui.cashHold;
+    else ui.cashShown = cash;
+    var level = (game.player && game.player.level) || 1;
+    if (ui.yearSeen == null) ui.yearSeen = level;
+    if (level !== ui.yearSeen) {
+      ui.yearSeen = level;
+      ui.yearPop = 1;
+    }
+    if (ui.yearPop > 0) {
+      ui.yearPop -= (dt > 0 ? dt : 16) / 280;
+      if (ui.yearPop < 0) ui.yearPop = 0;
+    }
     if (ui.coin) {
       ui.coin.t += dt > 0 ? dt : 16;
       if (ui.coin.t >= ui.coin.dur) {
@@ -2267,22 +2418,21 @@
         if (!ui.coin.landed) {
           ui.coin.landed = true;
           ui.cashHold = null;
+          ui.cashShown = cash;
           ui.coinPing = (ui.coinPing || 0) + 1;
         } else ui.coin = null;
       }
     }
     var selling = shopSelling(game);
-    var focus = lifeCardFocus(game);
-    if (!ui.busy) ui.busy = { key: "", t: 1 };
-    var busyKey = selling && !focus ? (game.phaseId || "open") : "";
-    if (busyKey && ui.busy.t >= 1 && ui.busy.key !== busyKey) {
-      ui.busy.key = busyKey;
-      ui.busy.t = 0;
+    if (!ui.cust) ui.cust = { seen: game.pulse || 0, t: 1 };
+    if (selling && game.pulse !== ui.cust.seen && ui.cust.t >= 1) {
+      ui.cust.seen = game.pulse;
+      ui.cust.t = 0;
     }
-    if (!busyKey && ui.busy.t >= 1) ui.busy.key = "";
-    if (ui.busy.t < 1) {
-      ui.busy.t += (dt > 0 ? dt : 16) / 700;
-      if (ui.busy.t > 1) ui.busy.t = 1;
+    if (!selling) ui.cust.seen = game.pulse || 0;
+    if (ui.cust.t < 1) {
+      ui.cust.t += (dt > 0 ? dt : 16) / 700;
+      if (ui.cust.t > 1) ui.cust.t = 1;
     }
     var dimTarget = spec.dayOne ? 1 : 0;
     ui.dim = easeToward(ui.dim == null ? dimTarget : ui.dim, dimTarget, dt, 520);
@@ -3139,41 +3289,48 @@
 
   function drawDock(ctx, game, ui, L) {
     var items = [
-      { id: "tab:job", label: "Work", menu: "job" },
-      { id: "tab:edu", label: "School", menu: "edu" },
-      { id: "tab:scout", label: "People", menu: "scout" },
-      { id: "tab:lab", label: "Stuff", menu: "lab" }
+      { id: "tab:job", label: "Work", menu: "job", mark: "shop" },
+      { id: "tab:edu", label: "School", menu: "edu", mark: "cap" },
+      { id: "tab:scout", label: "People", menu: "scout", mark: "people" },
+      { id: "tab:lab", label: "Stuff", menu: "lab", mark: "box" }
     ];
     var pad = 8;
-    var gap = 4;
+    var gap = 8;
     var y = L.tabY;
     var bh = L.h - y;
-    var backW = ui.menu ? Math.min(68, Math.max(48, L.w * 0.12)) : 0;
+    var backW = ui.menu ? 48 : 0;
     var x0 = pad + (backW ? backW + gap : 0);
     var bw = (L.w - x0 - pad - gap * (items.length - 1)) / items.length;
+    var degLeft = 0;
+    if (game.degree && game.degree.total) degLeft = game.degree.left / game.degree.total;
+    var scoutLeft = 0;
+    if (game.scouts && game.scouts.length && game.scouts[0].total) scoutLeft = game.scouts[0].left / game.scouts[0].total;
     var i;
     ctx.save();
     ctx.shadowBlur = 0;
     ctx.fillStyle = "#14110e";
     ctx.fillRect(0, y, L.w, bh);
-    ctx.fillStyle = "rgba(239,230,212,0.16)";
-    ctx.fillRect(0, y, L.w, 1);
     if (backW) {
       var backHot = ui.hover === "close";
-      ctx.font = font(13, false, 600, true);
-      ctx.fillStyle = backHot ? LAMP : "#b7aea3";
+      var backSink = pressSink(ui, "close");
+      ctx.font = textFace(11, "body");
+      ctx.fillStyle = backHot ? LAMP : "#8a8178";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("Back", pad + backW * 0.5, y + bh * 0.5);
+      ctx.fillText("Back", pad + backW * 0.5, y + bh * 0.5 + backSink);
       pushHit(ui, "close", pad, y, backW, bh);
     }
     for (i = 0; i < items.length; i++) {
       var item = items[i];
-      drawNavTab(ctx, ui, item.id, x0 + i * (bw + gap), y, bw, bh, item.label, ui.menu === item.menu);
+      var clock = null;
+      if (item.menu === "edu" && game.degree) clock = degLeft;
+      if (item.menu === "lab" && game.scouts && game.scouts.length) clock = scoutLeft;
+      drawNavTab(ctx, ui, item.id, x0 + i * (bw + gap), y, bw, bh, item.label, ui.menu === item.menu, item.mark, clock);
     }
     ctx.restore();
     ctx.textAlign = "left";
   }
+
 
 
 
@@ -4327,32 +4484,9 @@
 
   function drawPops(ctx, now) {
     var i;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
     for (i = pops.length - 1; i >= 0; i--) {
-      var p = pops[i];
-      var age = now - p.born;
-      if (age > p.life) {
-        pops.splice(i, 1);
-        continue;
-      }
-      var u = age / p.life;
-      var py = p.y - u * 16;
-      var popFont = font(30, true, 800);
-      ctx.font = popFont;
-      var tw = measure(ctx, popFont, p.text);
-      ctx.globalAlpha = 1 - u * u;
-      round(ctx, p.x - tw * 0.5 - 10, py - 16, tw + 20, 32, 10);
-      ctx.fillStyle = PAPER;
-      ctx.fill();
-      ctx.strokeStyle = INK;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.fillStyle = p.text.charAt(0) === "-" ? BRICK : INK;
-      ctx.fillText(p.text, p.x, py);
+      if (now - pops[i].born > pops[i].life) pops.splice(i, 1);
     }
-    ctx.globalAlpha = 1;
-    ctx.textAlign = "left";
   }
 
   function yearBlurb(game, now) {
@@ -4978,7 +5112,7 @@
   }
 
   function shopArtKey(spec) {
-    if (!spec.dayOne && spec.hours === "closed") return "shopClosed";
+    if (!spec || !spec.opened || spec.hours === "closed") return "shopClosed";
     return phaseShopKey(spec);
   }
 
@@ -5718,20 +5852,14 @@
   }
 
   function roundButton(ctx, ui, id, x, y, s, kind, on) {
-    var hover = ui.hover === id;
+    var sink = pressSink(ui, id);
     ctx.save();
     ctx.shadowBlur = 0;
-    ctx.beginPath();
-    ctx.arc(x + s * 0.5, y + s * 0.5, s * 0.5, 0, Math.PI * 2);
-    ctx.fillStyle = on ? LAMP : hover ? "#f7f1e4" : PAPER;
-    ctx.fill();
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    icon(ctx, kind, x + s * 0.5, y + s * 0.5, s * 0.5, INK);
+    icon(ctx, kind, x + s * 0.5, y + sink + s * 0.5, s * 0.62, on ? LAMP : PAPER);
     ctx.restore();
     pushHit(ui, id, x, y, s, s);
   }
+
 
   function drawTree(ctx, x, y, w, h) {
     ctx.fillStyle = "#3d5c32";
@@ -5935,26 +6063,35 @@
     var phase = S.phaseAt(now);
     if (phase && phase.name) bits.push(phase.name);
     var opened = !!(game.flags && game.flags.opened);
-    var closed = !!(game.world && game.world.hours === "closed");
+    var world = game.world || {};
+    var closed = world.hours === "closed";
     var slot = game.slots && game.slots[0];
     if (!opened) bits.push("Not selling");
     else if (closed) bits.push("Shop closed");
-    else if (slot && slot.stock <= 0) bits.push("Shop open. Out of stock");
+    else if (slot && slot.stock <= 0) bits.push("Shop open. Shelf empty");
     else bits.push("Shop open. Selling");
+    var hirePlace = S.personPlace ? S.personPlace(game, "hire") : "";
+    if (hirePlace === "counter" && slot && slot.employee) {
+      bits.push(slot.employee.caught ? "Busted" : (slot.employee.name + " on the register"));
+    }
     if (opened && !closed && game.pulse && game.lastNet) bits.push("last " + S.money(game.lastNet));
     if (game.degree && game.degree.left != null) {
       var def = D.degreeById[game.degree.id];
       bits.push((def ? def.name : "Class") + " " + S.fmtMs(game.degree.left));
     }
-    var i;
     var missions = game.scouts || [];
+    var i;
     for (i = 0; i < missions.length && i < 2; i++) {
       var mission = missions[i];
       var scout = D.scoutById[mission.id];
       bits.push((scout ? scout.name : "Scout") + " " + S.fmtMs(mission.left));
     }
+    if (world.rival) bits.push(world.rival);
+    if (game.flags && game.flags.shady && (game.player.heat || 0) > 0) bits.push("Heat " + Math.round(game.player.heat));
+    if (world.regular && world.regular.name && world.regular.mood != null) bits.push(world.regular.name + " mood " + world.regular.mood);
     return bits.join("  ·  ");
   }
+
 
   function pressSink(ui, id) {
     var press = ui && ui.press;
@@ -5963,7 +6100,7 @@
     if (age < 0 || age >= 140) return 0;
     var u = age / 140;
     var dip = u < 0.45 ? u / 0.45 : 1 - (u - 0.45) / 0.55;
-    return dip * 3;
+    return dip * 2;
   }
 
   function shopSelling(game) {
@@ -6026,185 +6163,548 @@
       var hump = Math.sin(u * Math.PI);
       flash = ui.coin.small ? hump * 0.28 : hump * 0.55;
     }
-    if (ui && ui.busy && ui.busy.key && ui.busy.t < 1) {
-      var pulse = Math.sin(ui.busy.t * Math.PI) * 0.22;
+    if (ui && ui.cust && ui.cust.t < 1) {
+      var pulse = Math.sin(ui.cust.t * Math.PI) * 0.22;
       if (pulse > flash) flash = pulse;
     }
     return flash;
   }
 
-  function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
-    var spec = storySpec(game, now, false);
-    var key = shopArtKey(spec);
-    var job = spec.job;
-    var cap = (game.player && game.player.shop) || (job && job.name) || ("Year " + (game.player.level || 1));
-    var pictureH = Math.max(8, h - 16);
-    if (ui) ui.shopPt = { x: x + w * 0.5, y: y + pictureH * 0.5 };
+  function drawShopFrame(ctx, game, spec, key, x, y, w, h, caption, dimRate) {
+    var capH = h > 64 ? 16 : 0;
+    var photoH = Math.max(8, h - capH);
     ctx.save();
     ctx.shadowBlur = 0;
     ctx.beginPath();
-    ctx.rect(x, y, w, h);
+    ctx.rect(x, y, w, photoH);
     ctx.clip();
-    ctx.fillStyle = "#2a2018";
-    ctx.fillRect(x, y, w, h);
-    if (!blitContain(ctx, key, x, y, w, pictureH)) {
-      ctx.fillStyle = BRICK;
-      ctx.fillRect(x + 6, y + 8, w - 12, Math.max(8, pictureH - 12));
-      ctx.fillStyle = spec.lights ? LAMP : "#241c16";
-      ctx.fillRect(x + 12, y + 14, Math.max(8, w * 0.28), Math.max(6, (pictureH - 12) * 0.32));
-      ctx.fillStyle = PAPER;
-      ctx.fillRect(x + w * 0.58, y + 16, Math.max(8, w * 0.18), Math.max(8, pictureH - 24));
-    }
+    ctx.fillStyle = "#14110e";
+    ctx.fillRect(x, y, w, photoH);
+    blitContain(ctx, key, x, y, w, photoH);
     if (spec.lights) {
       ctx.fillStyle = "rgba(240,195,106,0.16)";
-      ctx.fillRect(x, y, w, pictureH);
+      ctx.fillRect(x, y, w, photoH);
     }
-    var bulbR = Math.max(3, Math.min(6, w * 0.06));
-    ctx.beginPath();
-    ctx.arc(x + w - bulbR - 6, y + bulbR + 5, bulbR, 0, Math.PI * 2);
-    ctx.fillStyle = spec.lights ? LAMP : "#2a241c";
-    ctx.fill();
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = INK;
-    ctx.stroke();
+    if (!dimRate) {
+      ctx.beginPath();
+      ctx.arc(x + w - 12, y + 12, 4, 0, Math.PI * 2);
+      ctx.fillStyle = spec.lights ? LAMP : "#6a5a40";
+      ctx.fill();
+    }
     if (spec.sign) {
-      var signW = Math.min(w - 16, Math.max(28, w * 0.46));
-      ctx.fillStyle = PAPER;
-      ctx.fillRect(x + 6, y + 4, signW, 12);
-      ctx.strokeStyle = INK;
-      ctx.strokeRect(x + 6, y + 4, signW, 12);
-      var signFont = font(9, false, 700, true);
-      ctx.font = signFont;
-      ctx.fillStyle = INK;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(clipText(ctx, signFont, spec.shop || "Sign", signW - 4), x + 6 + signW * 0.5, y + 10);
+      var signW = Math.min(Math.max(28, w * 0.36), w - 16);
+      ctx.fillStyle = LAMP;
+      ctx.fillRect(x + 8, y + 8, signW, 10);
+      if (spec.shop) {
+        ctx.font = textFace(11, "title");
+        ctx.fillStyle = INK;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(clipText(ctx, textFace(11, "title"), spec.shop, signW - 6), x + 8 + signW * 0.5, y + 13);
+      }
+    }
+    if (spec.counter) {
+      ctx.fillStyle = "rgba(239,230,212,0.75)";
+      ctx.fillRect(x + w * 0.18, y + photoH - 12, Math.max(16, w * 0.22), 4);
     }
     var places = spec.places || {};
-    if (places.hire === "counter" || places.sera === "counter") {
+    if (places.hire === "counter") {
       var px = x + w * 0.56;
-      var foot = y + pictureH - 5;
+      var foot = y + photoH - 6;
       ctx.fillStyle = "#e4c2a4";
       ctx.beginPath();
-      ctx.arc(px, foot - 16, 4.5, 0, Math.PI * 2);
+      ctx.arc(px, foot - 22, 6, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = places.sera === "counter" ? BRICK : "#243044";
-      ctx.fillRect(px - 5, foot - 11, 10, 11);
-      ctx.strokeStyle = INK;
+      ctx.fillStyle = "#243044";
+      ctx.fillRect(px - 6, foot - 15, 12, 15);
+    }
+    if (spec.opened && spec.stock <= 0) {
+      ctx.strokeStyle = "rgba(239,230,212,0.7)";
       ctx.lineWidth = 1;
-      ctx.strokeRect(px - 5, foot - 11, 10, 11);
-    }
-    var second = (game.slots && game.slots.length > 1) || (game.world && game.world.secondLot);
-    if (second) {
-      ctx.fillStyle = BRICK;
-      ctx.fillRect(x + 5, y + pictureH - 16, 14, 11);
-      ctx.fillStyle = spec.lights ? LAMP : "#241c16";
-      ctx.fillRect(x + 7, y + pictureH - 14, 5, 5);
-      ctx.strokeStyle = INK;
-      ctx.strokeRect(x + 5, y + pictureH - 16, 14, 11);
-    }
-    var flash = shopFlash(ui);
-    if (flash > 0) {
-      ctx.fillStyle = "rgba(240,195,106," + flash.toFixed(3) + ")";
-      ctx.fillRect(x, y, w, pictureH);
+      ctx.strokeRect(x + 8, y + photoH - 22, Math.min(36, w * 0.28), 8);
     }
     ctx.restore();
     ctx.save();
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = INK;
+    ctx.strokeStyle = "rgba(239,230,212,0.45)";
     ctx.lineWidth = 1;
-    ctx.strokeRect(x, y, w, h);
-    ctx.fillStyle = PAPER;
-    ctx.fillRect(x, y + h - 16, w, 16);
-    var capFont = font(11, false, 700, true);
-    ctx.font = capFont;
-    ctx.fillStyle = INK;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, photoH - 1);
+    if (capH) {
+      var rate = S.money((game && game.lastNet) || 0);
+      var rateFace = textFace(11, "num");
+      var rateW = measure(ctx, rateFace, rate);
+      ctx.font = textFace(11, "body");
+      ctx.fillStyle = dimRate ? "#6e665c" : PAPER;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(clipText(ctx, textFace(11, "body"), caption || "", Math.max(8, w - rateW - 10)), x + 2, y + photoH + 8);
+      ctx.font = rateFace;
+      ctx.fillStyle = dimRate ? "#6e665c" : LAMP;
+      ctx.textAlign = "right";
+      ctx.fillText(rate, x + w - 2, y + photoH + 8);
+    }
+    ctx.restore();
+    return photoH;
+  }
+
+  function lifeMeasure(L) {
+    var max = 560;
+    var w = L.w - 16;
+    if (w > max) w = max;
+    w = Math.floor(w / 8) * 8;
+    if (w < 160) w = Math.max(160, L.w - 16);
+    var x = Math.round((L.w - w) * 0.5);
+    return { x: x, w: w };
+  }
+
+  function choiceBag(hero) {
+    var bag = {};
+    function add(id, label) {
+      if (id) bag["id:" + id] = 1;
+      if (label) bag["lb:" + String(label).toLowerCase()] = 1;
+    }
+    if (!hero) return bag;
+    add(hero.action, hero.label);
+    add(hero.alt, hero.altLabel);
+    return bag;
+  }
+
+  function choiceRepeats(bag, id, label) {
+    if (bag["id:" + id]) return true;
+    if (label && bag["lb:" + String(label).toLowerCase()]) return true;
+    return false;
+  }
+
+  function choiceLines(ctx, label, width) {
+    var face = textFace(15, "title");
+    var lines = wrapLines(ctx, face, label || "", Math.max(48, width - 16), 3);
+    var h = Math.max(40, lines.length * 20 + 16);
+    h = Math.ceil(h / 8) * 8;
+    return { lines: lines, h: h };
+  }
+
+  function chipControl(ctx, ui, id, x, y, w, h, lines, kind) {
+    if (w < 8 || h < 8) return;
+    var sink = pressSink(ui, id);
+    var yy = y + sink;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    round(ctx, x, yy, w, h, 8);
+    var ink = PAPER;
+    if (kind === "lamp") {
+      ctx.fillStyle = LAMP;
+      ctx.fill();
+      ink = INK;
+    } else if (kind === "paper") {
+      ctx.fillStyle = PAPER;
+      ctx.fill();
+      ink = INK;
+    } else {
+      ctx.fillStyle = "#14110e";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(239,230,212,0.28)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ink = PAPER;
+    }
+    ctx.font = textFace(15, "title");
+    ctx.fillStyle = ink;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(clipText(ctx, capFont, cap, w - 8), x + w * 0.5, y + h - 8);
+    var n = lines && lines.length ? lines.length : 1;
+    var text = lines && lines.length ? lines : [""];
+    var i;
+    for (i = 0; i < n; i++) {
+      ctx.fillText(text[i], x + w * 0.5, yy + h * 0.5 + (i - (n - 1) * 0.5) * 18);
+    }
+    ctx.restore();
+    if (id && ui) pushHit(ui, id, x, y, w, h);
+  }
+
+  function paintStamp(ctx, text, x, y, color) {
+    var chars = String(text || "").toUpperCase().split("");
+    ctx.font = textFace(11, "title");
+    ctx.fillStyle = color || LAMP;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    var pen = x;
+    var i;
+    for (i = 0; i < chars.length; i++) {
+      ctx.fillText(chars[i], pen, y);
+      pen += ctx.measureText(chars[i]).width + 1.5;
+    }
+  }
+
+  function secondSlotState(game) {
+    var slots = game.slots || [];
+    var owned = slots.length > 1;
+    var cap = S.slotCap ? S.slotCap(game) : 1;
+    return { show: owned || cap < 2 || !!(game.world && game.world.secondLot), owned: owned };
+  }
+
+  function goalAction(goal) {
+    if (!goal) return "";
+    if (goal.id === "rent") return "rentpay";
+    if (goal.id === "stock") return "stock:0";
+    if (goal.id === "hire") return "applicants";
+    if (goal.id.indexOf("deg:") === 0) return goal.id;
+    return roomAction(goal.id);
+  }
+
+  function partMark(id) {
+    if (id === "lights") return "bulb";
+    if (id === "sign") return "star";
+    if (id === "plant") return "drop";
+    if (id === "speaker") return "flame";
+    if (id === "room" || id === "floor") return "shop";
+    if (id === "safe" || id === "cooler") return "box";
+    return "key";
+  }
+
+  function miniHand(ctx, cx, cy, r, remain) {
+    var left = remain;
+    if (left < 0) left = 0;
+    if (left > 1) left = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(239,230,212,0.35)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    if (left > 0.01) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left);
+      ctx.strokeStyle = LAMP;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    var ang = -Math.PI / 2 + Math.PI * 2 * (1 - left);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(ang) * (r - 1), cy + Math.sin(ang) * (r - 1));
+    ctx.strokeStyle = PAPER;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  function paintScrollFade(ctx, body, ui) {
+    if (!body) return;
+    var color = (ui && ui.ground) || "#1a2744";
+    var scroll = ui.scroll || 0;
+    var content = ui.contentH || 0;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    if (scroll > 4) {
+      var g = ctx.createLinearGradient(0, body.y, 0, body.y + 24);
+      g.addColorStop(0, color);
+      g.addColorStop(1, hexA(color, 0));
+      ctx.fillStyle = g;
+      ctx.fillRect(body.x, body.y, body.w, 24);
+    }
+    if (content > body.h + scroll + 4) {
+      var g2 = ctx.createLinearGradient(0, body.y + body.h - 24, 0, body.y + body.h);
+      g2.addColorStop(0, hexA(color, 0));
+      g2.addColorStop(1, color);
+      ctx.fillStyle = g2;
+      ctx.fillRect(body.x, body.y + body.h - 24, body.w, 24);
+    }
     ctx.restore();
   }
 
-  function drawEventCard(ctx, game, ui, hero, x, y, w, now) {
-    var sceneW = w >= 420 ? Math.min(120, Math.floor(w * 0.26)) : 0;
-    var sceneH = 78;
-    var textW = w - 28 - (sceneW ? sceneW + 12 : 0);
-    var bodyFont = font(w < 420 ? 15 : 17, false, 500, true);
-    var lines = wrapLines(ctx, bodyFont, hero.line || "", Math.max(80, textW), 4);
-    var textBlock = 22 + lines.length * 22;
-    var topBlock = Math.max(textBlock, sceneW ? sceneH + 8 : textBlock);
-    var cardH = 12 + topBlock + 48;
+  function drawSoundSwitch(ctx, ui, x, y, w, on) {
+    var sink = pressSink(ui, "opt:sound");
     ctx.save();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = "#e4d8c4";
-    ctx.fillRect(x + 3, y + 4, w, cardH);
+    ctx.font = textFace(15, "body");
     ctx.fillStyle = PAPER;
-    ctx.fillRect(x, y, w, cardH);
-    ctx.fillStyle = hero.rail || GOLD;
-    ctx.fillRect(x, y, 6, cardH);
-    ctx.strokeStyle = INK;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText("Sound", x, y + 16 + sink);
+    var tw = 40;
+    var th = 16;
+    var tx = x + w - tw;
+    var ty = y + 8 + sink;
+    round(ctx, tx, ty, tw, th, 8);
+    ctx.fillStyle = on ? LAMP : "#14110e";
+    ctx.fill();
     ctx.lineWidth = 1;
-    ctx.strokeRect(x, y, w, cardH);
-    if (hero.stamp) {
-      ctx.font = font(11, false, 700, true);
-      ctx.fillStyle = BRICK;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.fillText(hero.stamp, x + 16, y + 10);
+    ctx.strokeStyle = on ? LAMP : "rgba(239,230,212,0.35)";
+    ctx.stroke();
+    ctx.beginPath();
+    var kx = on ? tx + tw - 14 : tx + 2;
+    ctx.arc(kx + 6, ty + 8, 6, 0, Math.PI * 2);
+    ctx.fillStyle = on ? INK : PAPER;
+    ctx.fill();
+    ctx.restore();
+    if (ui) pushHit(ui, "opt:sound", x, y, w, 32);
+  }
+
+  function drawUpgradeRow(flow, game, ui) {
+    var catalog = roomCatalog();
+    var goal = screenGoal(game);
+    var r = row(flow, 48);
+    if (!r.on) return;
+    var ctx = flow.ctx;
+    var n = catalog.length;
+    var gap = 8;
+    var cell = (flow.w - gap * (n - 1)) / n;
+    var i;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    for (i = 0; i < n; i++) {
+      var id = catalog[i][0];
+      var owned = partOwned(game, id);
+      var next = !!(goal && goal.id === id && !owned);
+      var x = flow.x + i * (cell + gap);
+      ctx.globalAlpha = (!owned && !next) ? 0.28 : 1;
+      round(ctx, x, r.y + 8, Math.max(8, cell), 32, 8);
+      ctx.fillStyle = next ? LAMP : (owned ? PAPER : "#14110e");
+      ctx.fill();
+      icon(ctx, partMark(id), x + cell * 0.5, r.y + 24, Math.min(16, cell * 0.7), (next || owned) ? INK : PAPER);
+      ctx.globalAlpha = 1;
+      var act = roomAction(id);
+      if (act && !owned && ui && partOpen(game, id)) pushHit(ui, act, x, r.y, Math.max(8, cell), 40);
     }
-    ctx.font = bodyFont;
-    ctx.fillStyle = INK;
+    ctx.restore();
+  }
+
+  function drawOwnedShelf(flow, game, ui) {
+    var owned = [];
+    var i;
+    for (i = 0; i < D.ITEMS.length; i++) if ((game.mats[D.ITEMS[i].id] || 0) > 0) owned.push(D.ITEMS[i]);
+    var nxt = nextShelfBuy(game);
+    var count = owned.length + (nxt ? 1 : 0);
+    if (!count) {
+      darkNote(flow, "The shelf is empty.");
+      return;
+    }
+    var gap = 8;
+    var cell = (flow.w - gap * (count - 1)) / count;
+    var iconH = 64;
+    var r = row(flow, iconH + 8);
+    if (!r.on) return;
+    var ctx = flow.ctx;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#3a2a22";
+    ctx.fillRect(flow.x, r.y + iconH - 6, flow.w, 6);
+    var box = Math.min(56, Math.max(24, cell - 8));
+    for (i = 0; i < owned.length; i++) {
+      var ix = flow.x + i * (cell + gap);
+      var bx = ix + (cell - box) * 0.5;
+      if (!blitContain(ctx, itemArt(owned[i].cat), bx, r.y, box, box)) {
+        ctx.fillStyle = "#241c16";
+        ctx.fillRect(bx, r.y, box, box);
+      }
+    }
+    if (nxt) {
+      var ex = flow.x + owned.length * (cell + gap);
+      var ebx = ex + (cell - box) * 0.5;
+      ctx.strokeStyle = "rgba(239,230,212,0.35)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(ebx, r.y, box, box);
+      var afford = !nxt.locked && (game.player.capital || 0) >= nxt.cost;
+      ctx.font = textFace(13, "num");
+      ctx.fillStyle = afford ? PAPER : "#6e665c";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      var tag = nxt.locked ? "Locked" : S.money(nxt.cost);
+      ctx.fillText(clipText(ctx, textFace(13, "num"), tag, Math.max(8, box - 4)), ebx + box * 0.5, r.y + box * 0.5);
+      if (!nxt.locked && ui) pushHit(ui, "buy:" + nxt.item.id, ebx, r.y, box, box);
+    }
+    ctx.restore();
+  }
+
+  function drawShelfList(flow, game) {
+    var cap = (game.player && game.player.capital) || 0;
+    var i;
+    for (i = 0; i < D.ITEMS.length; i++) {
+      var item = D.ITEMS[i];
+      if ((game.mats[item.id] || 0) > 0) continue;
+      var cost = S.marketCost(game, item);
+      var locked = (game.player.level || 1) < item.level;
+      var price = locked ? ("Year " + item.level) : S.money(cost);
+      darkLine(flow, locked ? "" : ("buy:" + item.id), item.name, price, locked || cap < cost);
+    }
+  }
+
+function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
+    var spec = storySpec(game, now, false);
+    var closed = !spec.opened || spec.hours === "closed";
+    var key = closed ? "shopClosed" : phaseShopKey(spec);
+    var job = spec.job;
+    var cap = (game.player && game.player.shop) || (job && job.name) || ("Year " + (game.player.level || 1));
+    var second = secondSlotState(game);
+    var gap = 8;
+    var capH = h > 64 ? 16 : 0;
+    var photoH0 = Math.max(8, h - capH);
+    var sideW = 0;
+    var sidePhoto = 0;
+    if (second.show && w >= 168 && photoH0 >= 64) {
+      sidePhoto = Math.max(40, Math.round(photoH0 * 0.42 / 8) * 8);
+      sideW = Math.round(sidePhoto * 16 / 9);
+      if (sideW > w * 0.34) {
+        sideW = Math.floor(w * 0.34 / 8) * 8;
+        sidePhoto = Math.round(sideW * 9 / 16);
+      }
+      if (sideW < 48) sideW = 0;
+    }
+    var mainW = sideW ? w - sideW - gap : w;
+    if (ui) ui.shopPt = { x: x + mainW * 0.5, y: y + photoH0 * 0.5 };
+    var photoH = drawShopFrame(ctx, game, spec, key, x, y, mainW, h, cap, closed);
+    if (ui && ui.cust && ui.cust.t < 1 && photoH > 16) {
+      var u = ui.cust.t;
+      var alpha = u < 0.12 ? u / 0.12 : (u > 0.82 ? (1 - u) / 0.18 : 1);
+      var cx = x + 14 + Math.max(8, mainW - 28) * u;
+      var foot = y + photoH - 4;
+      ctx.save();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = PAPER;
+      ctx.beginPath();
+      ctx.arc(cx, foot - 14, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(cx - 3, foot - 10, 6, 10);
+      ctx.restore();
+    }
+    if (sideW) {
+      var sx = x + mainW + gap;
+      var secondH = sidePhoto + capH;
+      var sy = y + (h - secondH);
+      if (second.owned) drawShopFrame(ctx, game, spec, key, sx, sy, sideW, secondH, "Shop 2", closed);
+      else {
+        ctx.save();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#14110e";
+        ctx.fillRect(sx, sy, sideW, sidePhoto);
+        ctx.strokeStyle = "rgba(239,230,212,0.45)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(sx + 0.5, sy + 0.5, sideW - 1, sidePhoto - 1);
+        ctx.font = textFace(11, "body");
+        ctx.fillStyle = "#6e665c";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("Locked", sx + sideW * 0.5, sy + sidePhoto * 0.5);
+        if (capH) ctx.fillText("Slot 2", sx + sideW * 0.5, sy + sidePhoto + 8);
+        ctx.restore();
+      }
+    }
+  }
+
+
+  function drawEventCard(ctx, game, ui, hero, x, y, w, now) {
+    var pad = 16;
+    var railW = 8;
+    var narrow = w < 480;
+    var bodyFace = textFace(15, "body");
+    var photoH = narrow ? 104 : 120;
+    var photoW = narrow ? (w - pad * 2 - railW) : Math.round(photoH * 16 / 9);
+    if (!narrow && photoW > Math.floor(w * 0.4)) photoW = Math.floor(w * 0.4 / 8) * 8;
+    var textW = w - pad * 2 - railW - (narrow ? 0 : photoW + 8);
+    var lines = wrapLines(ctx, bodyFace, hero.line || "", Math.max(80, textW), 5);
+    var textH = 24 + lines.length * 22;
+    var topH = narrow ? (textH + photoH + 8) : Math.max(textH, photoH);
+    var inner = w - pad * 2 - railW;
+    var half = (inner - 8) / 2;
+    var mainM = hero.action ? choiceLines(ctx, hero.label, (narrow || !hero.alt) ? inner : half) : { h: 0, lines: [""] };
+    var altM = hero.alt ? choiceLines(ctx, hero.altLabel, narrow ? inner : half) : { h: 0, lines: [""] };
+    var ch = Math.max(mainM.h || 0, altM.h || 0);
+    var choicesH = 0;
+    if (hero.action && hero.alt) choicesH = narrow ? (ch * 2 + 8) : ch;
+    else if (hero.action) choicesH = ch;
+    var cardH = pad + topH + (choicesH ? 8 + choicesH : 0) + pad;
+    cardH = Math.ceil(cardH / 8) * 8;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    round(ctx, x, y, w, cardH, 2);
+    ctx.fillStyle = "#14110e";
+    ctx.fill();
+    ctx.fillStyle = hero.rail || LAMP;
+    ctx.fillRect(x, y + 2, railW, Math.max(8, cardH - 4));
+    if (hero.stamp) paintStamp(ctx, hero.stamp, x + railW + pad, y + pad, hero.rail || LAMP);
+    ctx.font = bodyFace;
+    ctx.fillStyle = PAPER;
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
+    var textY = y + pad + 16;
     var i;
-    for (i = 0; i < lines.length; i++) ctx.fillText(lines[i], x + 16, y + 26 + i * 22);
-    if (sceneW) drawMiniShop(ctx, game, ui, x + w - sceneW - 10, y + 10, sceneW, sceneH, now);
+    for (i = 0; i < lines.length; i++) ctx.fillText(lines[i], x + railW + pad, textY + i * 22);
+    var photoX = narrow ? (x + railW + pad) : (x + w - pad - photoW);
+    var photoY = narrow ? (textY + lines.length * 22 + 8) : (y + pad);
+    if (photoW > 16 && photoH > 16) drawMiniShop(ctx, game, ui, photoX, photoY, photoW, photoH, now);
     else if (ui) ui.shopPt = { x: x + w - 24, y: y + 28 };
-    var by = y + cardH - 42;
-    var gap = 8;
-    if (hero.alt) {
-      var bw = (w - 32 - gap) / 2;
-      drawChoice(ctx, ui, hero.action, x + 14, by, bw, 32, hero.label);
-      drawChoice(ctx, ui, hero.alt, x + 14 + bw + gap, by, bw, 32, hero.altLabel);
-    } else if (hero.action) {
-      drawChoice(ctx, ui, hero.action, x + 14, by, w - 28, 32, hero.label);
+    if (hero.action) {
+      var by = y + pad + topH + 8;
+      var bx = x + railW + pad;
+      if (hero.alt) {
+        if (narrow) {
+          chipControl(ctx, ui, hero.action, bx, by, inner, ch, mainM.lines, "lamp");
+          chipControl(ctx, ui, hero.alt, bx, by + ch + 8, inner, ch, altM.lines, "dark");
+        } else {
+          chipControl(ctx, ui, hero.action, bx, by, half, ch, mainM.lines, "lamp");
+          chipControl(ctx, ui, hero.alt, bx + half + 8, by, half, ch, altM.lines, "dark");
+        }
+      } else chipControl(ctx, ui, hero.action, bx, by, inner, ch, mainM.lines, "lamp");
     }
     ctx.restore();
     return cardH;
   }
 
-  function drawClicker(ctx, ui, game, x, y, w) {
-    var gap = 8;
-    var bw = (w - gap * 2) / 3;
+
+  function drawClicker(ctx, ui, game, hero, x, y, w) {
+    var bag = choiceBag(hero);
     var tutor = D.hobbyById.tutor;
-    drawChoice(ctx, ui, "shift", x, y, bw, 34, "Work the rush");
-    drawChoice(ctx, ui, "hobby", x + bw + gap, y, bw, 34, tutor ? tutor.name : "Tutor");
-    drawChoice(ctx, ui, "stock:0", x + (bw + gap) * 2, y, bw, 34, "Restock");
+    var items = [
+      { id: "shift", label: "Work the rush" },
+      { id: "hobby", label: tutor ? tutor.name : "Tutor" },
+      { id: "stock:0", label: "Restock" }
+    ];
+    var shown = [];
+    var i;
+    for (i = 0; i < items.length; i++) {
+      if (choiceRepeats(bag, items[i].id, items[i].label)) continue;
+      shown.push(items[i]);
+    }
+    if (!shown.length) return 0;
+    var gap = 8;
+    var bw = (w - gap * (shown.length - 1)) / shown.length;
+    var metrics = [];
+    var ch = 40;
+    for (i = 0; i < shown.length; i++) {
+      var block = choiceLines(ctx, shown[i].label, bw);
+      metrics.push(block);
+      if (block.h > ch) ch = block.h;
+    }
+    for (i = 0; i < shown.length; i++) {
+      chipControl(ctx, ui, shown[i].id, x + i * (bw + gap), y, bw, ch, metrics[i].lines, "paper");
+    }
+    return ch;
   }
+
 
   function drawIdleBar(ctx, game, ui, x, y, w, now) {
     var text = idleStatus(game, now);
-    var f = font(13, false, 600, true);
+    var f = textFace(13, "body");
     ctx.save();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = "rgba(20, 16, 14, 0.45)";
-    ctx.fillRect(x, y, w, 28);
+    ctx.fillStyle = "rgba(20, 16, 14, 0.55)";
+    ctx.fillRect(x, y, w, 32);
     ctx.font = f;
     ctx.fillStyle = PAPER;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(clipText(ctx, f, text, w - 16), x + 8, y + 14);
-    if (ui && ui.busy && ui.busy.key && ui.busy.t < 1) {
-      var e = 1 - Math.pow(1 - ui.busy.t, 3);
+    ctx.fillText(clipText(ctx, f, text, w - 16), x + 8, y + 16);
+    if (ui && ui.cust && ui.cust.t < 1) {
+      var e = 1 - Math.pow(1 - ui.cust.t, 3);
       var px = x + 8 + Math.max(12, w - 28) * e;
-      var alpha = ui.busy.t > 0.82 ? (1 - ui.busy.t) / 0.18 : 1;
+      var alpha = ui.cust.t > 0.82 ? (1 - ui.cust.t) / 0.18 : 1;
       ctx.globalAlpha = alpha;
       ctx.fillStyle = LAMP;
-      ctx.fillRect(px, y + 23, 10, 3);
+      ctx.fillRect(px, y + 26, 10, 3);
       ctx.globalAlpha = 1;
     }
     ctx.restore();
   }
+
 
   function drawLogPanel(ctx, game, ui, x, y, w, h) {
     var n = game.logN || 0;
@@ -6212,38 +6712,40 @@
     if ((ui.logScroll || 0) > maxBack) ui.logScroll = maxBack;
     if ((ui.logScroll || 0) < 0) ui.logScroll = 0;
     var back = ui.logPin === false ? (ui.logScroll || 0) : 0;
-    var body = font(14, false, 500, true);
-    var lineH = 20;
-    var room = Math.max(1, Math.floor((h - 30) / lineH));
+    var body = textFace(13, "body");
+    var lineH = 24;
+    var room = Math.max(1, Math.floor((h - 8) / lineH));
     if (room > 5) room = 5;
     var end = n - back;
     var from = Math.max(0, end - room);
     ctx.save();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = "rgba(20, 16, 14, 0.45)";
+    ctx.fillStyle = "rgba(20, 16, 14, 0.55)";
     ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = "rgba(239,230,212,0.28)";
-    ctx.strokeRect(x, y, w, h);
-    ctx.font = font(11, false, 700, true);
-    ctx.fillStyle = LAMP;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillText("LOG", x + 10, y + 8);
     if (!n) {
       ctx.font = body;
-      ctx.fillStyle = PAPER;
-      ctx.fillText("Empty.", x + 10, y + 28);
+      ctx.fillStyle = "#8a8178";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText("Quiet.", x + 8, y + Math.min(16, h * 0.5));
+      ctx.restore();
+      ui.logTop = y;
+      ui.logBot = y + h;
+      return;
     }
     var i;
     var row = 0;
     for (i = from; i < end && row < room; i++) {
       var text = readableLog(game, S.logLine(game, i) || "");
-      var fresh = i === n - 1 && back === 0 && (logAnim.t || 1) < 1;
+      var newest = i === n - 1 && back === 0;
+      var fresh = newest && (logAnim.t || 1) < 1;
       var enter = fresh ? (1 - easeOut(logAnim.t)) * 8 : 0;
       ctx.globalAlpha = fresh ? (0.4 + 0.6 * easeOut(logAnim.t)) : 1;
       ctx.font = body;
-      ctx.fillStyle = PAPER;
-      ctx.fillText(clipText(ctx, body, text, w - 20), x + 10, y + 28 + row * lineH + enter);
+      ctx.fillStyle = newest ? PAPER : "#8a8178";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(clipText(ctx, body, text, w - 16), x + 8, y + 12 + row * lineH + enter);
       row += 1;
     }
     ctx.restore();
@@ -6251,73 +6753,90 @@
     ui.logBot = y + h;
   }
 
+
   function drawIdentity(ctx, game, ui, L) {
-    var gear = 28;
-    var gearX = L.w - gear - 10;
-    var topH = Math.max(32, Math.min(40, L.header - 36));
-    var mid = topH * 0.5;
-    var gearY = Math.max(4, mid - gear * 0.5);
     var shown = ui.cashShown != null ? ui.cashShown : game.player.capital;
     var cash = S.money(shown);
-    var cashFont = font(L.w < 420 ? 16 : 20, false, 700, true);
-    var goal = S.nextSpend ? S.nextSpend(game) : null;
+    var narrow = L.w < 520;
+    var numSize = narrow ? 18 : 28;
+    var numFace = textFace(numSize, "num");
+    var yearFace = textFace(narrow ? 15 : 18, "body");
+    var goal = screenGoal(game);
+    var base = narrow ? 36 : 40;
+    var gear = 24;
+    var gearX = L.w - 16 - gear;
     ctx.save();
     ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.rect(0, 0, L.w, L.header);
+    ctx.clip();
+    var yearLabel = "Year ";
+    ctx.font = yearFace;
     ctx.fillStyle = PAPER;
-    ctx.fillRect(0, 0, L.w, L.header);
-    ctx.fillStyle = INK;
-    ctx.fillRect(0, L.header - 3, L.w, 3);
-    ctx.font = cashFont;
-    ctx.fillStyle = INK;
     ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    ctx.fillText("Year " + (game.player.level || 1), 14, mid);
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(yearLabel, 16, base);
+    var yearNum = String((game.player && game.player.level) || 1);
+    ctx.font = numFace;
+    ctx.fillStyle = ui.yearPop > 0 ? LAMP : PAPER;
+    ctx.fillText(yearNum, 16 + measure(ctx, yearFace, yearLabel), base);
+    ctx.font = numFace;
+    ctx.fillStyle = PAPER;
     ctx.textAlign = "right";
-    ui.cashX = gearX - 10 - measure(ctx, cashFont, cash) * 0.5;
-    ui.cashPt = { x: ui.cashX, y: mid };
-    ctx.fillText(cash, gearX - 10, mid);
+    var cashRight = gearX - 8;
+    var cashW = measure(ctx, numFace, cash);
+    ctx.fillText(cash, cashRight, base);
+    ui.cashX = cashRight - cashW * 0.5;
+    ui.cashPt = { x: ui.cashX, y: base - numSize * 0.35 };
     if (goal) {
-      var labelFont = font(12, false, 700, true);
+      var labelFace = textFace(13, "body");
       var price = goal.price || (goal.cost > 0 ? S.money(goal.cost) : "");
-      var priceW = price ? measure(ctx, labelFont, price) + 8 : 0;
-      var labelY = topH + (L.header - topH) * 0.34;
-      var barH = 6;
-      var barY = topH + (L.header - topH) * 0.68;
-      if (barY + barH > L.header - 6) barY = L.header - 6 - barH;
+      var priceFace = textFace(13, "num");
+      var trackX = 16;
+      var trackW = L.w - 32;
+      var trackH = 8;
+      var trackY = L.header - 16;
+      var labelY = trackY - 10;
       var fill = goal.cost > 0 ? shown / goal.cost : (goal.fill || 0);
       if (fill < 0) fill = 0;
       if (fill > 1) fill = 1;
-      ctx.font = labelFont;
-      ctx.fillStyle = INK;
+      ctx.font = labelFace;
+      ctx.fillStyle = PAPER;
       ctx.textAlign = "left";
-      ctx.textBaseline = "middle";
-      ctx.fillText(clipText(ctx, labelFont, goal.label || "", L.w - 28 - priceW), 14, labelY);
-      if (price) {
-        ctx.textAlign = "right";
-        ctx.fillText(price, L.w - 14, labelY);
-      }
-      var barW = L.w - 28;
-      ctx.fillStyle = "#d9cbb8";
-      ctx.fillRect(14, barY, barW, barH);
+      ctx.textBaseline = "alphabetic";
+      ctx.fillText(clipText(ctx, labelFace, goal.label || "", trackW), trackX, labelY);
+      round(ctx, trackX, trackY, trackW, trackH, 2);
+      ctx.fillStyle = "rgba(239,230,212,0.16)";
+      ctx.fill();
       if (fill > 0) {
+        ctx.save();
+        round(ctx, trackX, trackY, trackW, trackH, 2);
+        ctx.clip();
         ctx.fillStyle = LAMP;
-        ctx.fillRect(14, barY, Math.max(2, barW * fill), barH);
+        ctx.fillRect(trackX, trackY, Math.max(2, trackW * fill), trackH);
+        ctx.restore();
       }
-      ctx.strokeStyle = INK;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(14, barY, barW, barH);
+      if (price) {
+        ctx.font = priceFace;
+        ctx.fillStyle = fill > 0.72 ? INK : PAPER;
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        ctx.fillText(price, trackX + trackW - 8, trackY + trackH * 0.5);
+      }
     }
     ctx.restore();
-    roundButton(ctx, ui, "hdr:settings", gearX, gearY, gear, "gear", ui.menu === "settings");
+    roundButton(ctx, ui, "hdr:settings", gearX, Math.max(8, base - gear), gear, "gear", ui.menu === "settings");
   }
+
 
   function drawLifeBody(ctx, game, ui, L, now) {
     var hero = currentHero(game, now);
     var t = logAnim.offerT == null ? 1 : easeOut(logAnim.offerT);
-    var dy = (1 - t) * 14;
-    var x = 12;
-    var w = L.w - 24;
-    var y = L.header + 10 + dy;
+    var dy = (1 - t) * 8;
+    var box = lifeMeasure(L);
+    var x = box.x;
+    var w = box.w;
+    var y = L.header + 8 + dy;
     var floor = L.tabY - 8;
     ctx.save();
     ctx.shadowBlur = 0;
@@ -6325,23 +6844,22 @@
     var cardH = drawEventCard(ctx, game, ui, hero, x, y, w, now);
     y += cardH + 8;
     if (y + 40 <= floor) {
-      drawClicker(ctx, ui, game, x, y, w);
-      y += 42;
+      var clickH = drawClicker(ctx, ui, game, hero, x, y, w);
+      if (clickH) y += clickH + 8;
     }
     if (y + 32 <= floor) {
       drawIdleBar(ctx, game, ui, x, y, w, now);
-      y += 36;
+      y += 40;
     }
-    var lines = Math.min(5, Math.max(game.logN || 1, 1));
-    var want = 36 + lines * 20;
-    var logH = Math.min(Math.max(0, floor - y), want);
-    if (logH >= 52) drawLogPanel(ctx, game, ui, x, y, w, logH);
+    var logH = Math.min(Math.max(0, floor - y), 8 + 4 * 24);
+    if (logH >= 32) drawLogPanel(ctx, game, ui, x, y, w, logH);
     else {
       ui.logTop = null;
       ui.logBot = null;
     }
     ctx.restore();
   }
+
 
   function sheetTitle(which) {
     if (which === "job") return "Work";
@@ -6353,7 +6871,7 @@
   }
 
   function drawSheet(ctx, game, ui, L, which) {
-    if (which === "job" || which === "edu" || which === "scout" || which === "lab") {
+    if (which === "job" || which === "edu" || which === "scout" || which === "lab" || which === "settings" || which === "journal") {
       drawTabGround(ctx, game, ui, L, which);
       return;
     }
@@ -6462,16 +6980,8 @@
     ui.now = now;
     cashHeld = !!(ui && ui.cashHold != null);
     var dpr = ui.dpr || 1;
-    var ox = 0;
-    var oy = 0;
-    if (shakeLeft > 0) {
-      var bounce = [0, 1, -2, 2];
-      var mag = bounce[shakeLeft] || 0;
-      ox = mag;
-      oy = mag * 0.4;
-      shakeLeft -= 1;
-    }
-    ctx.setTransform(dpr, 0, 0, dpr, ox * dpr, oy * dpr);
+    if (shakeLeft > 0) shakeLeft = 0;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
     ui.hits.length = 0;
@@ -6481,7 +6991,10 @@
     ui.screenSlip = false;
     buttonTone = "";
     sheetLock = false;
-    ctx.fillStyle = "#1a2744";
+    var phaseNow = S.phaseAt(now);
+    var ground = phaseGround(phaseNow && phaseNow.id);
+    ui.ground = ground;
+    ctx.fillStyle = ground;
     ctx.fillRect(0, 0, w, h);
     var heatN = (game.player && game.player.heat) || 0;
     if (game.flags && game.flags.shady && heatN > 28) {
