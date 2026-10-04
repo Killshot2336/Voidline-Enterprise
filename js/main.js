@@ -47,6 +47,104 @@
     try { S.save(game, root.localStorage); } catch (err) { /* ignore quota */ }
   }
 
+  var audioCtx = null;
+
+  function queuePay(before, kind) {
+    if (ui.cashHold == null) ui.cashHold = before;
+    ui.payKind = kind || "small";
+  }
+
+  function unlockAudio(then) {
+    try {
+      var AC = root.AudioContext || root.webkitAudioContext;
+      if (!AC) return null;
+      if (!audioCtx) audioCtx = new AC();
+      if (audioCtx.state === "suspended" && audioCtx.resume) {
+        var pending = audioCtx.resume();
+        if (pending && pending.then) {
+          pending.then(function () { if (then) then(); }).catch(function () {});
+          return audioCtx;
+        }
+      }
+      if (then) then();
+      return audioCtx;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function blip(freq, dur, type, peak) {
+    try {
+      if (game.settings && game.settings.muted) return;
+      var ac = audioCtx;
+      if (!ac || ac.state === "suspended") return;
+      var osc = ac.createOscillator();
+      var gain = ac.createGain();
+      osc.type = type || "sine";
+      osc.frequency.setValueAtTime(freq, ac.currentTime);
+      gain.gain.setValueAtTime(peak == null ? 0.04 : peak, ac.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime + dur);
+      osc.connect(gain);
+      gain.connect(ac.destination);
+      osc.start();
+      osc.stop(ac.currentTime + dur + 0.02);
+    } catch (err) { /* audio must not break the game */ }
+  }
+
+  function chime() {
+    try {
+      if (game.settings && game.settings.muted) return;
+      var ac = audioCtx;
+      if (!ac || ac.state === "suspended") return;
+      var t = ac.currentTime;
+      var notes = [523, 784];
+      var i;
+      for (i = 0; i < notes.length; i++) {
+        var osc = ac.createOscillator();
+        var gain = ac.createGain();
+        var start = t + i * 0.07;
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(notes[i], start);
+        gain.gain.setValueAtTime(0.0001, start);
+        gain.gain.exponentialRampToValueAtTime(0.045, start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.16);
+        osc.connect(gain);
+        gain.connect(ac.destination);
+        osc.start(start);
+        osc.stop(start + 0.18);
+      }
+    } catch (err) { /* audio must not break the game */ }
+  }
+
+  function hearCoin() {
+    var ping = ui.coinPing || 0;
+    if (ping === (ui.heardPing || 0)) return;
+    ui.heardPing = ping;
+    blip(880, 0.09, "triangle", 0.05);
+  }
+
+  function degreeCount(gameState) {
+    var n = 0;
+    var k;
+    var bag = gameState.degrees || {};
+    for (k in bag) if (bag[k]) n += 1;
+    return n;
+  }
+
+  function hearClocks() {
+    var degN = degreeCount(game);
+    var scoutN = (game.scouts || []).length;
+    if (!ui.clockSeed) {
+      ui.seenDeg = degN;
+      ui.seenScouts = scoutN;
+      ui.clockSeed = true;
+      return;
+    }
+    if (degN > ui.seenDeg || scoutN < ui.seenScouts) chime();
+    ui.seenDeg = degN;
+    ui.seenScouts = scoutN;
+  }
+
   function toggleMenu(name) {
     if (ui.menu === name) {
       ui.menu = null;
@@ -106,9 +204,18 @@
       ui.lift = ui.lift === lifted ? "" : lifted;
       return;
     }
-    if (id === "shift") { S.workShift(game, now); return; }
-    if (id === "hobby") { S.workHobby(game, now); return; }
-    if (id.indexOf("hobby:") === 0) { S.workHobby(game, now, id.substring(6)); return; }
+    if (id === "shift") {
+      var beforeShift = game.player.capital;
+      var shift = S.workShift(game, now);
+      if (shift && shift.ok) queuePay(beforeShift, "shift");
+      return;
+    }
+    if (id === "hobby" || id.indexOf("hobby:") === 0) {
+      var beforeHobby = game.player.capital;
+      var hobby = id === "hobby" ? S.workHobby(game, now) : S.workHobby(game, now, id.substring(6));
+      if (hobby && hobby.ok) queuePay(beforeHobby, "small");
+      return;
+    }
     if (id === "room") { S.buyRoom(game); return; }
     if (id === "floor") { S.buyFloor(game); return; }
     if (id === "rentpay") { S.payRent(game); return; }
@@ -159,7 +266,12 @@
     if (id === "score") { S.score(game, now); return; }
     if (id === "rest") { S.rest(game, now); return; }
     if (id === "applicants") { S.rollResume(game); return; }
-    if (id.indexOf("stock:") === 0) { S.buyStock(game, Number(id.substring(6))); return; }
+    if (id.indexOf("stock:") === 0) {
+      var beforeStock = game.player.capital;
+      var stocked = S.buyStock(game, Number(id.substring(6)));
+      if (stocked && stocked.ok) queuePay(beforeStock, "small");
+      return;
+    }
     if (id.indexOf("fire:") === 0) { S.fire(game, Number(id.substring(5))); return; }
     if (id.indexOf("cam:") === 0) { S.installCamera(game, Number(id.substring(4))); return; }
     if (id.indexOf("focus:") === 0) { ui.focusSlot = Number(id.substring(6)); return; }
@@ -218,6 +330,11 @@
       resize();
       return;
     }
+    if (id === "opt:sound") {
+      game.settings.muted = !game.settings.muted;
+      game.rev += 1;
+      return;
+    }
     if (id === "reset") { ui.resetArm = true; return; }
     if (id === "reset:yes") {
       var keep = ui;
@@ -246,6 +363,7 @@
     canvas.setPointerCapture(e.pointerId);
     var p = pointerPos(e);
     var hit = R.hitTest(ui, p.x, p.y);
+    unlockAudio(hit ? function () { blip(640, 0.035, "square", 0.03); } : null);
     if (hit) ui.press = { id: hit.id, at: Date.now() };
     ui.drag = { x: p.x, y: p.y, sx: p.x, sy: p.y, scroll: ui.scroll, log: ui.logScroll, moved: false };
   });
@@ -361,6 +479,8 @@
       if (!ui.menu && ui.menuT < 0.015) ui.menuT = 0;
       R.tick(dt, game);
       ui.seenPulse = game.pulse;
+      hearCoin();
+      hearClocks();
       if (game.player.level > ui.seenLevel) R.shake(3);
       ui.seenLevel = game.player.level;
       document.body.classList.toggle("perf", !!game.settings.performanceMode);

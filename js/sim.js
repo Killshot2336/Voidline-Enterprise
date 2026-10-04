@@ -167,7 +167,7 @@
         heldUntil: 0,
         skills: { work: 0, mind: 0, hustle: 0, clout: 0 }
       },
-      settings: { highFX: true, fpsCap: 60, performanceMode: false },
+      settings: { highFX: true, fpsCap: 60, performanceMode: false, muted: false },
       log: new Array(D.LOG_CAP),
       logN: 0,
       logHead: 0,
@@ -223,6 +223,8 @@
 
   function ensureLife(game) {
     var p = game.player;
+    if (!game.settings) game.settings = { highFX: true, fpsCap: 60, performanceMode: false, muted: false };
+    if (game.settings.muted == null) game.settings.muted = false;
     if (!p.skills) p.skills = { work: 0, mind: 0, hustle: 0, clout: 0 };
     if (p.heat == null) p.heat = 0;
     if (p.heldUntil == null) p.heldUntil = 0;
@@ -2621,6 +2623,104 @@
     }
   }
 
+  function cheapestResume(game) {
+    var list = game.resumes || [];
+    var best = null;
+    var i;
+    for (i = 0; i < list.length; i++) {
+      var card = list[i];
+      if (!card || card.dying) continue;
+      var cost = card.floor > 0 ? card.floor : card.ask;
+      if (!(cost > 0)) continue;
+      if (!best || cost < best.cost) best = { name: card.name || "A hire", cost: cost };
+    }
+    return best;
+  }
+
+  function spendGoal(id, label, cost, fill, price) {
+    var c = cost > 0 ? cost : 0;
+    var f = fill == null ? (c > 0 ? 0 : 1) : fill;
+    if (f < 0) f = 0;
+    if (f > 1) f = 1;
+    return { id: id, label: label, cost: c, fill: f, price: price || "" };
+  }
+
+  function nextSpend(game) {
+    ensureLife(game);
+    var place = game.player.place;
+    var cap = game.player.capital || 0;
+    function moneyGoal(id, label, cost) {
+      var f = cost > 0 ? cap / cost : 1;
+      return spendGoal(id, label, cost, f, money(cost));
+    }
+    if (game.flags.opened) {
+      var slot = game.slots && game.slots[0];
+      var stock = slot ? (slot.stock || 0) : 0;
+      if (slot && stock <= 0) {
+        var n = D.STOCK_PACK;
+        var room = stockCap(game) - stock;
+        if (n > room) n = room;
+        if (n > 0) return moneyGoal("stock", "Restock", n * D.STOCK_PRICE);
+      } else if (slot && stock <= 2 && currentLifeId(game, game.lastReal || 0) === "thin") {
+        var n2 = D.STOCK_PACK;
+        var room2 = stockCap(game) - stock;
+        if (n2 > room2) n2 = room2;
+        if (n2 > 0) return moneyGoal("stock", "Restock", n2 * D.STOCK_PRICE);
+      }
+      if (game.world.spot === "upstairs" && shopOpen(game) && !slotEmployee(game)) {
+        var hire = cheapestResume(game);
+        if (hire) return moneyGoal("hire", "Hire " + hire.name, hire.cost);
+      }
+    }
+    if (!place.owned) return moneyGoal("room", "Rent the corner", D.ROOM.rent);
+    if (!place.lights) return moneyGoal("lights", "Warm lights", D.ROOM.lights);
+    if (!place.sign) return moneyGoal("sign", "Paint a sign", D.ROOM.sign);
+    if (!place.counter) return moneyGoal("counter", "Real counter", D.ROOM.counter);
+    var extras = [["plant", "Plant"], ["speaker", "Speaker"], ["neon", "Neon"], ["cooler", "Cooler"], ["safe", "Safe"]];
+    var best = null;
+    var i;
+    for (i = 0; i < extras.length; i++) {
+      var part = extras[i][0];
+      if (place[part]) continue;
+      var partCost = D.ROOM[part];
+      if (!best || partCost < best.cost) best = { id: part, label: extras[i][1], cost: partCost };
+    }
+    if (best) return moneyGoal(best.id, best.label, best.cost);
+    if (!game.world.floor) return moneyGoal("floor", "Buy the floor", D.ROOM.floor);
+    var ready = null;
+    var later = null;
+    for (i = 0; i < D.DEGREES.length; i++) {
+      var deg = D.DEGREES[i];
+      if (game.degrees[deg.id]) continue;
+      if (game.degree && game.degree.id === deg.id) continue;
+      if (!later) later = deg;
+      if (game.player.level >= deg.level) { ready = deg; break; }
+    }
+    if (ready) return moneyGoal("deg:" + ready.id, ready.name, ready.cost);
+    for (i = 0; i < D.JOBS.length; i++) {
+      var job = D.JOBS[i];
+      if (jobUnlocked(game, job)) continue;
+      var fill = 1;
+      var price = "";
+      if (game.player.level < job.level) {
+        fill = job.level > 0 ? (game.player.level || 0) / job.level : 0;
+        price = "Year " + job.level;
+      } else if (job.skill) {
+        var have = (game.player.skills && game.player.skills[job.skill]) || 0;
+        var need = job.skillNeed || 1;
+        fill = need > 0 ? have / need : 1;
+        price = need + " " + job.skill;
+      } else if (job.node && D.nodeById[job.node]) {
+        var vpCost = D.nodeById[job.node].cost || 1;
+        fill = (game.player.vp || 0) / vpCost;
+        price = vpCost + " VP";
+      }
+      return spendGoal("job:" + job.id, job.name, 0, fill, price);
+    }
+    if (later) return moneyGoal("deg:" + later.id, later.name, later.cost);
+    return spendGoal("clear", "The corner is set", 0, 1, "");
+  }
+
   function checkGoals(game) {
     ensureLife(game);
     var g = game.world.goals;
@@ -3125,7 +3225,8 @@
     var settings = {
       highFX: game.settings.highFX,
       fpsCap: game.settings.fpsCap,
-      performanceMode: game.settings.performanceMode
+      performanceMode: game.settings.performanceMode,
+      muted: !!game.settings.muted
     };
     var next = fresh(now);
     next.settings = settings;
@@ -3150,6 +3251,7 @@
     compRegular: compRegular,
     greetRegular: greetRegular,
     currentLifeId: currentLifeId,
+    nextSpend: nextSpend,
     seraWantId: seraWantId,
     lifeBeat: lifeBeat,
     skim: skim,
