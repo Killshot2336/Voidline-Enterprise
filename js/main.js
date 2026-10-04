@@ -271,8 +271,28 @@
     }
     if (id.indexOf("up:") === 0) { S.setUpstairs(game, id.substring(3)); return; }
     if (id === "sendup") { S.sendUpstairs(game); return; }
-    if (id === "hours:open") { S.setHours(game, "open", now); return; }
-    if (id === "hours:close") { S.setHours(game, "closed", now); return; }
+    if (id === "hours:open" || id === "door:open") { S.setDoor ? S.setDoor(game, true, now) : S.setHours(game, "open", now); return; }
+    if (id === "hours:close" || id === "door:close") { S.setDoor ? S.setDoor(game, false, now) : S.setHours(game, "closed", now); return; }
+    if (id === "clock:pause") { game.settings.clock = 0; game.rev += 1; return; }
+    if (id === "clock:1") { game.settings.clock = 1; game.rev += 1; return; }
+    if (id === "clock:2") { game.settings.clock = 2; game.rev += 1; return; }
+    if (id === "clock:sleep") {
+      var from = ui.presentAt || now;
+      var slept = S.sleepToMorning(game, from);
+      if (slept && slept.land) ui.presentAt = slept.land;
+      return;
+    }
+    if (id === "name:type") {
+      ui.naming = !ui.naming;
+      if (ui.naming) ui.nameBuf = "";
+      return;
+    }
+    if (id.indexOf("shop:open:") === 0) {
+      ui.focusSlot = Number(id.substring(10)) || 0;
+      ui.naming = false;
+      if (ui.menu !== "job") toggleMenu("job");
+      return;
+    }
     if (id.indexOf("stand:") === 0) { S.stand(game, id.substring(6)); return; }
     if (id === "rewind") {
       ui.rewind = ui.rewind ? 0 : 1;
@@ -380,6 +400,12 @@
       game.rev += 1;
       return;
     }
+    if (id === "opt:clock") {
+      var speed = game.settings.clock;
+      game.settings.clock = speed === 1 ? 2 : (speed === 2 ? 0 : 1);
+      game.rev += 1;
+      return;
+    }
     if (id === "reset") { ui.resetArm = true; return; }
     if (id === "reset:yes") {
       var keep = ui;
@@ -462,6 +488,32 @@
   canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
 
   root.addEventListener("keydown", function (e) {
+    if (ui.naming) {
+      if (e.key === "Escape") { ui.naming = false; ui.nameBuf = ""; return; }
+      if (e.key === "Enter") {
+        S.setShopName(game, ui.focusSlot || 0, ui.nameBuf || "");
+        ui.naming = false;
+        ui.nameBuf = "";
+        e.preventDefault();
+        return;
+      }
+      if (e.key === "Backspace") {
+        ui.nameBuf = String(ui.nameBuf || "").slice(0, -1);
+        e.preventDefault();
+        return;
+      }
+      if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        var ch = e.key;
+        var code = ch.charCodeAt(0);
+        if (code >= 32 && code !== 127) {
+          var next = String(ui.nameBuf || "") + ch;
+          if (next.length > 22) next = next.slice(0, 22);
+          ui.nameBuf = next;
+        }
+        e.preventDefault();
+      }
+      return;
+    }
     if (e.key === "Escape") { ui.menu = null; ui.look = ""; ui.lift = ""; return; }
     if (e.key === "1") toggleMenu("job");
     else if (e.key === "2") toggleMenu("edu");
@@ -506,6 +558,10 @@
       if (dt > 80) dt = 80;
       if (dt < 0) dt = 0;
       S.frame(game, now);
+      if (ui.presentAt == null) ui.presentAt = now;
+      var clock = game.settings && game.settings.clock;
+      if (clock !== 0 && clock !== 2) clock = 1;
+      if (clock > 0) ui.presentAt += dt * clock;
       S.advanceSlides(game, dt);
       if (R.settle) R.settle(ui, game, dt, now);
       if (ui.focusSlot >= game.slots.length) ui.focusSlot = 0;
