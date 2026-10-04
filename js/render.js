@@ -25,6 +25,7 @@
   var NIGHT = "#1a2744";
   var QUIET = "#5c3d6e";
   var frameGame = null;
+  var frameUi = null;
   var logAnim = { n: -1, head: -1, t: 1 };
   var pops = [];
   var seenCash = null;
@@ -367,8 +368,8 @@
   }
 
   function layout(w, h) {
-    var dock = h < 640 ? 64 : 72;
-    var header = h < 520 ? 80 : 96;
+    var dock = h < 640 ? 48 : 52;
+    var header = 40;
     return {
       w: w,
       h: h,
@@ -2399,8 +2400,26 @@
     ui.door = easeToward(ui.door || 0, doorTarget, dt, 380);
     var cash = game.player ? game.player.capital : 0;
     if (ui.cashShown == null) ui.cashShown = cash;
-    if (ui.cashHold != null) ui.cashShown = ui.cashHold;
-    else ui.cashShown = cash;
+    if (ui.cashHold != null && !ui.coin && !ui.payKind) ui.cashHold = null;
+    if (ui.cashHold != null) {
+      ui.cashShown = ui.cashHold;
+      ui.cashFrom = ui.cashHold;
+      ui.cashT = 0;
+    } else {
+      if (ui.cashGoal !== cash) {
+        ui.cashFrom = ui.cashShown;
+        ui.cashGoal = cash;
+        ui.cashT = 0;
+      }
+      if ((ui.cashT || 0) < 1) {
+        ui.cashT = (ui.cashT || 0) + (dt > 0 ? dt : 16) / 380;
+        if (ui.cashT > 1) ui.cashT = 1;
+      }
+      var cashEase = easeOut(ui.cashT == null ? 1 : ui.cashT);
+      var cashFrom = ui.cashFrom == null ? cash : ui.cashFrom;
+      ui.cashShown = cashFrom + (cash - cashFrom) * cashEase;
+      if (ui.cashT >= 1) ui.cashShown = cash;
+    }
     var level = (game.player && game.player.level) || 1;
     if (ui.yearSeen == null) ui.yearSeen = level;
     if (level !== ui.yearSeen) {
@@ -2419,6 +2438,9 @@
           ui.coin.landed = true;
           ui.cashHold = null;
           ui.cashShown = cash;
+          ui.cashFrom = cash;
+          ui.cashGoal = cash;
+          ui.cashT = 1;
           ui.coinPing = (ui.coinPing || 0) + 1;
         } else ui.coin = null;
       }
@@ -3287,45 +3309,54 @@
     sheetLock = false;
   }
 
+  function menuFilter(menu) {
+    if (menu === "job") return "shop";
+    if (menu === "edu") return "class";
+    if (menu === "scout") return "people";
+    if (menu === "lab") return "stuff";
+    return "";
+  }
+
   function drawDock(ctx, game, ui, L) {
     var items = [
-      { id: "tab:job", label: "Work", menu: "job", mark: "shop" },
-      { id: "tab:edu", label: "School", menu: "edu", mark: "cap" },
-      { id: "tab:scout", label: "People", menu: "scout", mark: "people" },
-      { id: "tab:lab", label: "Stuff", menu: "lab", mark: "box" }
+      { id: "tab:job", label: "Work", menu: "job" },
+      { id: "tab:edu", label: "School", menu: "edu" },
+      { id: "tab:scout", label: "People", menu: "scout" },
+      { id: "tab:lab", label: "Stuff", menu: "lab" }
     ];
-    var pad = 8;
-    var gap = 8;
     var y = L.tabY;
     var bh = L.h - y;
-    var backW = ui.menu ? 48 : 0;
-    var x0 = pad + (backW ? backW + gap : 0);
-    var bw = (L.w - x0 - pad - gap * (items.length - 1)) / items.length;
-    var degLeft = 0;
-    if (game.degree && game.degree.total) degLeft = game.degree.left / game.degree.total;
-    var scoutLeft = 0;
-    if (game.scouts && game.scouts.length && game.scouts[0].total) scoutLeft = game.scouts[0].left / game.scouts[0].total;
     var i;
     ctx.save();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = "#14110e";
-    ctx.fillRect(0, y, L.w, bh);
-    if (backW) {
-      var backHot = ui.hover === "close";
-      var backSink = pressSink(ui, "close");
-      ctx.font = textFace(11, "body");
-      ctx.fillStyle = backHot ? LAMP : "#8a8178";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("Back", pad + backW * 0.5, y + bh * 0.5 + backSink);
-      pushHit(ui, "close", pad, y, backW, bh);
-    }
+    ctx.strokeStyle = "rgba(239,230,212,0.18)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(16, y + 0.5);
+    ctx.lineTo(L.w - 16, y + 0.5);
+    ctx.stroke();
+    var face = textFace(15, "body");
+    ctx.font = face;
+    ctx.textBaseline = "middle";
+    var gap = 22;
+    var total = 0;
+    for (i = 0; i < items.length; i++) total += measure(ctx, face, items[i].label);
+    total += gap * (items.length - 1);
+    var x = Math.max(16, (L.w - total) * 0.5);
     for (i = 0; i < items.length; i++) {
       var item = items[i];
-      var clock = null;
-      if (item.menu === "edu" && game.degree) clock = degLeft;
-      if (item.menu === "lab" && game.scouts && game.scouts.length) clock = scoutLeft;
-      drawNavTab(ctx, ui, item.id, x0 + i * (bw + gap), y, bw, bh, item.label, ui.menu === item.menu, item.mark, clock);
+      var on = ui.menu === item.menu;
+      var tw = measure(ctx, face, item.label);
+      var sink = pressSink(ui, item.id);
+      ctx.fillStyle = on ? LAMP : "#b7b0a6";
+      ctx.textAlign = "left";
+      ctx.fillText(item.label, x, y + bh * 0.5 + sink);
+      if (on) {
+        ctx.fillStyle = LAMP;
+        ctx.fillRect(x, y + bh * 0.5 + 9, tw, 1.5);
+      }
+      pushHit(ui, item.id, x - 4, y, tw + 8, bh);
+      x += tw + gap;
     }
     ctx.restore();
     ctx.textAlign = "left";
@@ -5902,6 +5933,7 @@
         if (logAnim.offerT > 1) logAnim.offerT = 1;
       }
     }
+    if (frameUi && game) feedClock(frameUi, game, dt);
     if (logAnim.n !== game.logN || logAnim.head !== game.logHead) {
       if (logAnim.n < 0) logAnim.t = 1;
       else logAnim.t = 0;
@@ -6829,35 +6861,777 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
   }
 
 
-  function drawLifeBody(ctx, game, ui, L, now) {
-    var hero = currentHero(game, now);
-    var t = logAnim.offerT == null ? 1 : easeOut(logAnim.offerT);
-    var dy = (1 - t) * 8;
-    var box = lifeMeasure(L);
-    var x = box.x;
-    var w = box.w;
-    var y = L.header + 8 + dy;
-    var floor = L.tabY - 8;
+  function feedClock(ui, game, dt) {
+    if (!ui || !game) return;
+    if (!ui.feed) ui.feed = { n: -1, head: -1, t: 1, freshIndex: -1, hard: false, held: {} };
+    var f = ui.feed;
+    if (!f.held) f.held = {};
+    var n = game.logN || 0;
+    var head = game.logHead || 0;
+    if (f.n < 0) {
+      f.n = n;
+      f.head = head;
+      f.freshIndex = n - 1;
+      f.hard = n > 0 && /busted/i.test(S.logLine(game, n - 1) || "");
+      f.t = f.hard ? 1 : 0;
+    } else if (f.n !== n || f.head !== head) {
+      var newest = n > 0 ? (S.logLine(game, n - 1) || "") : "";
+      var prev = n > 1 ? (S.logLine(game, n - 2) || "") : "";
+      var newestVoice = S.dayVoice ? S.dayVoice(newest) : newest;
+      var prevVoice = S.dayVoice ? S.dayVoice(prev) : prev;
+      f.n = n;
+      f.head = head;
+      if (newestVoice && newestVoice === prevVoice) {
+        f.t = 1;
+      } else {
+        f.hard = /busted/i.test(newest);
+        f.freshIndex = n - 1;
+        f.t = f.hard ? 1 : 0;
+      }
+    } else if (f.t < 1) {
+      f.t += (dt > 0 ? dt : 16) / 420;
+      if (f.t > 1) f.t = 1;
+    }
+    if (f.t >= 1 && f.freshIndex >= 0) f.held[f.freshIndex] = 1;
+    if (ui.verdict && ui.verdict.t < 1) {
+      ui.verdict.t += (dt > 0 ? dt : 16) / 420;
+      if (ui.verdict.t > 1) ui.verdict.t = 1;
+    }
+  }
+
+  function pokeChoice(ui, game, id, now) {
+    if (!ui || !game || !id) return;
+    var hero = currentHero(game, now || Date.now());
+    if (!hero) return;
+    var taken = "";
+    var other = "";
+    if (hero.action === id) {
+      taken = hero.label || "";
+      other = hero.altLabel || "";
+    } else if (hero.alt === id) {
+      taken = hero.altLabel || "";
+      other = hero.label || "";
+    } else return;
+    ui.verdict = { text: hero.line || "", taken: taken, other: other, before: game.logN || 0, t: 0 };
+  }
+
+  function phaseMark(id) {
+    if (id === "morning") return "sun";
+    if (id === "lunch") return "noon";
+    if (id === "night") return "moon";
+    return "lamp";
+  }
+
+  function phaseInk(id, bust) {
+    if (bust) return "#8a8178";
+    if (id === "morning") return "#f6e2c4";
+    if (id === "night") return "#c5d0e4";
+    if (id === "evening") return "#f0d2c0";
+    return PAPER;
+  }
+
+  function phaseTint(id) {
+    if (id === "morning") return "rgba(240, 176, 96, 0.28)";
+    if (id === "evening") return "rgba(120, 52, 28, 0.25)";
+    if (id === "night") return "rgba(8, 12, 28, 0.22)";
+    return "";
+  }
+
+  function drawMark(ctx, kind, x, y) {
+    if (!kind) return;
     ctx.save();
     ctx.shadowBlur = 0;
-    ctx.globalAlpha = 0.25 + 0.75 * t;
-    var cardH = drawEventCard(ctx, game, ui, hero, x, y, w, now);
-    y += cardH + 8;
-    if (y + 40 <= floor) {
-      var clickH = drawClicker(ctx, ui, game, hero, x, y, w);
-      if (clickH) y += clickH + 8;
-    }
-    if (y + 32 <= floor) {
-      drawIdleBar(ctx, game, ui, x, y, w, now);
-      y += 40;
-    }
-    var logH = Math.min(Math.max(0, floor - y), 8 + 4 * 24);
-    if (logH >= 32) drawLogPanel(ctx, game, ui, x, y, w, logH);
-    else {
-      ui.logTop = null;
-      ui.logBot = null;
+    ctx.translate(x, y);
+    ctx.strokeStyle = PAPER;
+    ctx.fillStyle = PAPER;
+    ctx.lineWidth = 1.25;
+    ctx.lineCap = "round";
+    var i;
+    var a;
+    if (kind === "sun") {
+      ctx.beginPath();
+      ctx.arc(0, 0, 2.3, 0, Math.PI * 2);
+      ctx.fill();
+      for (i = 0; i < 8; i++) {
+        a = i * Math.PI / 4;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * 3.5, Math.sin(a) * 3.5);
+        ctx.lineTo(Math.cos(a) * 5.3, Math.sin(a) * 5.3);
+        ctx.stroke();
+      }
+    } else if (kind === "noon") {
+      ctx.beginPath();
+      ctx.arc(0, -1.5, 2.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-5, 4.2);
+      ctx.lineTo(5, 4.2);
+      ctx.stroke();
+    } else if (kind === "lamp") {
+      ctx.beginPath();
+      ctx.arc(0, -1.2, 2.8, Math.PI, 0);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-2.8, -1.2);
+      ctx.lineTo(-2.2, 1.6);
+      ctx.lineTo(2.2, 1.6);
+      ctx.lineTo(2.8, -1.2);
+      ctx.stroke();
+      ctx.fillRect(-1.1, 1.8, 2.2, 1.6);
+    } else if (kind === "moon") {
+      ctx.beginPath();
+      ctx.arc(-0.6, 0, 4, 0.7, 5.6);
+      ctx.arc(1.6, -0.8, 3.3, 4, 2.4, true);
+      ctx.fill();
+    } else if (kind === "coin") {
+      ctx.beginPath();
+      ctx.arc(0, 0, 4.6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.font = "700 8px " + MONO;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("$", 0, 0.4);
+    } else if (kind === "heat") {
+      ctx.beginPath();
+      ctx.moveTo(0, -5.2);
+      ctx.bezierCurveTo(3.4, -1.2, 3.6, 2.2, 0, 5);
+      ctx.bezierCurveTo(-3.6, 2.2, -3.4, -1.2, 0, -5.2);
+      ctx.fill();
+    } else if (kind === "lock") {
+      ctx.beginPath();
+      ctx.arc(0, -1.3, 2.3, Math.PI, 0);
+      ctx.stroke();
+      ctx.strokeRect(-3.1, -1.2, 6.2, 5);
     }
     ctx.restore();
+  }
+
+  function drawRing(ctx, x, y, r, sweep) {
+    var p = sweep;
+    if (p < 0) p = 0;
+    if (p > 1) p = 1;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(239,230,212,0.35)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    if (p > 0.01) {
+      ctx.beginPath();
+      ctx.arc(x, y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p);
+      ctx.strokeStyle = LAMP;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function feedLineH(line) {
+    var h = 34;
+    if (line.bust) return 58;
+    if (line.art) h = 68;
+    else if (line.portrait || line.object || line.notebook || line.crate || line.packs) h = 58;
+    if (line.choices && line.choices.length) h += 30;
+    return h;
+  }
+
+  function blankLine(text, extra) {
+    var line = {
+      text: text || "",
+      stamp: "",
+      phase: "",
+      art: "",
+      portrait: "",
+      object: "",
+      tags: ["day"],
+      money: null,
+      mark: "",
+      packs: 0,
+      notebook: false,
+      crate: false,
+      bust: false,
+      hire: false,
+      ring: null,
+      slot2: false,
+      choices: null,
+      lock: false,
+      fresh: false,
+      rawIndex: null,
+      verdict: false
+    };
+    var k;
+    extra = extra || {};
+    for (k in extra) if (Object.prototype.hasOwnProperty.call(extra, k)) line[k] = extra[k];
+    if (line.lock) line.mark = "lock";
+    else if (!line.mark && line.money != null) line.mark = "coin";
+    return line;
+  }
+
+  function choiceTags(hero) {
+    var blob = ((hero.action || "") + " " + (hero.alt || "") + " " + (hero.stamp || "") + " " + (hero.line || "")).toLowerCase();
+    var tags = [];
+    if (/sera|landlord|rentpay|rival|juniper|hire|greet|comp|truce|regular|favor|partner|look:/.test(blob)) tags.push("people");
+    if (/class|deg:|hobby|tutor|school|certificate/.test(blob)) tags.push("class");
+    if (/stock|upgrade:|buy:|cooler|plant|speaker|safe|room|floor|neon|bulb/.test(blob)) tags.push("stuff");
+    if (/shift|hours|shop|rush|morning|lunch|evening|night|work the|day one/.test(blob)) tags.push("shop");
+    if (!tags.length) tags.push("day");
+    return tags;
+  }
+
+  function choicePictures(hero, game, now) {
+    var stamp = String(hero.stamp || "").toUpperCase();
+    var act = (hero.action || "") + " " + (hero.alt || "");
+    var phase = S.phaseAt(now).id;
+    var art = "";
+    var portrait = "";
+    var object = "";
+    if (stamp === "MORNING") art = "shopMorning";
+    else if (stamp === "LUNCH") art = "shopNoon";
+    else if (stamp === "EVENING") art = "shopEvening";
+    else if (stamp === "NIGHT") art = "shopNight";
+    else if (stamp === "SLOW") art = "shopClosed";
+    if (stamp === "SERA" || stamp === "REGULAR" || stamp === "FAVOR") portrait = "sera";
+    if (stamp === "RENT") portrait = "landlord";
+    if (stamp === "RIVAL" || stamp === "TRUCE") portrait = "juniper";
+    if (stamp === "HIRE") portrait = "hire";
+    if (act.indexOf("upgrade:cooler") >= 0) object = "cooler";
+    else if (act.indexOf("upgrade:safe") >= 0) object = "safe";
+    else if (act.indexOf("upgrade:speaker") >= 0) object = "speaker";
+    else if (act.indexOf("upgrade:plant") >= 0) object = "plant";
+    else if (act.indexOf("upgrade:lights") >= 0) object = "bulb";
+    else if (act.indexOf("stock:") >= 0) object = "stock";
+    var held = game.player && game.player.heldUntil && now < game.player.heldUntil;
+    return {
+      art: art,
+      portrait: held ? "hire" : portrait,
+      object: object,
+      notebook: act.indexOf("class") >= 0 || act.indexOf("deg:") >= 0 || stamp === "CLASS",
+      crate: String(hero.line || "").toLowerCase().indexOf("scout") >= 0,
+      bust: !!held,
+      phase: art ? (stamp === "MORNING" ? "morning" : stamp === "LUNCH" ? "lunch" : stamp === "EVENING" ? "evening" : stamp === "NIGHT" ? "night" : phase) : (held ? "night" : ""),
+      slot2: !!(art && game.slots && game.slots.length > 1)
+    };
+  }
+
+  function heroLine(game, ui, now) {
+    var hero = currentHero(game, now);
+    if (!hero || !hero.line) return null;
+    if (ui && ui.verdict && ui.verdict.t < 1 && (game.logN || 0) > (ui.verdict.before || 0) && hero.line !== ui.verdict.text) return null;
+    var pics = choicePictures(hero, game, now);
+    var choices = [];
+    if (hero.action) choices.push({ id: hero.action, label: shortChoice(hero.label || hero.action) });
+    if (hero.alt) choices.push({ id: hero.alt, label: shortChoice(hero.altLabel || hero.alt) });
+    var text = hero.line;
+    var stamp = "";
+    if (pics.bust) {
+      text = "You're being held.";
+      stamp = "Busted";
+    }
+    var money = S.moneyIn ? S.moneyIn(hero.label || "") : null;
+    if (money == null && S.moneyIn) money = S.moneyIn(hero.altLabel || "");
+    var lock = money != null && (game.player.capital || 0) < money;
+    return blankLine(text, {
+      stamp: stamp,
+      phase: pics.phase,
+      art: pics.art,
+      portrait: pics.portrait,
+      object: pics.object,
+      notebook: pics.notebook,
+      crate: pics.crate,
+      bust: pics.bust,
+      slot2: pics.slot2,
+      tags: choiceTags(hero),
+      choices: choices,
+      money: money,
+      mark: pics.bust && (game.player.heat || 0) >= 45 ? "heat" : (lock ? "lock" : (money != null ? "coin" : phaseMark(pics.phase))),
+      lock: lock,
+      ring: pics.notebook ? 1 : null
+    });
+  }
+
+  function logLines(game, filter) {
+    var lines = [];
+    var n = game.logN || 0;
+    var i;
+    for (i = 0; i < n; i++) {
+      var raw = S.logLine(game, i) || "";
+      if (!S.describeLine) break;
+      var desc = S.describeLine(raw, game);
+      if (!desc.text) continue;
+      if (!game.flags || game.flags.chosen === false) {
+        if (/zero dollars/i.test(desc.voice || desc.text)) continue;
+      }
+      if (filter && desc.tags.indexOf(filter) < 0) continue;
+      if (lines.length && lines[lines.length - 1].text === desc.text) continue;
+      desc.rawIndex = i;
+      desc.choices = null;
+      desc.lock = desc.mark === "lock";
+      lines.push(desc);
+    }
+    return lines;
+  }
+
+  function hasAction(lines, id) {
+    var i;
+    var c;
+    for (i = 0; i < lines.length; i++) {
+      if (!lines[i].choices) continue;
+      for (c = 0; c < lines[i].choices.length; c++) if (lines[i].choices[c].id === id) return true;
+    }
+    return false;
+  }
+
+  function pushChoice(lines, text, id, extra) {
+    if (id && hasAction(lines, id)) return;
+    var choices = id ? [{ id: id, label: shortChoice((extra && extra.label) || text) }] : null;
+    var line = blankLine(text, extra || {});
+    line.choices = choices;
+    lines.push(line);
+  }
+
+  function standingLines(game, ui, now, filter, lines) {
+    var cap = (game.player && game.player.capital) || 0;
+    var phase = S.phaseAt(now);
+    if (filter === "shop") {
+      var packCost = D.STOCK_PACK * D.STOCK_PRICE;
+      pushChoice(lines, "A pack for the shelf is " + S.money(packCost) + ".", "stock:0", {
+        stamp: "Shop", tags: ["shop"], object: "stock", money: packCost, lock: cap < packCost, label: "Restock"
+      });
+      var shifted = false;
+      var si;
+      for (si = 0; si < lines.length; si++) if (String(lines[si].text || "").indexOf("shift paid") >= 0) shifted = true;
+      if (!shifted && !hasAction(lines, "shift")) {
+        pushChoice(lines, "The counter can take a shift.", "shift", { stamp: "Shop", tags: ["shop"], packs: 4, label: "Work the rush" });
+      }
+      var closed = game.world && game.world.hours === "closed";
+      pushChoice(lines, closed ? "The door is shut." : "The door is open.", closed ? "hours:open" : "hours:close", {
+        stamp: phase.name || "Shop",
+        tags: ["shop"],
+        phase: phase.id,
+        mark: phaseMark(phase.id),
+        label: closed ? "Stay open" : "Lock up"
+      });
+      var hi;
+      for (hi = 0; hi < D.HOBBIES.length; hi++) {
+        var hobby = D.HOBBIES[hi];
+        if (hobby.id === "tutor" || hobby.id === "nightclass") continue;
+        var openH = S.hobbyOpen(game, hobby);
+        if (!openH) continue;
+        pushChoice(lines, hobby.name + ". " + S.money(hobby.pay) + ".", "hobby:" + hobby.id, {
+          stamp: "Work", tags: ["shop"], money: hobby.pay, label: hobby.name
+        });
+      }
+    } else if (filter === "class") {
+      if (game.degree) {
+        var def = D.degreeById[game.degree.id];
+        var rest = game.degree.total ? (1 - game.degree.left / game.degree.total) : 0;
+        lines.push(blankLine((def ? def.name : "Class") + " has " + S.fmtMs(game.degree.left) + " left.", {
+          stamp: "Class", tags: ["class"], notebook: true, ring: rest
+        }));
+      }
+      var next = nextDegree(game);
+      if (next && !game.degree) {
+        pushChoice(lines, next.name + " is " + S.money(next.cost) + ".", "deg:" + next.id, {
+          stamp: "Class", tags: ["class"], notebook: true, ring: 1, money: next.cost, lock: cap < next.cost, label: next.name
+        });
+      }
+      var classCost = 10;
+      pushChoice(lines, "A night class is " + S.money(classCost) + ".", "class", {
+        stamp: "Class", tags: ["class"], notebook: true, ring: 1, money: classCost, lock: cap < classCost, label: "Night class"
+      });
+      var tutor = D.hobbyById.tutor;
+      if (tutor) pushChoice(lines, "Tutor a lesson. " + S.money(tutor.pay) + ".", "hobby:tutor", {
+        stamp: "Class", tags: ["class"], notebook: true, money: tutor.pay, label: "Tutor"
+      });
+    } else if (filter === "people") {
+      var cast = ["sera", "landlord", "juniper", "hire"];
+      var pi;
+      var any = false;
+      for (pi = 0; pi < cast.length; pi++) {
+        var who = cast[pi];
+        if (!personHere(game, who)) continue;
+        any = true;
+        var choice = personChoice(game, who, ui);
+        var busted = who === "hire" && choice && String(choice.line || "").indexOf("Busted") >= 0;
+        var price = choice && choice.price ? (S.moneyIn ? S.moneyIn(choice.price) : null) : null;
+        pushChoice(lines, busted ? "You're being held." : ((choice && choice.line) || personCaption(game, who, ui)), choice && choice.action && !choice.disabled ? choice.action : ("look:" + who), {
+          stamp: busted ? "Busted" : personCaption(game, who, ui),
+          tags: ["people"],
+          portrait: who,
+          bust: busted,
+          phase: busted ? "night" : "",
+          money: price,
+          lock: !!(choice && choice.disabled),
+          label: (choice && choice.label) || "Look"
+        });
+      }
+      if (!any) lines.push(blankLine("Nobody is at the counter.", { stamp: "People", tags: ["people"] }));
+      var resumes = game.resumes || [];
+      var ri;
+      for (ri = 0; ri < resumes.length; ri++) {
+        var card = resumes[ri];
+        pushChoice(lines, card.name + " asks " + S.money(card.ask) + ".", "resume:" + card.id, {
+          stamp: "Hire", tags: ["people"], portrait: "hire", money: card.ask, lock: cap < card.floor, label: card.name
+        });
+      }
+      var hired = false;
+      var slots = game.slots || [];
+      var si;
+      for (si = 0; si < slots.length; si++) if (slots[si].employee) hired = true;
+      if (!resumes.length && !hired) pushChoice(lines, "Somebody might want the counter.", "applicants", { stamp: "People", tags: ["people"], portrait: "hire", label: "Find people" });
+    } else if (filter === "stuff") {
+      var place = (game.player && game.player.place) || {};
+      if (!place.owned) {
+        pushChoice(lines, "The corner is " + S.money(D.ROOM.rent) + ".", "room", {
+          stamp: "Stuff", tags: ["stuff"], money: D.ROOM.rent, lock: cap < D.ROOM.rent, label: "Rent the corner"
+        });
+      }
+      var parts = [
+        ["lights", "bulb", "Warm lights"],
+        ["cooler", "cooler", "A cooler"],
+        ["safe", "safe", "A safe"],
+        ["speaker", "speaker", "A speaker"],
+        ["plant", "plant", "A plant"]
+      ];
+      var bi;
+      for (bi = 0; bi < parts.length; bi++) {
+        if (!place.owned || place[parts[bi][0]]) continue;
+        var cost = D.ROOM[parts[bi][0]];
+        pushChoice(lines, parts[bi][2] + " is " + S.money(cost) + ".", "upgrade:" + parts[bi][0], {
+          stamp: "Stuff", tags: ["stuff"], object: parts[bi][1], money: cost, lock: cap < cost, label: parts[bi][2]
+        });
+      }
+      if (game.world && game.world.scoutJust) {
+        lines.push(blankLine("A scout came back with a crate.", { stamp: "Scout", tags: ["stuff", "people"], crate: true }));
+      }
+      var ii;
+      var shown = 0;
+      for (ii = 0; ii < D.ITEMS.length && shown < 8; ii++) {
+        var item = D.ITEMS[ii];
+        if ((game.mats[item.id] || 0) > 0) continue;
+        if ((game.player.level || 1) < item.level) continue;
+        var itemCost = S.marketCost(game, item);
+        pushChoice(lines, item.name + " is " + S.money(itemCost) + ".", "buy:" + item.id, {
+          stamp: "Stuff", tags: ["stuff"], money: itemCost, lock: cap < itemCost, label: item.name
+        });
+        shown += 1;
+      }
+    }
+  }
+
+  function attachVerdict(lines, game, ui, now) {
+    if (!ui || !ui.verdict) return;
+    var hero = currentHero(game, now);
+    if (hero && hero.line === ui.verdict.text) {
+      ui.verdict = null;
+      return;
+    }
+    if ((game.logN || 0) <= (ui.verdict.before || 0)) return;
+    if (ui.verdict.t >= 1) return;
+    var found = null;
+    var i;
+    for (i = 0; i < lines.length; i++) {
+      if (lines[i].rawIndex == null || lines[i].rawIndex < ui.verdict.before) continue;
+      if (!found) found = lines[i];
+      if (lines[i].money != null) {
+        found = lines[i];
+        break;
+      }
+    }
+    if (!found) return;
+    var picks = [{ id: "", label: shortChoice(ui.verdict.taken || ""), taken: true }];
+    if (ui.verdict.other) picks.push({ id: "", label: shortChoice(ui.verdict.other), strike: true });
+    found.choices = picks;
+    found.verdict = true;
+  }
+
+  function collectFeed(game, ui, now, filter) {
+    var lines = logLines(game, filter);
+    attachVerdict(lines, game, ui, now);
+    var hero = heroLine(game, ui, now);
+    if (hero && (!filter || hero.tags.indexOf(filter) >= 0)) {
+      var last = lines[lines.length - 1];
+      if (last && last.text === hero.text) {
+        if (!last.choices) last.choices = hero.choices;
+        if (!last.art) last.art = hero.art;
+        if (!last.portrait) last.portrait = hero.portrait;
+        if (!last.object) last.object = hero.object;
+        last.bust = last.bust || hero.bust;
+        last.notebook = last.notebook || hero.notebook;
+        last.crate = last.crate || hero.crate;
+      } else lines.push(hero);
+    }
+    if (filter) standingLines(game, ui, now, filter, lines);
+    if (!lines.length) lines.push(blankLine("Quiet.", { stamp: filter === "class" ? "Class" : filter === "people" ? "People" : filter === "stuff" ? "Stuff" : filter === "shop" ? "Shop" : "Day" }));
+    return lines;
+  }
+
+  function feedWindow(lines, viewH, back) {
+    var end = lines.length - (back > 0 ? back : 0);
+    if (end < 1) end = 1;
+    if (end > lines.length) end = lines.length;
+    var used = 0;
+    var first = end;
+    var i = end - 1;
+    while (i >= 0) {
+      var h = feedLineH(lines[i]);
+      if (used + h > viewH && used > 0) break;
+      used += h;
+      first = i;
+      i -= 1;
+    }
+    return { first: first, end: end, used: used };
+  }
+
+  function paintPacks(ctx, x, y, leave) {
+    var i;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    for (i = 0; i < 4; i++) {
+      var gone = 0;
+      var start = i / 4;
+      var stop = (i + 1) / 4;
+      if (leave >= stop) gone = 1;
+      else if (leave > start) gone = (leave - start) / (stop - start);
+      ctx.globalAlpha = 1 - gone;
+      var px = x + i * 14 + gone * 16;
+      if (!blitContain(ctx, "stock", px, y, 12, 16)) {
+        ctx.fillStyle = "#c4b49a";
+        ctx.fillRect(px, y, 12, 16);
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = "rgba(239,230,212,0.55)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x, y + 20);
+    ctx.lineTo(x + 50, y + 20);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function paintLinePhoto(ctx, line, picX, picY, picW, picH, wipe) {
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.rect(picX, picY, Math.max(1, picW * wipe), picH);
+    ctx.clip();
+    var biasX = line.phase === "night" || line.phase === "morning" ? 0.22 : 0.35;
+    blitCover(ctx, line.art, picX, picY, picW, picH, biasX, 0.36);
+    var tint = phaseTint(line.phase);
+    if (tint) {
+      ctx.fillStyle = tint;
+      ctx.fillRect(picX, picY, picW, picH);
+    }
+    ctx.restore();
+    if (line.slot2) {
+      var sw = 34;
+      var sh = 24;
+      var sx = picX + picW + 6;
+      ctx.save();
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.rect(sx, picY + 10, Math.max(1, sw * wipe), sh);
+      ctx.clip();
+      blitCover(ctx, line.art, sx, picY + 10, sw, sh, 0.62, 0.4);
+      if (tint) {
+        ctx.fillStyle = tint;
+        ctx.fillRect(sx, picY + 10, sw, sh);
+      }
+      ctx.restore();
+    }
+  }
+
+  function drawFeedLine(ctx, ui, game, line, x, y, w, anim) {
+    var h = feedLineH(line);
+    var ease = anim.ease;
+    var hot = !!line.hot;
+    var wipe = line.bust ? 1 : (hot ? ease : 1);
+    var slide = (hot && line.portrait && !line.bust && !line.hire) ? (1 - ease) * 36 : 0;
+    var drop = (hot && line.object) ? (1 - ease) * -24 : 0;
+    var hireStep = (hot && line.hire && line.portrait) ? (1 - ease) * 28 : 0;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    var picW = 0;
+    if (line.art) picW = line.slot2 ? 168 : 128;
+    else if (line.portrait) picW = 36;
+    else if (line.object || line.notebook || line.crate) picW = 40;
+    else if (line.packs) picW = 56;
+    var textX = x + 28;
+    var textW = Math.max(48, w - 36 - (picW ? picW + 8 : 0));
+    var mark = line.lock ? "lock" : line.mark;
+    if (mark) drawMark(ctx, mark, x + 14, y + 16);
+    var ink = phaseInk(line.phase, line.bust);
+    var body = line.text || "";
+    if (line.bust) body = body.replace(/^Busted\.\s*/i, "");
+    var moneyT = (hot && line.money != null) ? ease : 1;
+    if (line.money != null && body.indexOf("$") >= 0) {
+      body = body.replace(/-?\$[\d,]+/, S.money(Math.round((line.money < 0 ? -1 : 1) * Math.abs(line.money) * moneyT)));
+    }
+    var face = textFace(14, "body");
+    ctx.font = face;
+    ctx.fillStyle = ink;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    var sentence = body;
+    if (line.stamp && body.toLowerCase().indexOf(String(line.stamp).toLowerCase()) !== 0) sentence = line.stamp + "   " + body;
+    if (line.bust) {
+      ctx.font = textFace(16, "title");
+      ctx.fillStyle = "#d7dbe6";
+      ctx.fillText("Busted", textX, y + 16);
+      ctx.font = face;
+      ctx.fillStyle = "#8a8178";
+      ctx.fillText(clipText(ctx, face, body, textW), textX, y + 36);
+    } else {
+      var textY = line.choices ? y + 16 : y + h * 0.5;
+      ctx.fillText(clipText(ctx, face, sentence, textW), textX, textY);
+    }
+    var picX = x + w - 10 - picW;
+    var picY = y + 6;
+    if (line.art && picW > 8) paintLinePhoto(ctx, line, picX, picY, line.slot2 ? 120 : picW, 52, wipe);
+    if (line.portrait && !line.art) {
+      ctx.save();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = line.bust ? 0.38 : 1;
+      var px = picX + slide + (line.hire ? hireStep : 0);
+      if (!blitContain(ctx, line.portrait, px, picY, 32, 46)) {
+        ctx.fillStyle = "#2a241c";
+        ctx.fillRect(px, picY, 32, 46);
+      }
+      ctx.restore();
+      if (ui && !line.bust) {
+        var who = line.portrait;
+        if (who === "sera" || who === "landlord" || who === "juniper" || who === "hire") pushHit(ui, "look:" + who, px, picY, 32, 46);
+      }
+    }
+    if (line.object && !line.art && !line.portrait) {
+      blitContain(ctx, line.object, picX, picY + 4 + drop, 36, 40);
+    }
+    if (line.notebook && !line.object) {
+      blitContain(ctx, "notebook", picX, picY, 28, 36);
+      var rest = line.ring == null ? 1 : line.ring;
+      var sweep = hot ? rest * ease : rest;
+      drawRing(ctx, picX + 14, picY + 44, 7, sweep);
+    }
+    if (line.crate && !line.object && !line.notebook) blitContain(ctx, "crate", picX, picY + 4, 36, 36);
+    if (line.packs && !line.art) {
+      var rush = anim.phase === "morning" || anim.phase === "lunch";
+      var leave = 0;
+      if (rush && (line.hot || line.packed)) leave = line.hot ? ease : 1;
+      paintPacks(ctx, picX, picY + 12, leave);
+    }
+    if (line.choices && line.choices.length) {
+      var cx = textX;
+      var cy = y + h - 12;
+      var ci;
+      var strike = line.verdict ? easeOut(anim.strike || 0) : 0;
+      for (ci = 0; ci < line.choices.length; ci++) {
+        var pick = line.choices[ci];
+        if (!pick.label) continue;
+        var fade = pick.strike ? (1 - strike) : 1;
+        if (fade < 0.02) continue;
+        ctx.globalAlpha = fade;
+        var pickFace = textFace(14, "title");
+        ctx.font = pickFace;
+        ctx.fillStyle = pick.taken ? LAMP : ink;
+        ctx.textBaseline = "middle";
+        ctx.fillText(pick.label, cx, cy);
+        var tw = measure(ctx, pickFace, pick.label);
+        if (pick.taken) {
+          ctx.fillStyle = LAMP;
+          ctx.fillRect(cx, cy + 7, tw, 1.5);
+        }
+        if (pick.strike && strike > 0.02) {
+          ctx.strokeStyle = ink;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + tw, cy);
+          ctx.stroke();
+        }
+        if (pick.id && ui) pushHit(ui, pick.id, cx - 2, cy - 12, Math.max(16, tw + 8), 22);
+        cx += tw + 16;
+        ctx.globalAlpha = 1;
+      }
+    }
+    ctx.restore();
+    return h;
+  }
+
+  function drawClockLine(ctx, game, ui, L, now) {
+    var phase = S.phaseAt(now);
+    var shown = ui.cashShown != null ? ui.cashShown : (game.player.capital || 0);
+    var cash = S.money(Math.round(shown));
+    var heat = (game.player && game.player.heat) || 0;
+    var mark = (game.flags && game.flags.shady && heat >= 45) ? "heat" : phaseMark(phase.id);
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.textBaseline = "middle";
+    var y = L.header * 0.5;
+    drawMark(ctx, mark, 16, y);
+    var gear = 22;
+    var gearX = L.w - 12 - gear;
+    var numFace = textFace(15, "num");
+    ctx.font = numFace;
+    var cashW = measure(ctx, numFace, cash);
+    var cashRight = gearX - 10;
+    ctx.fillStyle = phaseInk(phase.id, false);
+    ctx.textAlign = "right";
+    ctx.fillText(cash, cashRight, y);
+    ui.cashPt = { x: cashRight - cashW * 0.5, y: y };
+    ui.cashX = ui.cashPt.x;
+    var stampFace = textFace(15, "body");
+    ctx.font = stampFace;
+    ctx.textAlign = "left";
+    var stamp = S.clockLabel(now) + "   " + (phase.name || "");
+    var stampW = Math.max(40, cashRight - cashW - 36);
+    ctx.fillText(clipText(ctx, stampFace, stamp, stampW), 30, y);
+    ctx.restore();
+    roundButton(ctx, ui, "hdr:settings", gearX, Math.max(6, y - gear * 0.5), gear, "gear", ui.menu === "settings");
+  }
+
+  function drawFeed(ctx, game, ui, L, now, filter) {
+    frameUi = ui;
+    var lines = collectFeed(game, ui, now, filter);
+    var viewH = L.tabY - L.header;
+    var maxBack = Math.max(0, lines.length - 1);
+    if ((ui.logScroll || 0) > maxBack) ui.logScroll = maxBack;
+    if ((ui.logScroll || 0) < 0) ui.logScroll = 0;
+    var back = ui.logPin === false ? (ui.logScroll || 0) : 0;
+    var win = feedWindow(lines, viewH - 8, back);
+    var f = ui.feed || { t: 1, freshIndex: -1, hard: false, held: {} };
+    var ease = easeOut(f.t == null ? 1 : f.t);
+    var slam = f.hard ? 0 : (1 - ease) * 24;
+    var phase = S.phaseAt(now).id;
+    ui.logTop = L.header;
+    ui.logBot = L.tabY;
+    ui.clip = { x: 0, y: L.header, w: L.w, h: viewH };
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.rect(0, L.header, L.w, viewH);
+    ctx.clip();
+    var y = L.header + 4 + slam;
+    var i;
+    for (i = win.first; i < win.end; i++) {
+      var line = lines[i];
+      line.hot = line.rawIndex != null && line.rawIndex === f.freshIndex && !f.hard;
+      line.packed = !!(f.held && line.rawIndex != null && f.held[line.rawIndex]);
+      if (line.hot || (i === win.end - 1 && line.money != null)) {
+        ui.shopPt = { x: Math.min(L.w - 40, 72), y: y + 18 };
+      }
+      y += drawFeedLine(ctx, ui, game, line, 8, y, L.w - 16, {
+        ease: ease,
+        strike: ui.verdict ? ui.verdict.t : 1,
+        phase: phase
+      });
+    }
+    ctx.restore();
+    ui.clip = null;
+  }
+
+  function drawLifeBody(ctx, game, ui, L, now) {
+    drawFeed(ctx, game, ui, L, now, "");
   }
 
 
@@ -6871,7 +7645,8 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
   }
 
   function drawSheet(ctx, game, ui, L, which) {
-    if (which === "job" || which === "edu" || which === "scout" || which === "lab" || which === "settings" || which === "journal") {
+    if (which === "job" || which === "edu" || which === "scout" || which === "lab") return;
+    if (which === "settings" || which === "journal") {
       drawTabGround(ctx, game, ui, L, which);
       return;
     }
@@ -7005,9 +7780,11 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
     }
     var L = layout(w, h);
     ui.L = L;
-    drawIdentity(ctx, game, ui, L);
-    if (!ui.menu) drawLifeBody(ctx, game, ui, L, now);
-    if (ui.menu) drawMenu(ctx, game, ui, L);
+    frameUi = ui;
+    drawClockLine(ctx, game, ui, L, now);
+    var sheet = ui.menu === "settings" || ui.menu === "journal";
+    if (!sheet) drawFeed(ctx, game, ui, L, now, menuFilter(ui.menu));
+    if (sheet) drawMenu(ctx, game, ui, L);
     drawDock(ctx, game, ui, L);
     launchPay(ui, L);
     drawCoin(ctx, ui.coin);
@@ -7052,6 +7829,7 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
     tickParts: tickParts,
     tick: tick,
     settle: settle,
+    pokeChoice: pokeChoice,
     spawn: spawn,
     burst: burst,
     shake: shake,

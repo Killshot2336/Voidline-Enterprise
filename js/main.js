@@ -153,6 +153,8 @@
     } else {
       ui.menu = name;
       ui.scroll = 0;
+      ui.logScroll = 0;
+      ui.logPin = true;
       ui.pick = null;
       ui.resetArm = false;
     }
@@ -164,9 +166,14 @@
     return null;
   }
 
+  function feedMenu(menu) {
+    return menu === "job" || menu === "edu" || menu === "scout" || menu === "lab";
+  }
+
   function act(id) {
     var now = Date.now();
     if (!id) return;
+    if (R.pokeChoice) R.pokeChoice(ui, game, id, now);
     if (id === "shady") { toggleMenu("lab"); return; }
     if (id.indexOf("tab:") === 0) {
       toggleMenu(id.substring(4));
@@ -377,7 +384,7 @@
     var dy = p.y - ui.drag.sy;
     if (Math.abs(p.x - ui.drag.sx) + Math.abs(dy) > 8) ui.drag.moved = true;
     if (!ui.drag.moved) return;
-    if (ui.menu && p.y > (ui.L ? ui.L.header : 0) && p.y < (ui.L ? ui.L.tabY : ui.h)) ui.scroll = ui.drag.scroll - (p.y - ui.drag.sy);
+    if (ui.menu && !feedMenu(ui.menu) && p.y > (ui.L ? ui.L.header : 0) && p.y < (ui.L ? ui.L.tabY : ui.h)) ui.scroll = ui.drag.scroll - (p.y - ui.drag.sy);
     else if (ui.logTop != null && p.y >= ui.logTop && p.y <= ui.logBot) {
       ui.logPin = false;
       ui.logScroll = ui.drag.log + Math.round((ui.drag.sy - p.y) / 18);
@@ -406,7 +413,7 @@
 
   canvas.addEventListener("wheel", function (e) {
     var p = pointerPos(e);
-    if (ui.menu && ui.L && p.y > ui.L.header && p.y < ui.L.tabY) {
+    if (ui.menu && !feedMenu(ui.menu) && ui.L && p.y > ui.L.header && p.y < ui.L.tabY) {
       ui.scroll += e.deltaY;
       e.preventDefault();
       return;

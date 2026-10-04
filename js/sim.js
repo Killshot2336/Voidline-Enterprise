@@ -208,9 +208,173 @@
     game.mats.trainee = 1;
     game.mats.chalk = 1;
     game.mats.fryer = 1;
-    pushLog(game, "Academic rank 1. Levels award 1 Void Point.");
+    pushLog(game, "Year one. The drawer is empty.");
     pushLog(game, "You're broke. Zero dollars. Pick a shift or a hobby.");
     return game;
+  }
+
+  function moneyIn(text) {
+    var m = String(text || "").match(/-?\$[\d,]+/);
+    if (!m) return null;
+    var n = Number(m[0].replace(/[$,]/g, ""));
+    if (isNaN(n)) return null;
+    return n;
+  }
+
+  function dayVoice(text) {
+    var raw = String(text || "");
+    var low = raw.toLowerCase();
+    var body = raw.replace(/^[+!*]\s*/, "");
+    if (low.indexOf("academic rank") >= 0) return "Year one. The drawer is empty.";
+    if (low.indexOf("you're broke") >= 0 || low.indexOf("zero dollars") >= 0) return "Zero dollars. A shift pays, or a hobby does.";
+    if (low.indexOf("clock phase:") >= 0) {
+      return body.replace(/Clock phase:\s*/i, "").replace(/\.\s*Revenue x[\d.]+/i, ".").replace(/\s{2,}/g, " ").trim();
+    }
+    if (low.indexOf("shift closed") >= 0 || low.indexOf("the shift paid") >= 0) {
+      var paid = body.match(/\$[\d,]+/);
+      return paid ? ("The shift paid " + paid[0] + ".") : "The shift paid.";
+    }
+    if (low.indexOf("stock audit") >= 0 || low.indexOf("pack landed") >= 0) {
+      var cost = body.match(/\$[\d,]+/);
+      return cost ? ("A pack landed on the shelf. " + cost[0] + ".") : "A pack landed on the shelf.";
+    }
+    if (low.indexOf("next xp threshold") >= 0 || low.indexOf("academic xp") >= 0) return "The year turned.";
+    if (low.indexOf("life:") >= 0) return "";
+    if (low.indexOf("offline slot") >= 0) {
+      var net = body.match(/-?\$[\d,]+/);
+      return net ? ("The shop ran while you were out. " + net[0] + ".") : "The shop ran while you were out.";
+    }
+    if (low.indexOf("revenue x") >= 0) return body.replace(/\s*Revenue x[\d.]+/ig, "").replace(/\s{2,}/g, " ").trim();
+    if (low.indexOf("city note:") >= 0) return body.replace(/City note:\s*/i, "");
+    if (low.indexOf("audit: slot") >= 0) return "The shelf is empty.";
+    if (low.indexOf("catch-up") >= 0) {
+      var named = body.match(/[A-Z][a-z]+ [A-Z][a-z]+/);
+      return named ? (named[0] + " covered the quiet hours.") : "You were gone. The shop waited.";
+    }
+    return body;
+  }
+
+  function phaseVoice(game, phase) {
+    if (game) ensureLife(game);
+    var open = !!(game && game.flags && game.flags.opened) && shopOpen(game);
+    var id = phase && phase.id;
+    if (id === "morning") return open ? "Morning Rush. The street is already hungry." : "Morning Rush. The shop is still dark.";
+    if (id === "lunch") return open ? "Lunch Hour. Plates are moving." : "Lunch Hour. The counter is quiet.";
+    if (id === "evening") return open ? "Evening Trade. People are killing time." : "Evening Trade. The door is shut.";
+    if (id === "night") return open ? "Night Drift. Regulars and weirdos." : "Night Drift. The street is quiet.";
+    return open ? "Standard Watch. The shop can wait." : "Standard Watch. Nothing is selling.";
+  }
+
+  function describeLine(text, game) {
+    var voice = dayVoice(text);
+    var low = (String(text || "") + " " + voice).toLowerCase();
+    var phase = "";
+    var art = "";
+    if (low.indexOf("morning rush") >= 0) { phase = "morning"; art = "shopMorning"; }
+    else if (low.indexOf("lunch hour") >= 0) { phase = "lunch"; art = "shopNoon"; }
+    else if (low.indexOf("evening trade") >= 0) { phase = "evening"; art = "shopEvening"; }
+    else if (low.indexOf("night drift") >= 0) { phase = "night"; art = "shopNight"; }
+    else if (low.indexOf("standard watch") >= 0) { phase = "standard"; art = "shopNoon"; }
+    if (low.indexOf("still dark") >= 0 || low.indexOf("door is shut") >= 0 || low.indexOf("shop is closed") >= 0 || low.indexOf("nothing is selling") >= 0) {
+      art = art || "shopClosed";
+    }
+    var portrait = "";
+    var object = "";
+    if (!art) {
+      if (/\bsera\b/.test(low)) portrait = "sera";
+      else if (low.indexOf("landlord") >= 0) portrait = "landlord";
+      else if (low.indexOf("juniper") >= 0) portrait = "juniper";
+      else if (low.indexOf("register") >= 0 || low.indexOf("resume") >= 0 || low.indexOf("busted") >= 0) portrait = "hire";
+    }
+    if (low.indexOf("cooler") >= 0) object = "cooler";
+    else if (low.indexOf("safe") >= 0) object = "safe";
+    else if (low.indexOf("speaker") >= 0) object = "speaker";
+    else if (low.indexOf("plant") >= 0) object = "plant";
+    else if (low.indexOf("warm lights") >= 0 || low.indexOf("bulb") >= 0) object = "bulb";
+    else if (low.indexOf("pack") >= 0 || low.indexOf("shelf") >= 0 || low.indexOf("stock") >= 0) object = "stock";
+    var stamp = "";
+    var sentence = voice;
+    if (phase && voice.indexOf(". ") > 0) {
+      stamp = voice.split(". ")[0];
+      sentence = voice.slice(stamp.length + 2);
+    }
+    var tags = [];
+    var notebook = low.indexOf("night class") >= 0 || low.indexOf("degree") >= 0 || low.indexOf("certificate") >= 0 || low.indexOf("hobby paid") >= 0 || low.indexOf("tutor") >= 0;
+    var crate = low.indexOf("scout") >= 0;
+    var bust = low.indexOf("busted") >= 0;
+    var hire = low.indexOf("register") >= 0;
+    var packs = (low.indexOf("shift paid") >= 0) ? 4 : 0;
+    if (portrait || crate || low.indexOf("resume") >= 0 || bust || /\bregular\b/.test(low)) tags.push("people");
+    if (object && !packs) tags.push("stuff");
+    if (notebook) tags.push("class");
+    if (art || packs || low.indexOf("shift") >= 0 || low.indexOf("shop") >= 0 || low.indexOf("shelf") >= 0 || low.indexOf("took in") >= 0 || hire) tags.push("shop");
+    if (!tags.length) tags.push("day");
+    var money = moneyIn(sentence);
+    if (money == null) money = moneyIn(voice);
+    if (money == null) money = moneyIn(text);
+    var heatHigh = !!(game && game.player && (game.player.heat || 0) >= 45);
+    var lock = low.indexOf("not enough") >= 0 || low.indexOf("drawer is light") >= 0 || low.indexOf("still locked") >= 0;
+    var mark = "";
+    if (lock) mark = "lock";
+    else if ((low.indexOf("heat") >= 0 || bust) && heatHigh) mark = "heat";
+    else if (money != null) mark = "coin";
+    else if (phase === "morning") mark = "sun";
+    else if (phase === "lunch") mark = "noon";
+    else if (phase === "night") mark = "moon";
+    else if (phase === "evening" || phase === "standard") mark = "lamp";
+    var ring = null;
+    if (notebook) ring = 1;
+    return {
+      text: sentence,
+      voice: voice,
+      stamp: stamp,
+      phase: phase,
+      art: art,
+      portrait: portrait,
+      object: object,
+      tags: tags,
+      money: money,
+      mark: mark,
+      packs: packs,
+      notebook: notebook,
+      crate: crate,
+      bust: bust,
+      hire: hire,
+      ring: ring,
+      slot2: !!(art && game && game.slots && game.slots.length > 1)
+    };
+  }
+
+  function noteDay(game, now, snap) {
+    ensureLife(game);
+    var phase = phaseAt(now || game.lastReal || 0);
+    var w = game.world;
+    if (!w.dayNote) w.dayNote = {};
+    var note = w.dayNote;
+    if (snap && snap.phaseChanged && note.phase !== phase.id) {
+      note.phase = phase.id;
+      pushLog(game, phaseVoice(game, phase));
+    }
+    if (!snap) return note;
+    var slot = game.slots && game.slots[0];
+    var open = !!(game.flags && game.flags.opened) && shopOpen(game);
+    if (open && slot && snap.stock != null) {
+      var sold = snap.stock - slot.stock;
+      var earned = (game.player.capital || 0) - (snap.capital || 0);
+      if (sold > 0 && earned > 0 && note.earn !== phase.id) {
+        note.earn = phase.id;
+        pushLog(game, "The shop took in " + money(Math.round(earned)) + ".");
+      }
+      if (slot.stock > 0 && slot.stock <= 2 && note.thin !== phase.id) {
+        note.thin = phase.id;
+        pushLog(game, "The shelf is getting thin.");
+      }
+    }
+    if (hireAtRegister(game) && note.cover !== phase.id) {
+      note.cover = phase.id;
+      pushLog(game, hireName(game) + " has the register.");
+    }
+    return note;
   }
 
   var SEASONS = ["winter", "spring", "summer", "fall"];
@@ -1290,6 +1454,11 @@
     var phase = phaseAt(now);
     var phaseChanged = !game.booted || phase.id !== game.phaseId;
     if (phaseChanged) syncHours(game, phase.id);
+    var daySnap = {
+      stock: game.slots && game.slots[0] ? game.slots[0].stock : 0,
+      capital: game.player.capital,
+      phaseChanged: phaseChanged
+    };
     if (wall > 0) {
       applyWall(game, game.lastReal, now);
       if (game.flags.opened) {
@@ -1329,9 +1498,7 @@
       }
       tenantTick(game, phase.id);
       enqueuePhaseDue(game, now);
-      if (!blocked && !offerLife(game, now) && !game.world.showing) {
-        pushLog(game, "Clock phase: " + phase.name + ". Revenue x" + phase.revenue.toFixed(2) + ".");
-      }
+      if (!blocked) offerLife(game, now);
     }
     game.phaseId = phase.id;
     tickHireMood(game, phase.id);
@@ -1345,6 +1512,7 @@
     }
     if (game.fx && now < game.fx.visLockUntil) game.player.visibility = 100;
     game.booted = true;
+    noteDay(game, now, daySnap);
     return phase;
   }
 
@@ -1546,7 +1714,7 @@
       pushLog(game, "A crafted plate is on the counter.");
     }
     maybeLevel(game);
-    pushLog(game, "+ Shift closed. Paid " + money(pay) + ". Academic XP rose.");
+    pushLog(game, "+ The shift paid " + money(pay) + ".");
     if (gotRaise) pushLog(game, "+ The counter noticed. You got a raise.");
     noteUnlocks(game);
     checkGoals(game);
@@ -1605,7 +1773,7 @@
     game.player.capital -= cost;
     game.player.place.owned = true;
     if (!game.world.deed || game.world.deed === "") game.world.deed = "renting";
-    pushLog(game, "+ You rented the corner. It's yours to change.");
+    pushLog(game, "+ You rented the corner. " + money(cost) + ".");
     game.rev += 1;
     return { ok: true };
   }
@@ -1625,16 +1793,16 @@
     }
     game.player.capital -= cost;
     game.player.place[part] = 1;
-    if (part === "lights") pushLog(game, "+ Warm lights. The corner looks like a shop.");
+    if (part === "lights") pushLog(game, "+ Warm lights. The corner looks like a shop. " + money(cost) + ".");
     else if (part === "sign") {
-      pushLog(game, "+ A sign. People can find you.");
+      pushLog(game, "+ A sign. People can find you. " + money(cost) + ".");
       syncRivalSign(game);
-    } else if (part === "counter") pushLog(game, "+ A real counter. The folding table is gone.");
-    else if (part === "cooler") pushLog(game, "+ A cooler. The shelf keeps longer.");
-    else if (part === "safe") pushLog(game, "+ A safe. Losses land a little softer.");
-    else if (part === "speaker") pushLog(game, "+ A speaker. The room has a little more clout.");
-    else if (part === "plant") pushLog(game, "+ A plant. The shift feels less sharp.");
-    else pushLog(game, "+ Neon. Mostly for show.");
+    } else if (part === "counter") pushLog(game, "+ A real counter. The folding table is gone. " + money(cost) + ".");
+    else if (part === "cooler") pushLog(game, "+ A cooler. The shelf keeps longer. " + money(cost) + ".");
+    else if (part === "safe") pushLog(game, "+ A safe. Losses land a little softer. " + money(cost) + ".");
+    else if (part === "speaker") pushLog(game, "+ A speaker. The room has a little more clout. " + money(cost) + ".");
+    else if (part === "plant") pushLog(game, "+ A plant. The shift feels less sharp. " + money(cost) + ".");
+    else pushLog(game, "+ Neon. Mostly for show. " + money(cost) + ".");
     finishCard(game, "upgrade:" + part);
     game.rev += 1;
     return { ok: true };
@@ -1726,7 +1894,7 @@
     game.world.regularDue = false;
     finishCard(game, "comp");
     game.world.showing = "";
-    pushLog(game, "+ " + reg.name + " grins. You comped the meal.");
+    pushLog(game, "+ " + reg.name + " grins. You comped the meal. $4.");
     game.rev += 1;
     return { ok: true };
   }
@@ -1741,7 +1909,7 @@
     finishCard(game, "greet");
     game.world.showing = "";
     game.player.capital += 3;
-    pushLog(game, "+ " + reg.name + " paid full price and went quiet.");
+    pushLog(game, "+ " + reg.name + " paid full price. $3.");
     game.rev += 1;
     return { ok: true };
   }
@@ -1844,7 +2012,7 @@
     }
     game.player.capital -= cost;
     slot.stock += n;
-    pushLog(game, "Stock audit in: +" + n + " on slot " + (slotIndex + 1) + " for " + money(cost) + ".");
+    pushLog(game, "+ A pack landed on the shelf. " + money(cost) + ".");
     game.rev += 1;
     return { ok: true };
   }
@@ -2873,7 +3041,7 @@
     game.player.intelligence = clampStat(game.player.intelligence + 2);
     game.world.classYear = game.player.level;
     game.world.showing = "";
-    pushLog(game, "+ Night class. Intelligence ticked up.");
+    pushLog(game, "+ Night class. $10. Intelligence ticked up.");
     game.rev += 1;
     return { ok: true };
   }
@@ -3238,6 +3406,11 @@
     money: money,
     phaseAt: phaseAt,
     clockLabel: clockLabel,
+    dayVoice: dayVoice,
+    phaseVoice: phaseVoice,
+    describeLine: describeLine,
+    noteDay: noteDay,
+    moneyIn: moneyIn,
     fresh: fresh,
     frame: frame,
     workShift: workShift,
