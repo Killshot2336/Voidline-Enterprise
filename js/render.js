@@ -1660,100 +1660,313 @@
     darkLine(flow, "hdr:journal", "The book", "", false);
   }
 
+  function capFlow(flow) {
+    var max = 560;
+    if (flow.w > max) {
+      var extra = flow.w - max;
+      flow.x += Math.round(extra * 0.5);
+      flow.w = max;
+    }
+  }
+
+  function roomPartsOwned(place) {
+    var keys = ["lights", "sign", "counter", "cooler", "safe", "speaker", "plant", "neon"];
+    var i;
+    for (i = 0; i < keys.length; i++) if (!place[keys[i]]) return false;
+    return true;
+  }
+
+  function nextTreeNode(game) {
+    var shady = !!(game.flags && game.flags.shady);
+    var i;
+    for (i = 0; i < D.NODES.length; i++) {
+      var node = D.NODES[i];
+      if (game.nodes && game.nodes[node.id]) continue;
+      if (node.line === "shady" && !shady) continue;
+      if (node.requires && !(game.nodes && game.nodes[node.requires])) continue;
+      return node;
+    }
+    return null;
+  }
+
+  function nextJobOffer(game, slot) {
+    var locked = null;
+    var i;
+    for (i = 0; i < D.JOBS.length; i++) {
+      var spec = D.JOBS[i];
+      if (!slot || slot.jobId === spec.id) continue;
+      if (S.jobUnlocked(game, spec)) return { spec: spec, open: true };
+      if (!locked) locked = spec;
+    }
+    return locked ? { spec: locked, open: false } : null;
+  }
+
+  function nameCycleId(slot, focus) {
+    var names = ["The Corner"].concat(D.SHOPS || []);
+    var at = names.indexOf(slot && slot.name);
+    if (at < 0) at = 0;
+    return "name:" + focus + ":" + ((at + 1) % names.length);
+  }
+
+  function paintStripCell(ctx, ui, y, x, w, h, id, title, meta, dim, allow) {
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#14110e";
+    ctx.fillRect(x, y, w, h);
+    var titleFace = textFace(15, "title");
+    var lines = wrapLines(ctx, titleFace, title || "", Math.max(40, w - 12), 2);
+    ctx.font = titleFace;
+    ctx.fillStyle = PAPER;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(lines[0] || "", x + w * 0.5, y + (meta ? 26 : h * 0.5));
+    if (lines[1] && !meta) ctx.fillText(lines[1], x + w * 0.5, y + 46);
+    if (meta) {
+      var metaFace = textFace(15, "num");
+      ctx.font = metaFace;
+      ctx.fillStyle = dim ? "#6e665c" : LAMP;
+      ctx.fillText(clipText(ctx, metaFace, meta, Math.max(20, w - 12)), x + w * 0.5, y + h - 18);
+    }
+    ctx.restore();
+    if (id && ui && allow !== false) pushHit(ui, id, x, y, w, h);
+  }
+
+  function drawShopRoster(flow, game, ui, focus) {
+    var slots = game.slots || [];
+    var locked = (S.slotCap ? S.slotCap(game) : 1) < 2;
+    var n = slots.length + (locked ? 1 : 0);
+    if (!n) return;
+    var gap = 8;
+    var cell = Math.min(150, (flow.w - gap * (n - 1)) / n);
+    var rowW = cell * n + gap * (n - 1);
+    var x0 = flow.x + Math.max(0, (flow.w - rowW) * 0.5);
+    var photoH = Math.max(52, Math.round(cell * 9 / 16));
+    var r = row(flow, photoH + 28);
+    if (!r.on) return;
+    var ctx = flow.ctx;
+    var now = (ui && ui.now) || Date.now();
+    var key = shopArtNow(game, now, null);
+    var i;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    for (i = 0; i < slots.length; i++) {
+      var x = x0 + i * (cell + gap);
+      paintShopCard(ctx, game, key, x, r.y, cell, photoH, { camera: !!slots[i].camera });
+      if (i === focus) {
+        ctx.fillStyle = LAMP;
+        ctx.fillRect(x, r.y + photoH + 4, cell, 2);
+      }
+      var nameFace = textFace(15, "title");
+      ctx.font = nameFace;
+      ctx.fillStyle = i === focus ? PAPER : "#8a8178";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(clipText(ctx, nameFace, slots[i].name || ("Shop " + (i + 1)), cell - 4), x + cell * 0.5, r.y + photoH + 8);
+      if (ui) pushHit(ui, "focus:" + i, x, r.y, cell, photoH + 26);
+    }
+    if (locked) {
+      var lx = x0 + slots.length * (cell + gap);
+      var cost = D.degreeById && D.degreeById.bach ? D.degreeById.bach.cost : 0;
+      paintEmptyFrame(ctx, lx, r.y, cell, photoH, cost);
+      ctx.font = textFace(15, "body");
+      ctx.fillStyle = "#8a8178";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText("Second", lx + cell * 0.5, r.y + photoH + 8);
+    }
+    ctx.restore();
+  }
+
+  function drawShopHero(flow, game, ui, slot, focus, now) {
+    var place = (game.player && game.player.place) || {};
+    var key = shopArtNow(game, now, null);
+    var ph = Math.round(Math.min(200, Math.max(128, flow.w * 9 / 16)));
+    var r = row(flow, ph + 8);
+    if (!r.on) return;
+    var ctx = flow.ctx;
+    var name = slot.name || "The Corner";
+    var sub = "";
+    var dimSub = false;
+    var cap = (game.player && game.player.capital) || 0;
+    if (!place.owned) {
+      sub = "Rent  " + S.money(D.ROOM.rent);
+      dimSub = cap < D.ROOM.rent;
+    } else if (game.world && game.world.floor) sub = "The floor";
+    else if (roomPartsOwned(place)) {
+      sub = "Floor  " + S.money(D.ROOM.floor);
+      dimSub = cap < D.ROOM.floor;
+    }
+    paintShopCard(ctx, game, key, flow.x, r.y, flow.w, ph, {
+      camera: !!slot.camera,
+      name: name,
+      sub: sub,
+      dimSub: dimSub
+    });
+    if (!ui) return;
+    if (!place.owned) pushHit(ui, "room", flow.x, r.y, flow.w, ph);
+    else {
+      pushHit(ui, nameCycleId(slot, focus), flow.x, r.y + ph - 46, Math.round(flow.w * 0.62), 46);
+      if (!game.world.floor && roomPartsOwned(place)) pushHit(ui, "floor", flow.x + Math.round(flow.w * 0.62), r.y + ph - 46, flow.w - Math.round(flow.w * 0.62), 46);
+    }
+    if (!slot.camera && game.nodes && game.nodes.camera) {
+      var price = S.money(D.CAM_COST);
+      ctx.save();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = cap < D.CAM_COST ? 0.4 : 1;
+      ctx.font = textFace(15, "num");
+      ctx.fillStyle = LAMP;
+      ctx.textAlign = "right";
+      ctx.textBaseline = "top";
+      ctx.fillText(price, flow.x + flow.w - 10, r.y + 30);
+      ctx.restore();
+      pushHit(ui, "cam:" + focus, flow.x + flow.w - 88, r.y + 8, 80, 40);
+    }
+  }
+
+  function drawRoomGrid(flow, game, ui, place) {
+    var parts = [
+      ["lights", "Lights", "bulb"],
+      ["sign", "Sign", ""],
+      ["counter", "Counter", ""],
+      ["cooler", "Cooler", "cooler"],
+      ["safe", "Safe", "safe"],
+      ["speaker", "Speaker", "speaker"],
+      ["plant", "Plant", "plant"],
+      ["neon", "Neon", ""]
+    ];
+    var next = -1;
+    var i;
+    if (place.owned) {
+      for (i = 0; i < parts.length; i++) if (!place[parts[i][0]]) { next = i; break; }
+    }
+    var cols = 4;
+    var gap = 8;
+    var cellW = (flow.w - gap * (cols - 1)) / cols;
+    var cellH = 86;
+    var r = row(flow, cellH * 2 + gap);
+    if (!r.on) return;
+    var ctx = flow.ctx;
+    var cap = (game.player && game.player.capital) || 0;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    for (i = 0; i < parts.length; i++) {
+      var col = i % cols;
+      var rowi = (i / cols) | 0;
+      var x = flow.x + col * (cellW + gap);
+      var y = r.y + rowi * (cellH + gap);
+      var owned = !!place[parts[i][0]];
+      var isNext = i === next;
+      ctx.save();
+      ctx.globalAlpha = (owned || isNext) ? 1 : 0.32;
+      ctx.fillStyle = owned ? "#2a241c" : "#14110e";
+      ctx.fillRect(x, y, cellW, cellH);
+      if (owned) {
+        ctx.fillStyle = LAMP;
+        ctx.fillRect(x, y, cellW, 3);
+      }
+      var art = parts[i][2];
+      if (art) {
+        if (!blitCover(ctx, art, x + 6, y + 8, Math.max(8, cellW - 12), 34, 0.5, 0.45)) {
+          ctx.fillStyle = "#14110e";
+          ctx.fillRect(x + 6, y + 8, Math.max(8, cellW - 12), 34);
+        }
+      } else if (parts[i][0] === "sign") {
+        ctx.fillStyle = owned ? LAMP : "#3a342c";
+        ctx.fillRect(x + 8, y + 18, Math.max(8, cellW - 16), 10);
+      } else if (parts[i][0] === "counter") {
+        ctx.fillStyle = owned ? PAPER : "#3a342c";
+        ctx.fillRect(x + 8, y + 26, Math.max(8, cellW - 16), 7);
+      } else {
+        ctx.fillStyle = owned ? VIOLET : "#3a342c";
+        ctx.fillRect(x + 8, y + 20, Math.max(8, cellW - 16), 6);
+      }
+      var nameFace = textFace(15, "title");
+      ctx.font = nameFace;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      if (isNext) {
+        var cost = D.ROOM[parts[i][0]] || 0;
+        var afford = cap >= cost;
+        ctx.fillStyle = PAPER;
+        ctx.fillText(clipText(ctx, nameFace, parts[i][1], cellW - 4), x + cellW * 0.5, y + cellH - 28);
+        ctx.font = textFace(15, "num");
+        ctx.fillStyle = afford ? LAMP : "#6e665c";
+        ctx.fillText(S.money(cost), x + cellW * 0.5, y + cellH - 12);
+      } else {
+        ctx.fillStyle = owned ? PAPER : "#8a8178";
+        ctx.fillText(clipText(ctx, nameFace, parts[i][1], cellW - 4), x + cellW * 0.5, y + cellH - 14);
+      }
+      ctx.restore();
+      if (isNext && ui) pushHit(ui, "upgrade:" + parts[i][0], x, y, cellW, cellH);
+    }
+    ctx.restore();
+  }
+
+  function drawShopStrip(flow, game, ui, slot, focus) {
+    var gap = 8;
+    var bw = (flow.w - gap * 2) / 3;
+    var h = 84;
+    var r = row(flow, h);
+    if (!r.on) return;
+    var ctx = flow.ctx;
+    var cap = (game.player && game.player.capital) || 0;
+    var stock = slot.stock || 0;
+    var limit = S.stockCap(game);
+    var buyN = D.STOCK_PACK;
+    var room = limit - stock;
+    if (buyN > room) buyN = room;
+    var cost = buyN * D.STOCK_PRICE;
+    var stockMeta = buyN > 0 ? S.money(cost) : "Full";
+    paintStripCell(ctx, ui, r.y, flow.x, bw, h, buyN > 0 ? ("stock:" + focus) : "", "Stock " + stock + "/" + limit, stockMeta, buyN > 0 && cap < cost, buyN > 0);
+
+    var hx = flow.x + bw + gap;
+    if (slot.employee) {
+      var emp = slot.employee;
+      paintStripCell(ctx, ui, r.y, hx, bw, h, "fire:" + focus, emp.name, emp.caught ? "Busted" : S.money(emp.salary), !!emp.caught, true);
+    } else paintStripCell(ctx, ui, r.y, hx, bw, h, "applicants", "Hire", "Find someone", false, true);
+
+    var job = D.jobById[slot.jobId];
+    var offer = nextJobOffer(game, slot);
+    var jx = flow.x + (bw + gap) * 2;
+    var jobMeta = "This job";
+    var jobId = "";
+    var jobDim = false;
+    if (offer && offer.open) {
+      jobMeta = offer.spec.name;
+      jobId = "apply:" + focus + ":" + offer.spec.id;
+    } else if (offer) {
+      jobMeta = jobNeed(offer.spec);
+      jobDim = true;
+    }
+    paintStripCell(ctx, ui, r.y, jx, bw, h, jobId, job ? job.name : "Job", jobMeta, jobDim, !!jobId);
+  }
+
   function drawOccupation(flow, game, ui) {
+    capFlow(flow);
     var now = (ui && ui.now) || game.lastReal || Date.now();
     var slots = game.slots || [];
     var focus = ui && ui.focusSlot != null ? ui.focusSlot : 0;
     if (!slots[focus]) focus = 0;
     var slot = slots[focus] || null;
     var place = (game.player && game.player.place) || {};
-    darkTitle(flow, "Business");
-    darkLine(flow, "close", "Back", "Chat", false);
-    darkKicker(flow, "Shops");
-    var i;
-    for (i = 0; i < slots.length; i++) {
-      var one = slots[i];
-      var oneJob = D.jobById[one.jobId];
-      var oneName = one.name || (i === 0 ? "The Corner" : ("Shop " + (i + 1)));
-      darkLine(flow, "focus:" + i, oneName, i === focus ? "Here" : (oneJob ? oneJob.name : "Open"), false);
-    }
-    if (S.slotCap(game) < 2) darkNote(flow, "A second shop opens after Operations Bachelor or the Server Rack.");
+    darkLine(flow, "close", "Back", "", false);
+    drawShopRoster(flow, game, ui, focus);
     if (!slot) {
       darkNote(flow, "No shop on the books.");
       return;
     }
-    var job = D.jobById[slot.jobId];
-    darkKicker(flow, slot.name || "This shop");
-    drawShopStill(flow, game, now);
-    darkNote(flow, (job ? job.name : "No job") + ". Stock " + (slot.stock || 0) + "/" + S.stockCap(game) + ".");
-    if (slot.employee) {
-      darkNote(flow, slot.employee.name + " is on the clock at " + S.money(slot.employee.salary) + ".");
-      darkLine(flow, "fire:" + focus, "Let them go", S.money(slot.employee.salary), false);
-    } else {
-      darkNote(flow, "Nobody is on the clock.");
-      darkLine(flow, "applicants", "Hire", "Find someone", false);
+    drawShopHero(flow, game, ui, slot, focus, now);
+    drawRoomGrid(flow, game, ui, place);
+    drawShopStrip(flow, game, ui, slot, focus);
+    var node = nextTreeNode(game);
+    if (node) {
+      var afford = (game.player.vp || 0) >= node.cost;
+      darkLine(flow, "node:" + node.id, node.name, node.cost + " VP", !afford);
     }
-    var resumes = game.resumes || [];
-    for (i = 0; i < resumes.length; i++) {
-      var card = resumes[i];
-      var selected = ui && ui.selected === card.id;
-      darkLine(flow, "resume:" + card.id, card.name, S.money(card.ask), !!card.dying);
-      if (selected && !card.dying && ui) drawDarkKeypad(flow, ui);
-    }
-    var packCost = D.STOCK_PACK * D.STOCK_PRICE;
-    darkLine(flow, "stock:" + focus, "Restock", (slot.stock || 0) + "/" + S.stockCap(game) + "  ·  " + S.money(packCost), false);
-    darkLine(flow, slot.camera ? "" : ("cam:" + focus), slot.camera ? "Camera on" : "Camera", slot.camera ? "On" : S.money(D.CAM_COST), !!slot.camera);
-    var closed = game.world && game.world.hours === "closed";
-    darkLine(flow, closed ? "hours:open" : "hours:close", closed ? "The door is shut" : "The door is open", closed ? "Stay open" : "Lock up", false);
-    darkKicker(flow, "The room");
-    if (!place.owned) darkLine(flow, "room", "Rent the corner", S.money(D.ROOM.rent), false);
-    var parts = [
-      ["lights", "Lights"],
-      ["sign", "Sign"],
-      ["counter", "Counter"],
-      ["cooler", "Cooler"],
-      ["safe", "Safe"],
-      ["speaker", "Speaker"],
-      ["plant", "Plant"],
-      ["neon", "Neon"]
-    ];
-    for (i = 0; i < parts.length; i++) {
-      var part = parts[i][0];
-      var owned = !!place[part];
-      var cost = D.ROOM[part];
-      darkLine(flow, owned || !place.owned ? "" : ("upgrade:" + part), parts[i][1], owned ? "In" : S.money(cost), owned || !place.owned);
-    }
-    var floorOwned = !!(game.world && game.world.floor);
-    darkLine(flow, floorOwned || !place.owned ? "" : "floor", "The floor", floorOwned ? "Yours" : S.money(D.ROOM.floor), floorOwned || !place.owned);
-    darkKicker(flow, "The job");
-    var lockedShown = false;
-    for (i = 0; i < D.JOBS.length; i++) {
-      var spec = D.JOBS[i];
-      var openJob = S.jobUnlocked(game, spec);
-      var current = slot.jobId === spec.id;
-      if (!openJob) {
-        if (lockedShown) continue;
-        lockedShown = true;
-        darkLine(flow, "", spec.name, jobNeed(spec), true);
-        continue;
-      }
-      darkLine(flow, current ? "" : ("apply:" + focus + ":" + spec.id), spec.name, current ? "This job" : "Take it", current);
-    }
-    darkKicker(flow, "Name");
-    var names = ["The Corner"].concat(D.SHOPS || []);
-    for (i = 0; i < names.length; i++) {
-      var using = slot.name === names[i];
-      darkLine(flow, using ? "" : ("name:" + focus + ":" + i), names[i], using ? "Now" : "Call it this", using);
-    }
-    darkKicker(flow, "The shelf");
-    drawShelfList(flow, game);
-    drawBackRoom(flow, game, ui);
+    row(flow, 16);
   }
 
-
-
-
-  function drawKeypad(ctx, ui, x, y, w) {
+function drawKeypad(ctx, ui, x, y, w) {
     var plateH = 24 + 4 * 38 + 40;
     blitCover(ctx, "brass", x - 6, y - 4, w + 12, plateH);
     ctx.font = font(17, false, 700, true);
@@ -1776,35 +1989,32 @@
   }
 
   function drawEducation(flow, game, ui) {
-    darkTitle(flow, "School");
-    darkLine(flow, "close", "Back", "Chat", false);
+    capFlow(flow);
+    darkLine(flow, "close", "Back", "", false);
     drawSchoolClock(flow, game, ui);
     var next = nextDegree(game);
     if (next) {
       var afford = (game.player.capital || 0) >= next.cost;
-      darkLine(flow, "deg:" + next.id, next.name, S.money(next.cost), !afford);
-    } else if (!game.degree) darkNote(flow, "Nothing left to start.");
-    darkKicker(flow, "Classes");
-    drawDegreeRail(flow, game, ui);
-    var classCost = 10;
-    var schoolCap = (game.player && game.player.capital) || 0;
-    darkLine(flow, "class", "Night class", S.money(classCost), schoolCap < classCost);
-    var tutor = D.hobbyById.tutor;
-    if (tutor && S.hobbyOpen(game, tutor)) darkLine(flow, "hobby:tutor", "Tutor a lesson", S.money(tutor.pay), false);
-    if (D.GRADS && game.grad) {
-      var held = [];
-      var g;
-      for (g = 0; g < D.GRADS.length; g++) {
-        if (game.grad[D.GRADS[g].id]) held.push(D.GRADS[g].name);
-      }
-      if (held.length) darkNote(flow, "Graduated  ·  " + held.join(", "));
+      var locked = (game.player.level || 1) < next.level;
+      darkLine(flow, locked ? "" : ("deg:" + next.id), next.name, locked ? ("Year " + next.level) : S.money(next.cost), locked || !afford);
+      return;
     }
+    var hobby = null;
+    var i;
+    for (i = 0; i < D.HOBBIES.length; i++) {
+      var item = D.HOBBIES[i];
+      if (!(item.need > 0)) continue;
+      if (!S.hobbyOpen(game, item)) { hobby = item; break; }
+    }
+    if (hobby) {
+      darkLine(flow, "", hobby.name, (hobby.needSkill || hobby.skill) + " " + hobby.need, true);
+      return;
+    }
+    var classCost = 10;
+    darkLine(flow, "class", "Night class", S.money(classCost), (game.player.capital || 0) < classCost);
   }
 
-
-
-
-  function drawCrateGoods(flow, game) {
+function drawCrateGoods(flow, game) {
     var place = game.player.place || {};
     var slot = game.slots && game.slots[0];
     var goods = [
@@ -1963,140 +2173,133 @@
     ctx.textAlign = "left";
   }
 
-  function drawScouts(flow, game) {
-    var ui = flow.ui;
-    darkTitle(flow, "People");
-    darkLine(flow, "close", "Back", "Chat", false);
-    var cast = ["sera", "landlord", "juniper", "hire"];
-    var look = ui && ui.look;
-    if (!look || cast.indexOf(look) < 0) {
-      look = "sera";
-      var pick;
-      for (pick = 0; pick < cast.length; pick++) {
-        if (personHere(game, cast[pick])) { look = cast[pick]; break; }
-      }
-    }
-    var caught = null;
-    var hireIdx = hireSlot(game, ui);
-    var hireEmp = game.slots && game.slots[hireIdx] && game.slots[hireIdx].employee;
-    if (hireEmp && hireEmp.caught) caught = hireEmp;
-    var viewH = Math.max(220, flow.bottom - flow.top);
-    var ph = Math.min(320, Math.max(180, Math.floor(viewH * 0.42 / 8) * 8));
-    var pw = Math.round(ph * 0.32);
-    if (pw > flow.w - 16) {
-      pw = flow.w - 16;
-      ph = Math.round(pw / 0.32);
-    }
-    var hero = row(flow, ph + 32);
-    if (hero.on) {
-      var ctx = flow.ctx;
-      var px = flow.x + (flow.w - pw) * 0.5;
-      var busted = look === "hire" && !!caught;
-      ctx.save();
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = busted ? 0.35 : 1;
-      ctx.fillStyle = "#14110e";
-      ctx.fillRect(px, hero.y, pw, ph);
-      blitContain(ctx, look, px, hero.y, pw, ph);
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = "rgba(239,230,212,0.35)";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(px + 0.5, hero.y + 0.5, pw - 1, ph - 1);
-      ctx.font = textFace(15, "title");
-      ctx.fillStyle = busted ? "#6e665c" : PAPER;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      ctx.fillText(busted ? "Busted" : personCaption(game, look, ui), flow.x + flow.w * 0.5, hero.y + ph + 8);
-      ctx.restore();
-      if (ui) pushHit(ui, "look:" + look, px, hero.y, pw, ph + 28);
-    }
-    var choice = personChoice(game, look, ui);
-    if (choice && choice.action) {
-      var chip = row(flow, 48);
-      if (chip.on && ui) {
-        var words = choice.label || "";
-        if (choice.price) words += "  " + choice.price;
-        var lines = choiceLines(flow.ctx, words, flow.w);
-        if (choice.disabled) flow.ctx.globalAlpha = 0.5;
-        chipControl(flow.ctx, ui, choice.disabled ? "" : choice.action, flow.x, chip.y, flow.w, Math.max(40, lines.h), lines.lines, choice.disabled ? "dark" : "lamp");
-        flow.ctx.globalAlpha = 1;
-      }
-    } else if (choice && choice.line) darkNote(flow, choice.line);
-
-    var others = [];
-    var oi;
-    for (oi = 0; oi < cast.length; oi++) if (cast[oi] !== look) others.push(cast[oi]);
-    var small = row(flow, 104);
-    if (small.on) {
-      var gap = 8;
-      var bw = (flow.w - gap * (others.length - 1)) / others.length;
-      var ctx2 = flow.ctx;
-      ctx2.save();
-      ctx2.shadowBlur = 0;
-      for (oi = 0; oi < others.length; oi++) {
-        var who = others[oi];
-        var bx = flow.x + oi * (bw + gap);
-        var sph = 72;
-        var spw = Math.min(bw - 8, Math.round(sph * 0.32));
-        var sx = bx + (bw - spw) * 0.5;
-        var dim = who === "hire" && !!caught;
-        ctx2.globalAlpha = dim ? 0.35 : (personHere(game, who) ? 1 : 0.4);
-        ctx2.fillStyle = "#14110e";
-        ctx2.fillRect(sx, small.y, spw, sph);
-        blitContain(ctx2, who, sx, small.y, spw, sph);
-        ctx2.globalAlpha = 1;
-        ctx2.strokeStyle = "rgba(239,230,212,0.28)";
-        ctx2.strokeRect(sx + 0.5, small.y + 0.5, spw - 1, sph - 1);
-        ctx2.font = textFace(11, "body");
-        ctx2.fillStyle = dim ? "#6e665c" : PAPER;
-        ctx2.textAlign = "center";
-        ctx2.textBaseline = "top";
-        var capName = dim ? "Busted" : personCaption(game, who, ui);
-        ctx2.fillText(clipText(ctx2, textFace(11, "body"), capName, bw - 4), bx + bw * 0.5, small.y + sph + 6);
-        if (ui) pushHit(ui, "look:" + who, bx, small.y, bw, sph + 24);
-      }
-      ctx2.restore();
-    }
-
-    var slots = game.slots || [];
-    var showed = false;
+  function spokeWho(game) {
+    var id = S.currentLifeId ? (S.currentLifeId(game, game.lastReal || Date.now()) || "") : "";
+    if (id === "regular" || id === "sera_dark") return "sera";
+    if (id === "landlord") return "landlord";
+    if (id === "rival" || id === "rival_flip") return "juniper";
+    var n = game.logN || 0;
     var i;
-    var featuredFire = choice && choice.action && choice.action.indexOf("fire:") === 0 ? choice.action : "";
-    for (i = 0; i < slots.length; i++) {
-      var emp = slots[i].employee;
-      if (!emp) continue;
-      var fireId = "fire:" + i;
-      if (fireId === featuredFire) continue;
-      if (!showed) {
-        darkKicker(flow, "On the clock");
-        showed = true;
-      }
-      var meta = S.money(emp.salary);
-      if (emp.caught) meta = "Busted";
-      darkLine(flow, fireId, emp.name, meta, false);
+    for (i = n - 1; i >= 0 && i >= n - 6; i--) {
+      var raw = String(S.logLine(game, i) || "").toLowerCase();
+      if (raw.indexOf("landlord") >= 0 || raw.indexOf("rent is") >= 0) return "landlord";
+      if (raw.indexOf("juniper") >= 0 || raw.indexOf("rival") >= 0) return "juniper";
+      if (raw.indexOf("sera") >= 0 || raw.indexOf("regular") >= 0) return "sera";
+      if (raw.indexOf("busted") >= 0 || raw.indexOf("register") >= 0) return "hire";
     }
-    darkKicker(flow, "Asking");
-    var resumes = game.resumes || [];
-    if (!resumes.length) darkNote(flow, "Nobody's waiting.");
-    if (!choice || choice.action !== "applicants") darkLine(flow, "applicants", "Find people", "", false);
-    for (i = 0; i < resumes.length; i++) {
-      var card = resumes[i];
-      var selected = ui && ui.selected === card.id;
-      darkLine(flow, "resume:" + card.id, card.name, S.money(card.ask), !!card.dying);
-      if (selected && !card.dying && ui) drawDarkKeypad(flow, ui);
-    }
-    if (game.flags && game.flags.shady && (game.player.heat || 0) > 0) darkNote(flow, "Heat " + Math.round(game.player.heat));
-    var reg = game.world && game.world.regular;
-    if (reg && reg.name && reg.mood != null && look !== "sera") darkNote(flow, reg.name + " mood " + reg.mood);
-    if (game.world && game.world.rival && look !== "juniper") darkNote(flow, game.world.rival);
-    darkKicker(flow, "Send someone");
-    drawScoutLines(flow, game);
+    var w = game.world || {};
+    if (w.rentDue > 0) return "landlord";
+    if (w.regular && w.regularDue) return "sera";
+    if (w.rival && !w.truce) return "juniper";
+    var slots = game.slots || [];
+    for (i = 0; i < slots.length; i++) if (slots[i].employee) return "hire";
+    if ((game.resumes || []).length) return "hire";
+    return "";
   }
 
+  function peopleFact(game, who) {
+    var w = game.world || {};
+    if (who === "sera" && w.regular) {
+      return (w.regular.name || "Sera") + "  ·  mood " + (w.regular.mood == null ? 0 : w.regular.mood) + "  ·  visits " + (w.regular.visits || 0);
+    }
+    if (who === "landlord") {
+      if ((w.behind || 0) > 0 && w.rentDue > 0) return "Rent is late. Rent is " + S.money(w.rentDue) + ".";
+      if (w.rentDue > 0) return "Rent is " + S.money(w.rentDue) + ".";
+      return "The building is quiet.";
+    }
+    if (who === "juniper") {
+      if (w.thin && w.thin.line) return w.thin.line;
+      if (w.rival) return w.rival + (w.truce ? ". The truce is holding." : " is across the street.");
+    }
+    if (who === "hire") {
+      var emp = null;
+      var slots = game.slots || [];
+      var i;
+      for (i = 0; i < slots.length; i++) if (slots[i].employee) { emp = slots[i].employee; break; }
+      if (emp && emp.caught) return "You're being held.";
+      if (emp) return emp.name + "  ·  " + S.money(emp.salary);
+    }
+    return "Nobody is at the counter.";
+  }
 
+  function drawFaceLine(flow, text, lamp) {
+    var face = textFace(15, "body");
+    var lines = wrapLines(flow.ctx, face, text || "", flow.w, 3);
+    var i;
+    for (i = 0; i < lines.length; i++) {
+      var r = row(flow, 22);
+      if (!r.on) continue;
+      var ctx = flow.ctx;
+      ctx.save();
+      ctx.shadowBlur = 0;
+      ctx.font = face;
+      ctx.fillStyle = lamp ? LAMP : PAPER;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(lines[i], flow.x + flow.w * 0.5, r.y + 11);
+      ctx.restore();
+    }
+  }
 
+  function drawScouts(flow, game) {
+    var ui = flow.ui;
+    capFlow(flow);
+    darkLine(flow, "close", "Back", "", false);
+    var cast = ["sera", "landlord", "juniper", "hire"];
+    var look = ui && ui.look;
+    if (!look || cast.indexOf(look) < 0) look = spokeWho(game);
+    var viewH = Math.max(240, flow.bottom - flow.top);
+    var ph = Math.min(400, Math.max(240, Math.floor(viewH * 0.5)));
+    var pw = Math.round(ph * 318 / 1088);
+    if (pw > flow.w - 8) {
+      pw = flow.w - 8;
+      ph = Math.round(pw * 1088 / 318);
+    }
+    var hireIdx = hireSlot(game, ui);
+    var emp = game.slots && game.slots[hireIdx] && game.slots[hireIdx].employee;
+    var busted = look === "hire" && !!(emp && emp.caught);
+    if (look) {
+      var hero = row(flow, ph + 8);
+      if (hero.on) {
+        var ctx = flow.ctx;
+        var px = flow.x + (flow.w - pw) * 0.5;
+        ctx.save();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#14110e";
+        ctx.fillRect(px, hero.y, pw, ph);
+        paintFigure(ctx, look, px, hero.y, pw, ph, busted ? 0.4 : 1, 0);
+        ctx.restore();
+      }
+    }
+    drawFaceLine(flow, busted ? "Busted" : (look ? personCaption(game, look, ui) : "Nobody"), busted);
+    var fact = look ? peopleFact(game, look) : "Nobody is at the counter.";
+    if (fact) drawFaceLine(flow, fact, false);
+    var choice = look ? personChoice(game, look, ui) : null;
+    if (choice && choice.action) {
+      var words = choice.label || "Choose";
+      if (choice.price) words += "  " + choice.price;
+      var lines = choiceLines(flow.ctx, words, flow.w);
+      var chip = row(flow, Math.max(48, lines.h) + 8);
+      if (chip.on) {
+        chipControl(flow.ctx, ui, choice.disabled ? "" : choice.action, flow.x, chip.y, flow.w, Math.max(48, lines.h), lines.lines, choice.disabled ? "dim" : "lamp");
+      }
+    } else if (!look || !choice || !choice.action) {
+      var find = choiceLines(flow.ctx, "Find people", flow.w);
+      var chip2 = row(flow, find.h + 8);
+      if (chip2.on && (!choice || choice.action !== "applicants")) chipControl(flow.ctx, ui, "applicants", flow.x, chip2.y, flow.w, find.h, find.lines, "lamp");
+    }
+    if (look === "hire" && !emp) {
+      var resumes = game.resumes || [];
+      if (resumes.length) {
+        var card = resumes[0];
+        var selected = ui && ui.selected === card.id;
+        darkLine(flow, "resume:" + card.id, card.name, S.money(card.ask), (game.player.capital || 0) < (card.floor || 0));
+        if (selected && !card.dying && ui) drawDarkKeypad(flow, ui);
+      }
+    }
+  }
 
-  function uiOf(flow) {
+function uiOf(flow) {
     return flow.ui;
   }
 
@@ -2509,6 +2712,7 @@
       ui.yearPop -= (dt > 0 ? dt : 16) / 280;
       if (ui.yearPop < 0) ui.yearPop = 0;
     }
+    stepShelf(ui, game, dt);
     if (ui.coin) {
       ui.coin.t += dt > 0 ? dt : 16;
       if (ui.coin.t >= ui.coin.dur) {
@@ -3396,6 +3600,24 @@
     return "";
   }
 
+  function businessAnswers(game) {
+    var slot = game.slots && game.slots[0];
+    var open = !!(game.flags && game.flags.opened) && !(game.world && game.world.hours === "closed");
+    return !!(open && slot && (slot.stock || 0) <= 0);
+  }
+
+  function peopleAnswers(game) {
+    var w = game.world || {};
+    if (w.rentDue > 0) return true;
+    if (w.regular && w.regularDue) return true;
+    if (w.rival && !w.truce) return true;
+    if ((game.resumes || []).length) return true;
+    var slots = game.slots || [];
+    var i;
+    for (i = 0; i < slots.length; i++) if (slots[i].employee && slots[i].employee.caught) return true;
+    return false;
+  }
+
   function drawDock(ctx, game, ui, L) {
     var items = [
       { id: "tab:chat", label: "Chat", menu: "" },
@@ -3408,12 +3630,6 @@
     var i;
     ctx.save();
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = "rgba(239,230,212,0.18)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(16, y + 0.5);
-    ctx.lineTo(L.w - 16, y + 0.5);
-    ctx.stroke();
     var face = textFace(15, "body");
     ctx.font = face;
     ctx.textBaseline = "middle";
@@ -3427,12 +3643,19 @@
       var on = item.menu ? ui.menu === item.menu : !ui.menu;
       var tw = measure(ctx, face, item.label);
       var sink = pressSink(ui, item.id);
-      ctx.fillStyle = on ? LAMP : "#b7b0a6";
+      ctx.fillStyle = on ? LAMP : "#5e584e";
       ctx.textAlign = "left";
       ctx.fillText(item.label, x, y + bh * 0.5 + sink);
       if (on) {
         ctx.fillStyle = LAMP;
-        ctx.fillRect(x, y + bh * 0.5 + 9, tw, 1.5);
+        ctx.fillRect(x, y + bh * 0.5 + 10 + sink, tw, 2);
+      }
+      var alert = (!on) && ((item.menu === "job" && businessAnswers(game)) || (item.menu === "scout" && peopleAnswers(game)));
+      if (alert) {
+        ctx.fillStyle = LAMP;
+        ctx.beginPath();
+        ctx.arc(x + tw + 7, y + bh * 0.5 - 7, 3, 0, Math.PI * 2);
+        ctx.fill();
       }
       pushHit(ui, item.id, x - 4, y, tw + 8, bh);
       x += tw + gap;
@@ -3441,10 +3664,7 @@
     ctx.textAlign = "left";
   }
 
-
-
-
-  function wrapLines(ctx, fontStr, text, width, maxLines) {
+function wrapLines(ctx, fontStr, text, width, maxLines) {
     var words = String(text || "").split(" ");
     var lines = [];
     var cur = "";
@@ -6402,10 +6622,10 @@
     ctx.shadowBlur = 0;
     round(ctx, x, yy, w, h, 8);
     var ink = PAPER;
-    if (kind === "lamp") {
-      ctx.fillStyle = LAMP;
+    if (kind === "lamp" || kind === "dim") {
+      ctx.fillStyle = kind === "dim" ? "#6a5430" : LAMP;
       ctx.fill();
-      ink = INK;
+      ink = kind === "dim" ? "#2a2118" : INK;
     } else if (kind === "paper") {
       ctx.fillStyle = PAPER;
       ctx.fill();
@@ -6959,8 +7179,29 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
     }
     if (f.t >= 1 && f.freshIndex >= 0) f.held[f.freshIndex] = 1;
     if (ui.verdict && ui.verdict.t < 1) {
-      ui.verdict.t += (dt > 0 ? dt : 16) / 420;
+      ui.verdict.t += (dt > 0 ? dt : 16) / 640;
       if (ui.verdict.t > 1) ui.verdict.t = 1;
+    }
+    if (ui.verdict && ui.verdict.t >= 1 && !ui.verdict.saved) {
+      ui.verdict.saved = true;
+      if ((game.logN || 0) > (ui.verdict.before || 0)) {
+        if (!ui.plateMemory) ui.plateMemory = [];
+        ui.plateMemory.push({
+          before: ui.verdict.before || 0,
+          text: ui.verdict.text || "",
+          art: ui.verdict.art || "",
+          portrait: ui.verdict.portrait || "",
+          object: ui.verdict.object || "",
+          phase: ui.verdict.phase || "",
+          bust: !!ui.verdict.bust,
+          stamp: ui.verdict.stamp || "",
+          notebook: !!ui.verdict.notebook,
+          crate: !!ui.verdict.crate,
+          slot2: !!ui.verdict.slot2
+        });
+        if (ui.plateMemory.length > 16) ui.plateMemory.shift();
+      }
+      ui.verdict = null;
     }
   }
 
@@ -7200,8 +7441,8 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
     if (ui && ui.verdict && ui.verdict.t < 1 && (game.logN || 0) > (ui.verdict.before || 0) && hero.line !== ui.verdict.text) return null;
     var pics = choicePictures(hero, game, now);
     var choices = [];
-    if (hero.action) choices.push({ id: hero.action, label: String(hero.label || hero.action).replace(/\s+/g, " ").trim() });
-    if (hero.alt) choices.push({ id: hero.alt, label: String(hero.altLabel || hero.alt).replace(/\s+/g, " ").trim() });
+    if (hero.action) choices.push({ id: hero.action, label: heatLabel(game, hero.action, String(hero.label || hero.action).replace(/\s+/g, " ").trim()) });
+    if (hero.alt) choices.push({ id: hero.alt, label: heatLabel(game, hero.alt, String(hero.altLabel || hero.alt).replace(/\s+/g, " ").trim()) });
     var text = hero.line;
     var stamp = "";
     if (pics.bust) {
@@ -7243,7 +7484,7 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
         if (/zero dollars/i.test(desc.voice || desc.text)) continue;
       }
       if (filter && desc.tags.indexOf(filter) < 0) continue;
-      if (lines.length && lines[lines.length - 1].text === desc.text) continue;
+      if (lines.length && sameQuiet(lines[lines.length - 1].text, desc.text)) continue;
       desc.rawIndex = i;
       desc.choices = null;
       desc.lock = desc.mark === "lock";
@@ -7479,53 +7720,239 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
     return "h:" + text;
   }
 
-  function chatMediaBox(line, inner) {
-    var none = { kind: "", w: 0, h: 0, beside: false };
-    if (!line) return none;
-    if (line.art) {
-      var fw = 160;
-      var fh = 90;
-      if (fw > inner) {
-        fw = Math.max(96, inner);
-        fh = Math.round(fw * 9 / 16);
-      }
-      return { kind: "art", w: fw, h: fh, beside: inner >= fw + 150 };
+  function sameQuiet(a, b) {
+    function q(t) {
+      var s = String(t || "").toLowerCase();
+      return s === "quiet." || s.indexOf("street is quiet") >= 0 || s.indexOf("nothing is selling") >= 0 || s.indexOf("counter is quiet") >= 0 || s.indexOf("shop is still dark") >= 0 || s.indexOf("the door is shut") >= 0;
     }
-    if (line.portrait) {
-      var ph = 168;
-      var pw = Math.max(44, Math.round(ph * 318 / 1088));
-      return { kind: "portrait", w: pw, h: ph, beside: inner >= pw + 150 };
-    }
-    if (line.object) return { kind: "object", w: 72, h: 72, beside: inner >= 232 };
-    if (line.notebook) return { kind: "notebook", w: 64, h: 80, beside: inner >= 224 };
-    if (line.crate) return { kind: "crate", w: 72, h: 72, beside: inner >= 232 };
-    if (line.packs) return { kind: "packs", w: 72, h: 72, beside: inner >= 232 };
-    return none;
+    return a === b || (q(a) && q(b));
   }
 
-  function measureChat(ctx, line, width) {
-    var margin = 72;
-    var inner = Math.max(80, width - margin);
-    var media = chatMediaBox(line, inner);
-    var textW = inner;
-    if (media.beside) textW = Math.max(80, inner - media.w - 12);
-    var face = textFace(15, "body");
-    var words = wrapLines(ctx, face, line.text || "", textW, 14);
-    var textH = Math.max(20, words.length * 20);
-    var stack = media.beside ? Math.max(textH, media.h) : textH + (media.h ? 8 + media.h : 0);
-    var choices = line.choices && line.choices.length ? 44 : 0;
-    var h = 10 + stack + choices + 14;
-    return {
-      h: h,
-      margin: margin,
-      inner: inner,
-      textW: textW,
-      textH: textH,
-      words: words,
-      face: face,
-      media: media,
-      stack: stack
+  function heatLabel(game, id, label) {
+    if (id !== "skim" && id !== "score") return label;
+    var n = S.heatQuote ? S.heatQuote(game, id) : 0;
+    if (!n) return label;
+    if (String(label).indexOf("Heat") >= 0) return label;
+    return label + "  Heat +" + n;
+  }
+
+  function stepShelf(ui, game, dt) {
+    if (!ui || !game) return;
+    var slot = game.slots && game.slots[0];
+    var stock = slot ? (slot.stock || 0) : 0;
+    if (!ui.shelf) ui.shelf = { n: stock, wait: 0 };
+    if (ui.shelf.n == null) ui.shelf.n = stock;
+    if (ui.shelf.n === stock) {
+      ui.shelf.wait = 0;
+      return;
+    }
+    ui.shelf.wait = (ui.shelf.wait || 0) + (dt > 0 ? dt : 16);
+    if (ui.shelf.wait < 180) return;
+    ui.shelf.wait = 0;
+    if (ui.shelf.n > stock) ui.shelf.n -= 1;
+    else ui.shelf.n += 1;
+  }
+
+  function linePhaseId(line) {
+    if (!line) return "";
+    if (line.phase === "morning" || line.phase === "lunch" || line.phase === "evening" || line.phase === "night" || line.phase === "standard") return line.phase;
+    if (line.art === "shopMorning") return "morning";
+    if (line.art === "shopEvening") return "evening";
+    if (line.art === "shopNight") return "night";
+    var s = String(line.text || "");
+    if (s.indexOf("Morning Rush") >= 0) return "morning";
+    if (s.indexOf("Lunch Hour") >= 0) return "lunch";
+    if (s.indexOf("Evening Trade") >= 0) return "evening";
+    if (s.indexOf("Night Drift") >= 0) return "night";
+    if (s.indexOf("Standard Watch") >= 0) return "standard";
+    return "";
+  }
+
+  function phaseTitle(id) {
+    if (id === "morning") return "Morning Rush";
+    if (id === "lunch") return "Lunch Hour";
+    if (id === "evening") return "Evening Trade";
+    if (id === "night") return "Night Drift";
+    if (id === "standard") return "Standard Watch";
+    return "";
+  }
+
+  function toneFromKey(key) {
+    if (key === "shopMorning") return "morning";
+    if (key === "shopEvening") return "evening";
+    if (key === "shopNight" || key === "shopClosed") return "night";
+    if (key === "shopNoon") return "lunch";
+    return "";
+  }
+
+  function plateFill(phase, bright, rent) {
+    if (rent && bright) return "#6e4c32";
+    var map = {
+      morning: ["#32241e", "#5c4032"],
+      lunch: ["#1c2a30", "#2c424c"],
+      evening: ["#321e18", "#5a3428"],
+      standard: ["#22202a", "#3a3644"],
+      night: ["#141c2c", "#2a3c58"]
     };
+    var pair = map[phase] || ["#1a1612", "#2e2822"];
+    return pair[bright ? 1 : 0];
+  }
+
+  function lineIsRent(line) {
+    var t = ((line && line.text) || "").toLowerCase();
+    var s = ((line && line.stamp) || "").toLowerCase();
+    return s === "rent" || t.indexOf("rent is") >= 0 || t.indexOf("rent due") >= 0;
+  }
+
+  function wantsShelf(line) {
+    if (!line) return false;
+    if (line.packs) return true;
+    var t = (line.text || "").toLowerCase();
+    if (t.indexOf("shelf") >= 0 || t.indexOf("stock") >= 0 || t.indexOf("pack") >= 0) return true;
+    if (t.indexOf("shift paid") >= 0 || t.indexOf("took in") >= 0) return true;
+    return false;
+  }
+
+  function shopArtNow(game, now, line) {
+    var open = !!(game && game.flags && game.flags.opened) && !(game.world && game.world.hours === "closed");
+    var low = ((line && line.text) || "").toLowerCase();
+    if (!open || low.indexOf("still dark") >= 0 || low.indexOf("door is shut") >= 0 || low.indexOf("nothing is selling") >= 0) return "shopClosed";
+    var phase = (line && line.phase) || S.phaseAt(now).id;
+    if (phase === "morning") return "shopMorning";
+    if (phase === "evening") return "shopEvening";
+    if (phase === "night") return "shopNight";
+    return "shopNoon";
+  }
+
+  function platePicture(line, game, now) {
+    var pic = { kind: "", key: "", shelf: false, bust: !!(line && line.bust) };
+    if (!line) return pic;
+    if (line.bust) {
+      pic.kind = "portrait";
+      pic.key = line.portrait || "hire";
+      return pic;
+    }
+    if (line.portrait && !line.art) {
+      pic.kind = "portrait";
+      pic.key = line.portrait;
+      return pic;
+    }
+    if (line.art || line.packs || wantsShelf(line)) {
+      pic.kind = "shop";
+      pic.key = line.art || shopArtNow(game, now, line);
+      if (!openShopArt(pic.key)) pic.key = shopArtNow(game, now, line);
+      pic.shelf = wantsShelf(line);
+      return pic;
+    }
+    if (line.object) {
+      pic.kind = "object";
+      pic.key = line.object;
+      pic.shelf = wantsShelf(line);
+      return pic;
+    }
+    if (line.notebook) {
+      pic.kind = "object";
+      pic.key = "notebook";
+      return pic;
+    }
+    if (line.crate) {
+      pic.kind = "object";
+      pic.key = "crate";
+      return pic;
+    }
+    return pic;
+  }
+
+  function openShopArt(key) {
+    return key === "shopMorning" || key === "shopNoon" || key === "shopEvening" || key === "shopNight" || key === "shopClosed";
+  }
+
+  function secondFrame(game) {
+    var slots = (game && game.slots) || [];
+    if (slots.length > 1) return { owned: true };
+    var cap = S.slotCap ? S.slotCap(game) : 1;
+    if (cap < 2) {
+      var cost = D.degreeById && D.degreeById.bach ? D.degreeById.bach.cost : 0;
+      return { owned: false, price: cost };
+    }
+    return null;
+  }
+
+  function plateSentence(line) {
+    var text = (line && line.text) || "";
+    if (line && line.bust && text.toLowerCase().indexOf("busted") < 0) text = "Busted. " + text;
+    return text;
+  }
+
+  function chatColumn(L) {
+    var maxW = 520;
+    var w = L.w - 24;
+    if (w > maxW) w = maxW;
+    if (w < 160) w = Math.max(120, L.w - 12);
+    return { x: Math.round((L.w - w) * 0.5), w: w };
+  }
+
+  function choiceUnaffordable(pick) {
+    var g = frameGame;
+    if (!g || !pick || !pick.label) return false;
+    var n = S.moneyIn ? S.moneyIn(pick.label) : null;
+    if (n == null || n < 0) return false;
+    return (g.player.capital || 0) < n;
+  }
+
+  function measurePlateChoices(ctx, line, width) {
+    var picks = [];
+    var i;
+    if (!line || !line.choices) return null;
+    for (i = 0; i < line.choices.length; i++) if (line.choices[i] && line.choices[i].label) picks.push(line.choices[i]);
+    if (!picks.length) return null;
+    var narrow = picks.length < 2 || width < 360;
+    var gap = 8;
+    var face = textFace(15, "title");
+    var bw = narrow ? width : (width - gap * (picks.length - 1)) / picks.length;
+    var maxH = 48;
+    var blocks = [];
+    for (i = 0; i < picks.length; i++) {
+      var lines = wrapLines(ctx, face, picks[i].label, Math.max(48, bw - 20), 3);
+      var bh = Math.max(48, lines.length * 20 + 16);
+      if (bh > maxH) maxH = bh;
+      blocks.push(lines);
+    }
+    var total = narrow ? maxH * picks.length + gap * (picks.length - 1) : maxH;
+    return { picks: picks, blocks: blocks, bw: bw, bh: maxH, h: total, narrow: narrow, gap: gap, face: face };
+  }
+
+  function splicePlateMemory(lines, ui) {
+    var mem = (ui && ui.plateMemory) || [];
+    var m;
+    var i;
+    for (m = 0; m < mem.length; m++) {
+      var item = mem[m];
+      if (!item || !item.text) continue;
+      var dup = false;
+      for (i = 0; i < lines.length; i++) if (lines[i].text === item.text) dup = true;
+      if (dup) continue;
+      var plate = blankLine(item.text, {
+        stamp: item.stamp || "",
+        phase: item.phase || "",
+        art: item.art || "",
+        portrait: item.portrait || "",
+        object: item.object || "",
+        notebook: !!item.notebook,
+        crate: !!item.crate,
+        bust: !!item.bust,
+        slot2: !!item.slot2
+      });
+      plate.choices = null;
+      var at = lines.length;
+      for (i = 0; i < lines.length; i++) {
+        if (lines[i].rawIndex != null && lines[i].rawIndex >= (item.before || 0)) {
+          at = i;
+          break;
+        }
+      }
+      lines.splice(at, 0, plate);
+    }
   }
 
   function stepChatIn(ui, lines) {
@@ -7539,12 +7966,13 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
       f.t = 1;
     } else if (key !== f.tailKey) {
       f.tailKey = key;
-      f.t = tail && tail.bust ? 1 : 0;
+      f.t = 0;
     } else if ((f.t || 0) < 1) {
       var dt = ui.dt > 0 ? ui.dt : 16;
-      f.t += dt / 420;
+      f.t += dt / 520;
       if (f.t > 1) f.t = 1;
     }
+    if (f.t >= 1 && key) f.held[key] = 1;
     return f;
   }
 
@@ -7586,6 +8014,7 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
       if (!kept.length) kept.push(prompt);
       return kept;
     }
+    splicePlateMemory(lines, ui);
     var hero = heroLine(game, ui, now);
     if (hero) {
       var tail = lines[lines.length - 1];
@@ -7607,128 +8036,365 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
     return lines;
   }
 
-  function paintChatMedia(ctx, line, media, x, y) {
+  function shopMarkPhase(game, ui, now) {
+    var lines = collectChat(game, ui, now);
+    var i;
+    for (i = lines.length - 1; i >= 0; i--) {
+      var pic = platePicture(lines[i], game, now);
+      if (pic.kind === "shop" && pic.key && pic.key !== "shopClosed") {
+        if (pic.key === "shopMorning") return "morning";
+        if (pic.key === "shopEvening") return "evening";
+        if (pic.key === "shopNight") return "night";
+        if (lines[i].phase) return lines[i].phase;
+        return S.phaseAt(now).id;
+      }
+    }
+    return S.phaseAt(now).id;
+  }
+
+  function paintFigure(ctx, key, x, y, w, h, alpha, slide) {
     ctx.save();
     ctx.shadowBlur = 0;
-    if (media.kind === "art") {
-      var biasX = line.phase === "night" || line.phase === "morning" ? 0.22 : 0.35;
-      if (!blitCover(ctx, line.art, x, y, media.w, media.h, biasX, 0.36)) {
-        ctx.fillStyle = "#241c16";
-        ctx.fillRect(x, y, media.w, media.h);
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    ctx.fillStyle = "#14110e";
+    ctx.fillRect(x, y, w, h);
+    ctx.globalAlpha = alpha == null ? 1 : alpha;
+    var img = painted(key);
+    if (img) {
+      var ir = img.naturalWidth / Math.max(1, img.naturalHeight);
+      var dh = h;
+      var dw = dh * ir;
+      if (dw > w) {
+        dw = w;
+        dh = dw / ir;
       }
-      var tint = phaseTint(line.phase);
-      if (tint) {
-        ctx.fillStyle = tint;
-        ctx.fillRect(x, y, media.w, media.h);
-      }
-      ctx.strokeStyle = "rgba(239,230,212,0.4)";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x + 0.5, y + 0.5, media.w - 1, media.h - 1);
-    } else if (media.kind === "portrait") {
-      ctx.globalAlpha = line.bust ? 0.4 : 1;
-      if (!blitContain(ctx, line.portrait, x, y, media.w, media.h)) {
-        ctx.fillStyle = "#241c16";
-        ctx.fillRect(x, y, media.w, media.h);
-      }
+      var dx = x + (w - dw) * 0.5 + (slide || 0);
+      var dy = y + (h - dh);
+      ctx.drawImage(img, dx, dy, dw, dh);
+    }
+    ctx.restore();
+  }
+
+  function paintShopCard(ctx, game, key, x, y, w, h, opts) {
+    opts = opts || {};
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    ctx.fillStyle = "#14110e";
+    ctx.fillRect(x, y, w, h);
+    var heat = (game && game.player && game.player.heat) || 0;
+    var dim = 0;
+    if (game && game.flags && game.flags.shady && heat >= 20) dim = Math.min(0.5, (heat - 20) / 140);
+    ctx.globalAlpha = 1 - dim;
+    if (!blitCover(ctx, key || "shopClosed", x, y, w, h, 0.32, 0.4)) {
       ctx.globalAlpha = 1;
-    } else if (media.kind === "object" || media.kind === "packs") {
-      if (!blitContain(ctx, line.object || "stock", x, y, media.w, media.h)) {
-        ctx.fillStyle = "#241c16";
-        ctx.fillRect(x, y, media.w, media.h);
-      }
-    } else if (media.kind === "notebook") {
-      if (!blitContain(ctx, "notebook", x, y, media.w, media.h - 16)) {
-        ctx.fillStyle = "#241c16";
-        ctx.fillRect(x, y, media.w, media.h - 16);
-      }
-      drawRing(ctx, x + media.w * 0.5, y + media.h - 8, 7, line.ring == null ? 1 : line.ring);
-    } else if (media.kind === "crate") {
-      if (!blitContain(ctx, "crate", x, y, media.w, media.h)) {
-        ctx.fillStyle = "#241c16";
-        ctx.fillRect(x, y, media.w, media.h);
+      ctx.fillStyle = "#14110e";
+      ctx.fillRect(x, y, w, h);
+    }
+    ctx.globalAlpha = 1;
+    var place = (game && game.player && game.player.place) || {};
+    if (place.lights) {
+      ctx.fillStyle = LAMP;
+      ctx.beginPath();
+      ctx.arc(x + Math.max(14, w * 0.18), y + h * 0.46, Math.max(3, Math.min(7, w * 0.02)), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (place.sign) {
+      var shop = (game.slots && game.slots[0] && game.slots[0].name) || "Shop";
+      var sw = Math.min(Math.max(72, w * 0.42), Math.max(16, w - 16));
+      ctx.fillStyle = "#1c1612";
+      ctx.fillRect(x + 8, y + 8, sw, 22);
+      ctx.font = textFace(15, "title");
+      ctx.fillStyle = LAMP;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(clipText(ctx, textFace(15, "title"), shop, sw - 12), x + 8 + sw * 0.5, y + 19);
+    }
+    if (game && S.hireAtRegister && S.hireAtRegister(game)) {
+      var pw = Math.max(28, Math.min(w * 0.22, 72));
+      var ph = Math.max(64, h * 0.7);
+      paintFigure(ctx, "hire", x + w * 0.1, y + h - ph - 2, pw, ph, 1, 0);
+    }
+    if (opts.camera) {
+      var cx = x + w - 26;
+      var cy = y + 12;
+      ctx.strokeStyle = LAMP;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(cx, cy, 14, 10);
+      ctx.beginPath();
+      ctx.arc(cx + 7, cy + 5, 2.2, 0, Math.PI * 2);
+      ctx.fillStyle = LAMP;
+      ctx.fill();
+    }
+    if (opts.name) {
+      var barH = opts.sub ? 46 : 30;
+      ctx.fillStyle = "#1c1612";
+      ctx.fillRect(x, y + h - barH, w, barH);
+      ctx.font = textFace(15, "title");
+      ctx.fillStyle = PAPER;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(clipText(ctx, textFace(15, "title"), opts.name, w - 20), x + 10, y + h - barH + (opts.sub ? 15 : barH * 0.5));
+      if (opts.sub) {
+        ctx.font = textFace(15, "body");
+        ctx.fillStyle = opts.dimSub ? "#6e665c" : LAMP;
+        ctx.fillText(clipText(ctx, textFace(15, "body"), opts.sub, w - 20), x + 10, y + h - 14);
       }
     }
     ctx.restore();
   }
 
-  function drawChatChoices(ctx, ui, line, x, y, w, strikeT) {
-    var picks = [];
-    var i;
-    for (i = 0; i < line.choices.length; i++) if (line.choices[i] && line.choices[i].label) picks.push(line.choices[i]);
-    if (!picks.length || w < 40) return;
-    var gap = 8;
-    var bh = 36;
-    var bw = (w - gap * (picks.length - 1)) / picks.length;
-    if (bw < 16) return;
-    var strike = line.verdict ? easeOut(strikeT || 0) : 0;
-    var face = textFace(14, "title");
-    for (i = 0; i < picks.length; i++) {
-      var pick = picks[i];
-      var fade = pick.strike ? (1 - strike) : 1;
-      if (fade < 0.02) continue;
-      var bx = x + i * (bw + gap);
-      ctx.save();
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = fade;
-      var hot = ui && pick.id && ui.hover === pick.id;
-      ctx.fillStyle = pick.taken ? "rgba(240,195,106,0.22)" : (hot ? "rgba(239,230,212,0.14)" : "rgba(239,230,212,0.06)");
-      ctx.fillRect(bx, y, bw, bh);
-      ctx.strokeStyle = pick.taken ? LAMP : "rgba(239,230,212,0.35)";
-      ctx.lineWidth = pick.taken ? 1.5 : 1;
-      ctx.strokeRect(bx + 0.5, y + 0.5, Math.max(1, bw - 1), bh - 1);
-      ctx.font = face;
-      ctx.fillStyle = pick.taken ? LAMP : phaseInk(line.phase, line.bust);
+  function paintEmptyFrame(ctx, x, y, w, h, price) {
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#100e0c";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "#3a342c";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 2, y + 2, Math.max(1, w - 4), Math.max(1, h - 4));
+    if (price) {
+      ctx.font = textFace(15, "num");
+      ctx.fillStyle = "#8a8178";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      var label = clipText(ctx, face, pick.label, Math.max(8, bw - 16));
-      ctx.fillText(label, bx + bw * 0.5, y + bh * 0.5);
+      ctx.fillText(S.money(price), x + w * 0.5, y + h * 0.5);
+    }
+    ctx.restore();
+  }
+
+  function paintShelf(ctx, x, y, w, count) {
+    var slots = 8;
+    var gap = 6;
+    var cell = Math.floor((w - gap * (slots - 1)) / slots);
+    if (cell < 10) return 0;
+    var h = Math.min(34, cell);
+    var shown = count < 0 ? 0 : count;
+    var i;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    for (i = 0; i < slots; i++) {
+      var cx = x + i * (cell + gap);
+      ctx.fillStyle = "#100e0c";
+      ctx.fillRect(cx, y, cell, h);
+      if (i < shown) {
+        if (!blitCover(ctx, "stock", cx, y, cell, h, 0.5, 0.45)) {
+          ctx.fillStyle = "#14110e";
+          ctx.fillRect(cx, y, cell, h);
+        }
+      }
+    }
+    if (shown > slots) {
+      ctx.font = textFace(15, "num");
+      ctx.fillStyle = PAPER;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(shown), x + (slots - 1) * (cell + gap) + cell * 0.5, y + h * 0.5);
+    }
+    ctx.restore();
+    return h;
+  }
+
+  function shelfCount(line, ui, newest) {
+    if (newest && ui && ui.shelf && ui.shelf.n != null) return ui.shelf.n;
+    if (line && line.packs) return line.packs;
+    var t = ((line && line.text) || "").toLowerCase();
+    if (t.indexOf("empty") >= 0 || t.indexOf("sold out") >= 0) return 0;
+    if (t.indexOf("thin") >= 0) return 2;
+    return 0;
+  }
+
+  function measureChat(ctx, line, width, game, now, headerText, colorPhase) {
+    var photo = platePicture(line, game, now);
+    var side = photo.kind === "shop" ? secondFrame(game) : null;
+    var photoH = 0;
+    var sideW = 0;
+    if (photo.kind === "shop") {
+      photoH = Math.round(Math.min(210, width * 9 / 16));
+      if (photoH < 96) photoH = 96;
+      if (side) {
+        sideW = Math.round(Math.min(width * 0.3, photoH * 16 / 9));
+        if (sideW < 68) sideW = 0;
+      }
+    } else if (photo.kind === "portrait") {
+      photoH = Math.min(340, Math.max(240, Math.round(width * 0.72)));
+    } else if (photo.kind === "object") {
+      photoH = Math.round(Math.min(168, width * 0.52));
+    }
+    var padX = 14;
+    var textW = Math.max(80, width - padX * 2);
+    var face = textFace(15, "body");
+    var sentence = plateSentence(line);
+    var words = wrapLines(ctx, face, sentence, textW, 8);
+    var textH = Math.max(22, words.length * 22);
+    var shelfH = photo.shelf ? 42 : 0;
+    var choice = null;
+    var choiceH = 0;
+    if (line.choices && line.choices.length) {
+      choice = measurePlateChoices(ctx, line, textW);
+      if (choice) choiceH = choice.h;
+    }
+    var headerH = headerText ? 28 : 0;
+    var inner = photoH + (shelfH ? 10 + shelfH : 0) + 12 + textH + (choiceH ? 10 + choiceH : 0) + 14;
+    var tone = colorPhase || toneFromKey(photo && photo.key);
+    return {
+      h: headerH + inner + 12,
+      headerH: headerH,
+      headerText: headerText || "",
+      inner: inner,
+      photoH: photoH,
+      sideW: sideW,
+      side: sideW ? side : null,
+      shelfH: shelfH,
+      words: words,
+      face: face,
+      textW: textW,
+      padX: padX,
+      choice: choice,
+      photo: photo,
+      w: width,
+      phase: tone,
+      rent: lineIsRent(line)
+    };
+  }
+
+  function drawPlateChoices(ctx, ui, line, metrics, x, y, strikeT) {
+    if (!metrics) return;
+    var strike = line.verdict ? easeOut(strikeT || 0) : 0;
+    var i;
+    for (i = 0; i < metrics.picks.length; i++) {
+      var pick = metrics.picks[i];
+      var bx = metrics.narrow ? x : x + i * (metrics.bw + metrics.gap);
+      var by = metrics.narrow ? y + i * (metrics.bh + metrics.gap) : y;
+      var fade = pick.strike ? (1 - strike) : 1;
+      if (fade < 0.04) continue;
+      var sink = pick.taken ? 2 : pressSink(ui, pick.id);
+      var dim = !pick.taken && choiceUnaffordable(pick);
+      var main = i === 0;
+      ctx.save();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = Math.max(0, fade);
+      ctx.fillStyle = main ? (dim ? "#6a5430" : LAMP) : "#1a120e";
+      ctx.fillRect(bx, by + sink, metrics.bw, metrics.bh);
+      ctx.font = metrics.face;
+      ctx.fillStyle = main ? (dim ? "#2a2118" : INK) : (dim ? "#6e665c" : PAPER);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      var lines = metrics.blocks[i];
+      var n = lines.length || 1;
+      var li;
+      for (li = 0; li < lines.length; li++) {
+        ctx.fillText(lines[li], bx + metrics.bw * 0.5, by + sink + metrics.bh * 0.5 + (li - (n - 1) * 0.5) * 18);
+      }
       if (pick.strike && strike > 0.02) {
-        var tw = Math.min(bw - 16, measure(ctx, face, label));
-        ctx.strokeStyle = phaseInk(line.phase, false);
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = main ? INK : PAPER;
+        ctx.globalAlpha = Math.max(0.2, fade);
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(bx + bw * 0.5 - tw * 0.5, y + bh * 0.5);
-        ctx.lineTo(bx + bw * 0.5 + tw * 0.5, y + bh * 0.5);
+        ctx.moveTo(bx + 14, by + sink + metrics.bh * 0.5);
+        ctx.lineTo(bx + metrics.bw - 14, by + sink + metrics.bh * 0.5);
         ctx.stroke();
       }
       ctx.restore();
-      if (pick.id && ui && fade > 0.35) pushHit(ui, pick.id, bx, y, bw, bh);
+      if (pick.id && ui && fade > 0.35) pushHit(ui, pick.id, bx, by, metrics.bw, metrics.bh);
     }
   }
 
-  function drawChatMessage(ctx, ui, line, x, y, box, dy, strikeT) {
+  function drawChatMessage(ctx, ui, game, line, x, y, box, dy, strikeT, newest, ease) {
     var drawY = y + (dy || 0);
+    var arrive = newest && ease < 1;
+    var wipe = arrive ? ease : 1;
+    if (wipe < 0) wipe = 0;
+    if (wipe > 1) wipe = 1;
     ctx.save();
     ctx.shadowBlur = 0;
-    var stampFace = textFace(12, "title");
-    ctx.font = stampFace;
-    ctx.fillStyle = "#b7b0a6";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    var stampLines = wrapLines(ctx, stampFace, marginStamp(line), Math.max(24, box.margin - 14), 3);
-    var si;
-    for (si = 0; si < stampLines.length; si++) ctx.fillText(stampLines[si], x, drawY + 10 + si * 15);
-    var textX = x + box.margin;
-    var textY = drawY + 10;
-    var media = box.media;
-    var mediaX = textX;
-    var mediaY = textY + box.textH + 8;
-    if (media.beside) {
-      mediaX = textX + box.textW + 12;
-      mediaY = textY;
+    if (box.headerText) {
+      ctx.font = textFace(15, "title");
+      ctx.fillStyle = "#b7b0a6";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText(box.headerText, x, drawY + 12);
     }
+    var plateY = drawY + box.headerH;
+    var plateH = box.inner;
+    var bright = !!newest;
+    ctx.fillStyle = plateFill(box.phase, bright, !!(box.rent && newest));
+    round(ctx, x, plateY, box.w, plateH, 8);
+    ctx.fill();
+    var photo = box.photo;
+    var photoY = plateY;
+    if (photo && photo.kind === "portrait" && photo.key) {
+      var slide = arrive ? (1 - ease) * -72 : 0;
+      paintFigure(ctx, photo.key, x, photoY, box.w, box.photoH, line.bust ? 0.4 : 1, slide);
+    } else if (photo && (photo.kind === "shop" || photo.kind === "object")) {
+      var mainW = box.sideW ? box.w - box.sideW - 8 : box.w;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x, photoY, Math.max(1, box.w * wipe), box.photoH);
+      ctx.clip();
+      if (photo.kind === "shop") {
+        var slot0 = game.slots && game.slots[0];
+        paintShopCard(ctx, game, photo.key, x, photoY, mainW, box.photoH, { camera: !!(slot0 && slot0.camera) });
+        if (box.side) {
+          var sx = x + mainW + 8;
+          if (box.side.owned) paintShopCard(ctx, game, photo.key, sx, photoY, box.sideW, box.photoH, {});
+          else paintEmptyFrame(ctx, sx, photoY, box.sideW, box.photoH, box.side.price);
+        }
+      } else {
+        ctx.fillStyle = "#14110e";
+        ctx.fillRect(x, photoY, mainW, box.photoH);
+        if (!blitCover(ctx, photo.key, x, photoY, mainW, box.photoH, 0.5, 0.45)) {
+          ctx.fillStyle = "#14110e";
+          ctx.fillRect(x, photoY, mainW, box.photoH);
+        }
+      }
+      ctx.restore();
+      if (newest && photo.kind === "shop") ui.shopPt = { x: x + mainW * 0.5, y: photoY + box.photoH * 0.45 };
+    }
+    if (newest && (!ui.shopPt || photo.kind !== "shop")) {
+      ui.shopPt = { x: x + box.w * 0.5, y: photoY + Math.max(16, box.photoH * 0.4) };
+    }
+    var cursor = photoY + box.photoH;
+    if (photo && photo.shelf) {
+      cursor += 10;
+      paintShelf(ctx, x + box.padX, cursor, box.textW, shelfCount(line, ui, newest));
+      cursor += box.shelfH - 10;
+    }
+    cursor += 12;
     ctx.font = box.face;
-    ctx.fillStyle = phaseInk(line.phase, line.bust);
+    ctx.fillStyle = line.bust ? "#8a8178" : (newest ? PAPER : "#b7b0a6");
     ctx.textAlign = "left";
     ctx.textBaseline = "top";
-    var i;
-    for (i = 0; i < box.words.length; i++) ctx.fillText(box.words[i], textX, textY + i * 20);
-    if (media.kind) paintChatMedia(ctx, line, media, mediaX, mediaY);
-    if (media.kind === "portrait" && line.portrait && !line.bust && ui) {
+    var ti;
+    for (ti = 0; ti < box.words.length; ti++) ctx.fillText(box.words[ti], x + box.padX, cursor + ti * 22);
+    cursor += box.words.length * 22;
+    if (box.choice) drawPlateChoices(ctx, ui, line, box.choice, x + box.padX, cursor + 10, strikeT);
+    if (photo && photo.kind === "portrait" && line.portrait && !line.bust && ui) {
       var who = line.portrait;
-      if (who === "sera" || who === "landlord" || who === "juniper" || who === "hire") pushHit(ui, "look:" + who, mediaX, mediaY, media.w, media.h);
+      if (who === "sera" || who === "landlord" || who === "juniper" || who === "hire") pushHit(ui, "look:" + who, x, photoY, box.w, box.photoH);
     }
-    if (line.choices && line.choices.length) drawChatChoices(ctx, ui, line, textX, drawY + 10 + box.stack + 8, box.inner, strikeT);
+    ctx.restore();
+  }
+
+  function paintColumnFade(ctx, L) {
+    var color = (frameUi && frameUi.ground) || "#1a2744";
+    var top = L.header;
+    var bot = L.tabY;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    var g = ctx.createLinearGradient(0, top, 0, top + 28);
+    g.addColorStop(0, color);
+    g.addColorStop(1, hexA(color, 0));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, top, L.w, 28);
+    var g2 = ctx.createLinearGradient(0, bot - 36, 0, bot);
+    g2.addColorStop(0, hexA(color, 0));
+    g2.addColorStop(1, color);
+    ctx.fillStyle = g2;
+    ctx.fillRect(0, bot - 36, L.w, 36);
     ctx.restore();
   }
 
@@ -7753,17 +8419,26 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
     ui.logTop = L.header;
     ui.logBot = L.tabY;
     ui.clip = { x: 0, y: L.header, w: L.w, h: viewH };
-    var width = Math.max(120, L.w - 20);
+    var col = chatColumn(L);
     var boxes = [];
+    var group = "";
     var i;
-    for (i = 0; i < lines.length; i++) boxes.push(measureChat(ctx, lines[i], width));
+    for (i = 0; i < lines.length; i++) {
+      var ph = linePhaseId(lines[i]);
+      var header = "";
+      if (ph && ph !== group) {
+        header = phaseTitle(ph);
+        group = ph;
+      }
+      boxes.push(measureChat(ctx, lines[i], col.w, game, now, header, ph || group));
+    }
     var end = lines.length - back;
     if (end < 1) end = lines.length ? 1 : 0;
     if (end > lines.length) end = lines.length;
-    var y = L.tabY - 4;
+    var y = L.tabY - 8;
     var rows = [];
     var used = 0;
-    var viewInner = Math.max(40, viewH - 8);
+    var viewInner = Math.max(40, viewH - 16);
     i = end - 1;
     while (i >= 0) {
       var h = boxes[i].h;
@@ -7772,12 +8447,6 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
       rows.push({ i: i, y: y });
       used += h;
       i -= 1;
-    }
-    if (back > 0 && rows.length && used < viewInner) {
-      var oldest = rows[rows.length - 1];
-      var shift = (L.header + 4) - oldest.y;
-      var k;
-      for (k = 0; k < rows.length; k++) rows[k].y += shift;
     }
     ctx.save();
     ctx.shadowBlur = 0;
@@ -7789,11 +8458,12 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
     for (r = rows.length - 1; r >= 0; r--) {
       var row = rows[r];
       var newest = row.i === lines.length - 1 && back === 0;
-      var dy = newest && ease < 1 ? (1 - ease) * 24 : 0;
-      if (newest) ui.shopPt = { x: Math.min(L.w - 48, 110), y: row.y + 28 + dy };
-      drawChatMessage(ctx, ui, lines[row.i], 10, row.y, boxes[row.i], dy, strikeT);
+      var rowEase = newest ? ease : 1;
+      var dy = newest && rowEase < 1 ? (1 - rowEase) * 24 : 0;
+      drawChatMessage(ctx, ui, game, lines[row.i], col.x, row.y, boxes[row.i], dy, strikeT, newest, rowEase);
     }
     ctx.restore();
+    paintColumnFade(ctx, L);
     ui.clip = null;
   }
 
@@ -7806,12 +8476,13 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
     var shown = ui.cashShown != null ? ui.cashShown : (game.player.capital || 0);
     var cash = S.money(Math.round(shown));
     var heat = (game.player && game.player.heat) || 0;
-    var mark = (game.flags && game.flags.shady && heat >= 45) ? "heat" : phaseMark(phase.id);
+    var markPhase = (ui && ui.markPhase) || phase.id;
+    var mark = (game.flags && game.flags.shady && heat >= 45) ? "heat" : phaseMark(markPhase);
     ctx.save();
     ctx.shadowBlur = 0;
-    ctx.textBaseline = "middle";
-    var y = L.header * 0.5;
-    drawMark(ctx, mark, 16, y);
+    var y = L.header - 12;
+    ctx.textBaseline = "alphabetic";
+    drawMark(ctx, mark, 16, y - 5);
     var gear = 22;
     var gearX = L.w - 12 - gear;
     var numFace = textFace(15, "num");
@@ -7968,16 +8639,10 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
     ui.ground = ground;
     ctx.fillStyle = ground;
     ctx.fillRect(0, 0, w, h);
-    var heatN = (game.player && game.player.heat) || 0;
-    if (game.flags && game.flags.shady && heatN > 28) {
-      var ha = (heatN - 28) / 220;
-      if (ha > 0.16) ha = 0.16;
-      ctx.fillStyle = "rgba(28, 22, 18, " + ha.toFixed(3) + ")";
-      ctx.fillRect(0, 0, w, h);
-    }
     var L = layout(w, h);
     ui.L = L;
     frameUi = ui;
+    ui.markPhase = shopMarkPhase(game, ui, now);
     drawClockLine(ctx, game, ui, L, now);
     var board = ui.menu === "job" || ui.menu === "edu" || ui.menu === "scout" || ui.menu === "lab" || ui.menu === "settings" || ui.menu === "journal";
     if (!board) drawFeed(ctx, game, ui, L, now, "");

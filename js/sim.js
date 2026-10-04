@@ -275,8 +275,17 @@
     else if (low.indexOf("evening trade") >= 0) { phase = "evening"; art = "shopEvening"; }
     else if (low.indexOf("night drift") >= 0) { phase = "night"; art = "shopNight"; }
     else if (low.indexOf("standard watch") >= 0) { phase = "standard"; art = "shopNoon"; }
-    if (low.indexOf("still dark") >= 0 || low.indexOf("door is shut") >= 0 || low.indexOf("shop is closed") >= 0 || low.indexOf("nothing is selling") >= 0) {
-      art = art || "shopClosed";
+    if (low.indexOf("still dark") >= 0 || low.indexOf("door is shut") >= 0 || low.indexOf("shop is closed") >= 0 || low.indexOf("nothing is selling") >= 0 || low.indexOf("counter is quiet") >= 0 || low.indexOf("street is quiet") >= 0) {
+      art = "shopClosed";
+    }
+    if (!art && (low.indexOf("while you were out") >= 0 || low.indexOf("covered the quiet") >= 0 || low.indexOf("catch-up") >= 0)) {
+      var openArt = !!(game && game.flags && game.flags.opened) && (!game.world || game.world.hours !== "closed");
+      var pid = (game && game.phaseId) || "";
+      if (!openArt) art = "shopClosed";
+      else if (pid === "morning") art = "shopMorning";
+      else if (pid === "evening") art = "shopEvening";
+      else if (pid === "night") art = "shopNight";
+      else art = "shopNoon";
     }
     var portrait = "";
     var object = "";
@@ -928,6 +937,13 @@
       n.hours = "closed";
     }
     return w.block;
+  }
+
+  function heatQuote(game, kind) {
+    ensureLife(game);
+    if (kind === "skim") return game.world && game.world.quietRoom ? 10 : 8;
+    if (kind === "score") return 18;
+    return 0;
   }
 
   function hireAtRegister(game) {
@@ -3493,6 +3509,8 @@
     nextSpend: nextSpend,
     seraWantId: seraWantId,
     lifeBeat: lifeBeat,
+    heatQuote: heatQuote,
+    hireAtRegister: hireAtRegister,
     skim: skim,
     score: score,
     rest: rest,

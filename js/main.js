@@ -197,6 +197,8 @@
         ui.menu = null;
         ui.look = "";
         ui.lift = "";
+        ui.logScroll = 0;
+        ui.logPin = true;
         return;
       }
       toggleMenu(tab);
@@ -204,7 +206,14 @@
     }
     if (id === "hdr:journal") { toggleMenu("journal"); return; }
     if (id === "hdr:settings") { toggleMenu("settings"); return; }
-    if (id === "close") { ui.menu = null; ui.look = ""; ui.lift = ""; return; }
+    if (id === "close") {
+      ui.menu = null;
+      ui.look = "";
+      ui.lift = "";
+      ui.logScroll = 0;
+      ui.logPin = true;
+      return;
+    }
     if (id.indexOf("look:") === 0) {
       var who = id.substring(5);
       if (ui.menu === "scout" && ui.look === who) {
