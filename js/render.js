@@ -3712,7 +3712,7 @@ function uiOf(flow) {
       var on = item.view === current;
       var sink = pressSink(ui, item.id);
       ctx.save();
-      ctx.globalAlpha = on ? 1 : 0.38;
+      ctx.globalAlpha = on ? 1 : 0.62;
       ctx.beginPath();
       ctx.rect(x, iy + sink, cw, ch);
       ctx.clip();
@@ -9277,7 +9277,26 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
       var doorId = !place.owned ? "room" : (doorClosed(game) ? "door:open" : "door:close");
       pushHit(ui, doorId, door.x, door.y, door.w, door.h);
       hoverStroke(ctx, ui, doorId, door);
-      if (!place.owned) paintStamp(ctx, door, S.money(D.ROOM.rent || 0), cap >= (D.ROOM.rent || 0));
+      if (!place.owned) {
+        var rw = Math.min(door.w + 36, 160);
+        var rh = 48;
+        var rx = door.x + (door.w - rw) * 0.5;
+        var ry = door.y + door.h * 0.28;
+        var afford = cap >= (D.ROOM.rent || 0);
+        ctx.save();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "rgba(16,12,10,0.9)";
+        ctx.fillRect(rx, ry, rw, rh);
+        ctx.fillStyle = afford ? LAMP : "#8a8178";
+        ctx.fillRect(rx, ry, rw, 3);
+        ctx.font = textFace(15, "title");
+        ctx.fillStyle = afford ? LAMP : PAPER;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("Rent  " + S.money(D.ROOM.rent || 0), rx + rw * 0.5, ry + rh * 0.55);
+        ctx.restore();
+        pushHit(ui, "room", rx, ry, rw, rh);
+      }
     }
     var props = [
       ["lights", "bulb"],
@@ -9514,7 +9533,7 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
       var by = nbY + 8;
       ctx.save();
       ctx.shadowBlur = 0;
-      ctx.globalAlpha = book.dim ? 0.45 : 1;
+      ctx.globalAlpha = book.dim ? 0.82 : 1;
       ctx.translate(bx + bw * 0.5, by + bh * 0.5);
       ctx.rotate(-0.08);
       if (!blit(ctx, "notebook", -bw * 0.5, -bh * 0.5, bw, bh)) {
@@ -9659,6 +9678,10 @@ function drawMiniShop(ctx, game, ui, x, y, w, h, now) {
       actLabel = choice.label || "";
       if (choice.price) actLabel += "  " + choice.price;
       dim = !!choice.disabled;
+    }
+    if (!actLabel) {
+      actId = "applicants";
+      actLabel = "Find people";
     }
     if (actLabel) {
       var sink = pressSink(ui, actId);
