@@ -166,8 +166,24 @@
     return null;
   }
 
-  function feedMenu(menu) {
-    return menu === "job" || menu === "edu" || menu === "scout" || menu === "lab";
+  function boardOpen() {
+    return !!ui.menu;
+  }
+
+  function overBoard(p) {
+    return boardOpen() && ui.L && p.y > ui.L.header && p.y < ui.L.tabY;
+  }
+
+  function overChat(p) {
+    return !ui.menu && ui.logTop != null && p.y >= ui.logTop && p.y <= ui.logBot;
+  }
+
+  function moveChat(next) {
+    ui.logScroll = next;
+    if (ui.logScroll <= 0) {
+      ui.logScroll = 0;
+      ui.logPin = true;
+    } else ui.logPin = false;
   }
 
   function act(id) {
@@ -176,7 +192,14 @@
     if (R.pokeChoice) R.pokeChoice(ui, game, id, now);
     if (id === "shady") { toggleMenu("lab"); return; }
     if (id.indexOf("tab:") === 0) {
-      toggleMenu(id.substring(4));
+      var tab = id.substring(4);
+      if (tab === "chat") {
+        ui.menu = null;
+        ui.look = "";
+        ui.lift = "";
+        return;
+      }
+      toggleMenu(tab);
       return;
     }
     if (id === "hdr:journal") { toggleMenu("journal"); return; }
@@ -282,6 +305,12 @@
     if (id.indexOf("fire:") === 0) { S.fire(game, Number(id.substring(5))); return; }
     if (id.indexOf("cam:") === 0) { S.installCamera(game, Number(id.substring(4))); return; }
     if (id.indexOf("focus:") === 0) { ui.focusSlot = Number(id.substring(6)); return; }
+    if (id.indexOf("name:") === 0) {
+      var nameBits = id.split(":");
+      var namePick = nameBits.length > 2 ? Number(nameBits[2]) : null;
+      S.renameShop(game, Number(nameBits[1]), namePick);
+      return;
+    }
     if (id.indexOf("apply:") === 0) {
       var bits = id.split(":");
       S.applyJob(game, Number(bits[1]), bits[2]);
@@ -384,11 +413,8 @@
     var dy = p.y - ui.drag.sy;
     if (Math.abs(p.x - ui.drag.sx) + Math.abs(dy) > 8) ui.drag.moved = true;
     if (!ui.drag.moved) return;
-    if (ui.menu && !feedMenu(ui.menu) && p.y > (ui.L ? ui.L.header : 0) && p.y < (ui.L ? ui.L.tabY : ui.h)) ui.scroll = ui.drag.scroll - (p.y - ui.drag.sy);
-    else if (ui.logTop != null && p.y >= ui.logTop && p.y <= ui.logBot) {
-      ui.logPin = false;
-      ui.logScroll = ui.drag.log + Math.round((ui.drag.sy - p.y) / 18);
-    }
+    if (overBoard(p)) ui.scroll = ui.drag.scroll - (p.y - ui.drag.sy);
+    else if (overChat(p)) moveChat(ui.drag.log + Math.round((ui.drag.sy - p.y) / 18));
   });
 
   canvas.addEventListener("pointerup", function (e) {
@@ -413,18 +439,13 @@
 
   canvas.addEventListener("wheel", function (e) {
     var p = pointerPos(e);
-    if (ui.menu && !feedMenu(ui.menu) && ui.L && p.y > ui.L.header && p.y < ui.L.tabY) {
+    if (overBoard(p)) {
       ui.scroll += e.deltaY;
       e.preventDefault();
       return;
     }
-    if (ui.logTop != null && p.y >= ui.logTop && p.y <= ui.logBot) {
-      ui.logPin = false;
-      ui.logScroll += e.deltaY < 0 ? 1 : -1;
-      if (ui.logScroll <= 0) {
-        ui.logScroll = 0;
-        ui.logPin = true;
-      }
+    if (overChat(p)) {
+      moveChat((ui.logScroll || 0) + (e.deltaY < 0 ? 1 : -1));
       e.preventDefault();
     }
   }, { passive: false });

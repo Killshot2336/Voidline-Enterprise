@@ -1218,5 +1218,39 @@ function memStorage() {
   assert(countText(cover, "Ada has the register") === 1, "hire line once per phase");
 })();
 
+(function shopNames() {
+  var now = 1750000000000;
+  var game = S.fresh(now);
+  S.frame(game, now);
+  assert(game.slots[0].name === "The Corner", "missing shop name migrates");
+  assert(game.player.place.name === "The Corner", "place keeps the shop name");
+  assert(game.player.shop === "", "name migration leaves the brand empty");
+  assert(game.player.capital === 0 && game.flags.opened === false, "a name does not open the shop");
+  var named = S.renameShop(game, 0, 1);
+  assert(named.ok && named.name === "Greasefire", "rename picks Greasefire");
+  assert(game.slots[0].name === "Greasefire" && game.player.place.name === "Greasefire", "rename stores the slot and the place");
+  assert(game.player.shop === "Greasefire", "rename keeps the brand in step");
+  assert(String(lastLog(game)).indexOf("Greasefire") >= 0, "rename line");
+  assert(game.flags.opened === false, "rename leaves the counter closed");
+  var store = memStorage();
+  S.save(game, store);
+  var raw = JSON.parse(store.mem[D.SAVE_KEY]);
+  delete raw.slots[0].name;
+  delete raw.player.place.name;
+  raw.player.shop = "Neon Nook";
+  store.mem[D.SAVE_KEY] = JSON.stringify(raw);
+  var loaded = S.load(now + 20, store);
+  assert(loaded.slots[0].name === "Neon Nook", "old save takes the brand as the name");
+  assert(loaded.player.place.name === "Neon Nook", "old place name migrates");
+  assert(loaded.player.shop === "Neon Nook", "old brand stays");
+  var bare = JSON.parse(store.mem[D.SAVE_KEY]);
+  bare.player.shop = "";
+  delete bare.slots[0].name;
+  delete bare.player.place.name;
+  store.mem[D.SAVE_KEY] = JSON.stringify(bare);
+  var corner = S.load(now + 30, store);
+  assert(corner.slots[0].name === "The Corner" && corner.player.shop === "", "blank save gets The Corner");
+})();
+
 console.log(ok + " passed, " + fails + " failed");
 if (fails) process.exit(1);

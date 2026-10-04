@@ -292,6 +292,7 @@
     else if (low.indexOf("plant") >= 0) object = "plant";
     else if (low.indexOf("warm lights") >= 0 || low.indexOf("bulb") >= 0) object = "bulb";
     else if (low.indexOf("pack") >= 0 || low.indexOf("shelf") >= 0 || low.indexOf("stock") >= 0) object = "stock";
+    if (!art && !portrait && !object && low.indexOf("took in") >= 0) object = "stock";
     var stamp = "";
     var sentence = voice;
     if (phase && voice.indexOf(". ") > 0) {
@@ -491,6 +492,42 @@
     if (w.wallAward === undefined) w.wallAward = null;
     w.season = seasonOf(p.level);
     ensureEmployees(game);
+    ensureShopNames(game);
+  }
+
+  function defaultShopName(index) {
+    if (index === 0) return "The Corner";
+    if (index === 1) return "Second Chair";
+    return "Shop " + (index + 1);
+  }
+
+  function shopNameList() {
+    var names = ["The Corner"];
+    var shops = D.SHOPS || [];
+    var i;
+    for (i = 0; i < shops.length; i++) names.push(shops[i]);
+    return names;
+  }
+
+  function ensureShopNames(game) {
+    var slots = game.slots || [];
+    var place = game.player && game.player.place;
+    var i;
+    for (i = 0; i < slots.length; i++) {
+      var slot = slots[i];
+      if (!slot) continue;
+      var current = slot.name == null ? "" : String(slot.name).replace(/\s+/g, " ").trim();
+      if (!current) {
+        if (i === 0 && game.player && game.player.shop) current = String(game.player.shop).trim();
+        else if (i === 0 && place && place.name) current = String(place.name).replace(/\s+/g, " ").trim();
+        if (!current) current = defaultShopName(i);
+      }
+      if (current.length > 22) current = current.slice(0, 22).trim();
+      slot.name = current;
+    }
+    if (place && slots[0] && (place.name == null || String(place.name).trim() === "")) {
+      place.name = slots[0].name;
+    }
   }
 
   function shopIndex(game) {
@@ -1011,6 +1048,7 @@
   function ensureSlots(game) {
     var cap = slotCap(game);
     while (game.slots.length < cap) game.slots.push(makeSlot(game.slots.length));
+    ensureShopNames(game);
   }
 
   function hasTrait(emp, id) {
@@ -2928,10 +2966,38 @@
     index = Number(index);
     if (!shops[index]) return { ok: false, reason: "name" };
     game.player.shop = shops[index];
+    if (game.slots && game.slots[0]) game.slots[0].name = shops[index];
+    if (game.player.place) game.player.place.name = shops[index];
     game.world.showing = "";
     pushLog(game, "+ The shop is " + game.player.shop + ".");
     game.rev += 1;
     return { ok: true, shop: game.player.shop };
+  }
+
+  function renameShop(game, slotIndex, pick) {
+    ensureLife(game);
+    ensureSlots(game);
+    var slot = game.slots[slotIndex];
+    if (!slot) return { ok: false, reason: "slot" };
+    var names = shopNameList();
+    var next = "";
+    if (pick != null && names[Number(pick)]) next = names[Number(pick)];
+    else {
+      var at = names.indexOf(slot.name);
+      if (at < 0) at = 0;
+      next = names[(at + 1) % names.length];
+    }
+    next = String(next || "").replace(/\s+/g, " ").trim();
+    if (!next || next === slot.name) return { ok: false, reason: "same" };
+    if (next.length > 22) next = next.slice(0, 22).trim();
+    slot.name = next;
+    if (slotIndex === 0) {
+      if (game.player.place) game.player.place.name = next;
+      if ((D.SHOPS || []).indexOf(next) >= 0) game.player.shop = next;
+      else if (next === "The Corner") game.player.shop = "";
+    }
+    pushLog(game, "+ The shop is " + next + ".");
+    return { ok: true, name: next };
   }
 
   function cycleShop(game) {
@@ -3464,6 +3530,7 @@
     loadSlot: loadSlot,
     reset: reset,
     setShop: setShop,
+    renameShop: renameShop,
     cycleShop: cycleShop,
     setUpstairs: setUpstairs,
     sendUpstairs: sendUpstairs,
