@@ -344,16 +344,17 @@
   }
 
   function layout(w, h) {
-    var dock = w < 560 ? 86 : 102;
+    var dock = h < 640 ? 60 : (w < 560 ? 68 : 76);
+    var header = h < 640 ? 48 : 58;
     return {
       w: w,
       h: h,
-      header: 0,
-      a1: h,
-      b0: h,
-      b1: h,
-      tabH: 0,
-      tabY: h,
+      header: header,
+      a1: h - dock,
+      b0: header,
+      b1: h - dock,
+      tabH: dock,
+      tabY: h - dock,
       dock: dock
     };
   }
@@ -731,7 +732,7 @@
       if (rentRow.on) button(flow.ctx, ui, "room", flow.x, rentRow.y, flow.w, 32, "Rent the corner", false, game.player.capital < D.ROOM.rent);
     } else {
       para(flow, (place.lights ? "Warm lights" : "Bare bulb") + " · " + (place.sign ? "sign up" : "no sign") + " · " + (place.counter ? "real counter" : "folding table") + ".");
-      var parts = [["lights", "Warm lights"], ["sign", "Paint a sign"], ["counter", "Real counter"]];
+      var parts = [["lights", "Warm lights"], ["sign", "Paint a sign"], ["counter", "Real counter"], ["cooler", "Cooler"], ["safe", "Safe"], ["speaker", "Speaker"], ["plant", "Plant"], ["neon", "Neon"]];
       var pi;
       for (pi = 0; pi < parts.length; pi++) {
         var part = parts[pi][0];
@@ -1114,6 +1115,8 @@
       }
       if (!any) para(flow, "You don't own any of these. Buy them in School.");
     }
+    var bookRow = row(flow, 40);
+    if (bookRow.on) button(flow.ctx, ui, "hdr:journal", flow.x, bookRow.y, flow.w, 32, "The book", false, false);
     para(flow, "Cameras bolt onto a shop after Camera Schematic. Cost " + S.money(D.CAM_COST) + ".");
   }
 
@@ -1160,6 +1163,7 @@
       var bits = wrapLines(ctx, font(15, false, 500, true), line, bw - 4, 2);
       ctx.fillText(bits[0] || "", bx + bw * 0.5, r.y + 118);
       if (bits[1]) ctx.fillText(bits[1], bx + bw * 0.5, r.y + 136);
+      if (flow.ui) pushHit(flow.ui, "look:" + who[i], bx, r.y, bw, 112);
     }
     ctx.restore();
     ctx.textAlign = "left";
@@ -1167,6 +1171,10 @@
 
   function drawScouts(flow, game) {
     drawPeopleRow(flow, game);
+    var lookUi = uiOf(flow);
+    if (lookUi && lookUi.look) para(flow, personWant(game, lookUi.look));
+    var hireRow = row(flow, 40);
+    if (hireRow.on && lookUi) button(flow.ctx, lookUi, "applicants", flow.x, hireRow.y, flow.w, 32, "Find people", false, false);
     section(flow, "SEND SOMEONE");
     if (!game.nodes.charter) para(flow, "Scout Charter is still locked. It's on the clout line in Stuff.");
     else para(flow, "They leave on the real clock. Late night is faster. Two people out at once.");
@@ -2435,17 +2443,8 @@
   }
 
   function drawMenu(ctx, game, ui, L) {
-    var which = ui.menu || ((ui.holdT > 0.02) ? ui.holdMenu : "");
-    if (!which) return;
-    ctx.save();
-    ctx.shadowBlur = 0;
-    if (which === "job") drawLedger(ctx, game, ui, L);
-    else if (which === "edu") drawNotebook(ctx, game, ui, L);
-    else if (which === "lab") drawCrateView(ctx, game, ui, L);
-    else if (which === "scout") drawPeopleHold(ctx, game, ui, L);
-    else if (which === "journal") drawWallNotes(ctx, game, ui, L);
-    else if (which === "settings") drawSlipBack(ctx, game, ui, L);
-    ctx.restore();
+    if (!ui.menu) return;
+    drawSheet(ctx, game, ui, L, ui.menu);
     ui.clip = null;
     paperOn = false;
     buttonTone = "";
@@ -2454,36 +2453,27 @@
 
   function drawDock(ctx, game, ui, L) {
     var items = [
-      { id: "tab:job", art: "ledger", menu: "job" },
-      { id: "tab:edu", art: "notebook", menu: "edu" },
-      { id: "tab:scout", art: "photostrip", menu: "scout", faces: true },
-      { id: "tab:lab", art: "crate", menu: "lab" }
+      { id: "tab:job", label: "Work", menu: "job" },
+      { id: "tab:edu", label: "School", menu: "edu" },
+      { id: "tab:scout", label: "People", menu: "scout" },
+      { id: "tab:lab", label: "Stuff", menu: "lab" }
     ];
-    var faces = ["sera", "landlord", "juniper", "hire"];
+    var pad = 10;
+    var gap = 8;
+    var y = L.tabY + 8;
+    var bh = L.h - y - 8;
+    if (bh < 32) bh = 32;
+    var bw = (L.w - pad * 2 - gap * (items.length - 1)) / items.length;
     var i;
     ctx.save();
     ctx.shadowBlur = 0;
+    ctx.fillStyle = "#14110e";
+    ctx.fillRect(0, L.tabY, L.w, L.h - L.tabY);
+    ctx.fillStyle = BRICK;
+    ctx.fillRect(0, L.tabY, L.w, 3);
     for (i = 0; i < items.length; i++) {
       var item = items[i];
-      var held = ui.holdMenu === item.menu && (ui.menu === item.menu || (ui.holdT || 0) > 0.02);
-      if (held && item.menu !== "scout") continue;
-      var pose = held ? objectPose(L, item.menu, ui.holdT || 0) : restSpot(L, item.menu);
-      ctx.fillStyle = "rgba(20,14,10,0.22)";
-      ctx.beginPath();
-      ctx.ellipse(pose.x + pose.w * 0.5, pose.y + pose.h - 1, pose.w * 0.28, 2.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-      if (!paintCut(ctx, item.art, pose.x, pose.y, pose.w, pose.h)) {
-        ctx.fillStyle = "#c4b09a";
-        ctx.fillRect(pose.x, pose.y, pose.w, pose.h);
-      }
-      pushHit(ui, item.id, pose.x, pose.y, pose.w, pose.h);
-      if (item.faces) {
-        var f;
-        var fw = pose.w / faces.length;
-        for (f = 0; f < faces.length; f++) {
-          pushHit(ui, "look:" + faces[f], pose.x + f * fw, pose.y, fw, pose.h);
-        }
-      }
+      drawTab(ctx, ui, item.id, pad + i * (bw + gap), y, bw, bh, item.label, ui.menu === item.menu);
     }
     ctx.restore();
     ctx.textAlign = "left";
@@ -5075,6 +5065,16 @@
 
   function tick(dt, game) {
     frameGame = game;
+    if (game) {
+      var offer = offerKey(game);
+      if (logAnim.offer !== offer) {
+        logAnim.offer = offer;
+        logAnim.offerT = 0;
+      } else if ((logAnim.offerT || 0) < 1) {
+        logAnim.offerT += dt / 260;
+        if (logAnim.offerT > 1) logAnim.offerT = 1;
+      }
+    }
     if (logAnim.n !== game.logN || logAnim.head !== game.logHead) {
       if (logAnim.n < 0) logAnim.t = 1;
       else logAnim.t = 0;
@@ -5175,6 +5175,384 @@
     clearGlow(ctx);
   }
 
+  function offerKey(game) {
+    var now = (game && game.lastReal) || 0;
+    if (game.player && game.player.heldUntil && now < game.player.heldUntil) return "held";
+    if (!game.flags || game.flags.chosen === false) return "dayone";
+    var front = game.world && game.world.spine && game.world.spine[0];
+    if (front) return "spine:" + front;
+    if (game.world && game.world.showing) return "show:" + game.world.showing;
+    return "log:" + (game.logHead || 0);
+  }
+
+  function currentHero(game, now) {
+    var newest = game.logN - 1;
+    var hero = storyBeat(newest >= 0 ? (S.logLine(game, newest) || "") : "", game);
+    if (!game.flags || game.flags.chosen === false) {
+      hero = {
+        line: "Zero dollars. A shift pays tonight. A hobby pays less and teaches you.",
+        rail: GOLD,
+        action: "shift",
+        label: "Take a shift",
+        alt: "hobby",
+        altLabel: "Start a hobby",
+        stamp: "DAY ONE"
+      };
+    }
+    if (game.player.heldUntil && now < game.player.heldUntil) {
+      var left = Math.max(1, Math.ceil((game.player.heldUntil - now) / 1000));
+      hero = {
+        line: "You're sitting this out. " + left + "s left on the clock.",
+        rail: VIOLET,
+        action: "rest",
+        label: "Wait it out",
+        alt: null,
+        altLabel: null,
+        stamp: "HEAT"
+      };
+    } else if (game.flags && game.flags.chosen) {
+      var frontId = game.world && game.world.spine && game.world.spine[0];
+      var showId = frontId || (game.world && game.world.showing);
+      var lived = showId && S.lifeBeat ? S.lifeBeat(game, showId) : null;
+      if (lived) hero = lived;
+      else hero = offerHours(game, decorateOffer(game, hero));
+    }
+    return hero;
+  }
+
+  function readableLog(game, text) {
+    var raw = String(text || "");
+    var idm = raw.match(/life:\s*([a-z0-9_]+)/i);
+    if (idm && S.lifeBeat) {
+      var lived = S.lifeBeat(game, idm[1]);
+      if (lived && lived.line) return lived.line;
+    }
+    if (raw.charAt(0) === "!" || raw.charAt(0) === "+" || raw.charAt(0) === "*") return raw.substring(1).replace(/^\s+/, "");
+    return raw;
+  }
+
+  function idleStatus(game, now) {
+    var bits = [];
+    var phase = S.phaseAt(now);
+    if (phase && phase.name) bits.push(phase.name);
+    var opened = !!(game.flags && game.flags.opened);
+    var closed = !!(game.world && game.world.hours === "closed");
+    var slot = game.slots && game.slots[0];
+    if (!opened) bits.push("Not selling");
+    else if (closed) bits.push("Shop closed");
+    else if (slot && slot.stock <= 0) bits.push("Shop open. Out of stock");
+    else bits.push("Shop open. Selling");
+    if (opened && game.pulse && game.lastNet) bits.push("last " + S.money(game.lastNet));
+    if (game.degree && game.degree.left != null) {
+      var def = D.degreeById[game.degree.id];
+      bits.push((def ? def.name : "Class") + " " + S.fmtMs(game.degree.left));
+    }
+    var i;
+    var missions = game.scouts || [];
+    for (i = 0; i < missions.length && i < 2; i++) {
+      var mission = missions[i];
+      var scout = D.scoutById[mission.id];
+      bits.push((scout ? scout.name : "Scout") + " " + S.fmtMs(mission.left));
+    }
+    return bits.join("  ·  ");
+  }
+
+  function drawTab(ctx, ui, id, x, y, w, h, label, on) {
+    if (!id || w < 8 || h < 8) return;
+    var hover = ui.hover === id;
+    var sc = uiScale(ui, id);
+    var cx = x + w * 0.5;
+    var cy = y + h * 0.5;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.translate(cx, cy);
+    ctx.scale(sc, sc);
+    ctx.translate(-cx, -cy);
+    ctx.fillStyle = on ? LAMP : (hover ? "#f7f1e4" : PAPER);
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = on ? 2 : 1;
+    ctx.strokeRect(x, y, w, h);
+    var f = font(w < 110 ? 13 : 15, false, 700, true);
+    ctx.font = f;
+    ctx.fillStyle = INK;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(clipText(ctx, f, label || "", w - 12), cx, cy);
+    ctx.restore();
+    pushHit(ui, id, x, y, w, h);
+  }
+
+  function drawChoice(ctx, ui, id, x, y, w, h, label) {
+    if (!id) return;
+    var press = ui.press && ui.press.id === id;
+    var age = press ? ((ui.now || 0) - ui.press.at) : 9999;
+    var answered = !!(press && age >= 0 && age < 220);
+    drawTab(ctx, ui, id, x, y, w, h, label, answered);
+  }
+
+  function drawMiniShop(ctx, game, x, y, w, h, now) {
+    var spec = storySpec(game, now, false);
+    var key = shopArtKey(spec);
+    var job = spec.job;
+    var cap = (game.player && game.player.shop) || (job && job.name) || ("Year " + (game.player.level || 1));
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    ctx.fillStyle = "#2a2018";
+    ctx.fillRect(x, y, w, h);
+    if (!blitContain(ctx, key, x, y, w, h - 16)) {
+      ctx.fillStyle = BRICK;
+      ctx.fillRect(x + 6, y + 8, w - 12, Math.max(8, h - 28));
+      ctx.fillStyle = LAMP;
+      ctx.fillRect(x + 12, y + 14, Math.max(8, w * 0.28), Math.max(6, (h - 28) * 0.32));
+      ctx.fillStyle = PAPER;
+      ctx.fillRect(x + w * 0.58, y + 16, Math.max(8, w * 0.18), Math.max(8, h - 40));
+    }
+    ctx.restore();
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(x, y + h - 16, w, 16);
+    var capFont = font(11, false, 700, true);
+    ctx.font = capFont;
+    ctx.fillStyle = INK;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(clipText(ctx, capFont, cap, w - 8), x + w * 0.5, y + h - 8);
+    ctx.restore();
+  }
+
+  function drawEventCard(ctx, game, ui, hero, x, y, w, now) {
+    var sceneW = w >= 420 ? Math.min(120, Math.floor(w * 0.26)) : 0;
+    var sceneH = 78;
+    var textW = w - 28 - (sceneW ? sceneW + 12 : 0);
+    var bodyFont = font(w < 420 ? 15 : 17, false, 500, true);
+    var lines = wrapLines(ctx, bodyFont, hero.line || "", Math.max(80, textW), 4);
+    var textBlock = 22 + lines.length * 22;
+    var topBlock = Math.max(textBlock, sceneW ? sceneH + 8 : textBlock);
+    var cardH = 12 + topBlock + 48;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#e4d8c4";
+    ctx.fillRect(x + 3, y + 4, w, cardH);
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(x, y, w, cardH);
+    ctx.fillStyle = hero.rail || GOLD;
+    ctx.fillRect(x, y, 6, cardH);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, w, cardH);
+    if (hero.stamp) {
+      ctx.font = font(11, false, 700, true);
+      ctx.fillStyle = BRICK;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.fillText(hero.stamp, x + 16, y + 10);
+    }
+    ctx.font = bodyFont;
+    ctx.fillStyle = INK;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    var i;
+    for (i = 0; i < lines.length; i++) ctx.fillText(lines[i], x + 16, y + 26 + i * 22);
+    if (sceneW) drawMiniShop(ctx, game, x + w - sceneW - 10, y + 10, sceneW, sceneH, now);
+    var by = y + cardH - 42;
+    var gap = 8;
+    if (hero.alt) {
+      var bw = (w - 32 - gap) / 2;
+      drawChoice(ctx, ui, hero.action, x + 14, by, bw, 32, hero.label);
+      drawChoice(ctx, ui, hero.alt, x + 14 + bw + gap, by, bw, 32, hero.altLabel);
+    } else if (hero.action) {
+      drawChoice(ctx, ui, hero.action, x + 14, by, w - 28, 32, hero.label);
+    }
+    ctx.restore();
+    return cardH;
+  }
+
+  function drawClicker(ctx, ui, game, x, y, w) {
+    var gap = 8;
+    var bw = (w - gap * 2) / 3;
+    var tutor = D.hobbyById.tutor;
+    drawChoice(ctx, ui, "shift", x, y, bw, 34, "Work the rush");
+    drawChoice(ctx, ui, "hobby", x + bw + gap, y, bw, 34, tutor ? tutor.name : "Tutor");
+    drawChoice(ctx, ui, "stock:0", x + (bw + gap) * 2, y, bw, 34, "Restock");
+  }
+
+  function drawIdleBar(ctx, game, x, y, w, now) {
+    var text = idleStatus(game, now);
+    var f = font(13, false, 600, true);
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(20, 16, 14, 0.45)";
+    ctx.fillRect(x, y, w, 28);
+    ctx.font = f;
+    ctx.fillStyle = PAPER;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(clipText(ctx, f, text, w - 16), x + 8, y + 14);
+    ctx.restore();
+  }
+
+  function drawLogPanel(ctx, game, ui, x, y, w, h) {
+    var n = game.logN || 0;
+    var maxBack = Math.max(0, n - 1);
+    if ((ui.logScroll || 0) > maxBack) ui.logScroll = maxBack;
+    if ((ui.logScroll || 0) < 0) ui.logScroll = 0;
+    var back = ui.logPin === false ? (ui.logScroll || 0) : 0;
+    var body = font(14, false, 500, true);
+    var lineH = 20;
+    var room = Math.max(1, Math.floor((h - 30) / lineH));
+    if (room > 5) room = 5;
+    var end = n - back;
+    var from = Math.max(0, end - room);
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(20, 16, 14, 0.45)";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "rgba(239,230,212,0.28)";
+    ctx.strokeRect(x, y, w, h);
+    ctx.font = font(11, false, 700, true);
+    ctx.fillStyle = LAMP;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText("LOG", x + 10, y + 8);
+    if (!n) {
+      ctx.font = body;
+      ctx.fillStyle = PAPER;
+      ctx.fillText("Empty.", x + 10, y + 28);
+    }
+    var i;
+    var row = 0;
+    for (i = from; i < end && row < room; i++) {
+      var text = readableLog(game, S.logLine(game, i) || "");
+      var fresh = i === n - 1 && back === 0 && (logAnim.t || 1) < 1;
+      var enter = fresh ? (1 - easeOut(logAnim.t)) * 8 : 0;
+      ctx.globalAlpha = fresh ? (0.4 + 0.6 * easeOut(logAnim.t)) : 1;
+      ctx.font = body;
+      ctx.fillStyle = PAPER;
+      ctx.fillText(clipText(ctx, body, text, w - 20), x + 10, y + 28 + row * lineH + enter);
+      row += 1;
+    }
+    ctx.restore();
+    ui.logTop = y;
+    ui.logBot = y + h;
+  }
+
+  function drawIdentity(ctx, game, ui, L) {
+    var mid = L.header * 0.5;
+    var gear = 28;
+    var gearX = L.w - gear - 10;
+    var gearY = Math.max(6, mid - gear * 0.5);
+    var shown = ui.cashShown != null ? ui.cashShown : game.player.capital;
+    var cash = S.money(shown);
+    var cashFont = font(L.w < 420 ? 16 : 20, false, 700, true);
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(0, 0, L.w, L.header);
+    ctx.fillStyle = INK;
+    ctx.fillRect(0, L.header - 3, L.w, 3);
+    ctx.font = cashFont;
+    ctx.fillStyle = INK;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText("Year " + (game.player.level || 1), 14, mid);
+    ctx.textAlign = "right";
+    ui.cashX = gearX - 10 - measure(ctx, cashFont, cash) * 0.5;
+    ctx.fillText(cash, gearX - 10, mid);
+    ctx.restore();
+    roundButton(ctx, ui, "hdr:settings", gearX, gearY, gear, "gear", ui.menu === "settings");
+  }
+
+  function drawLifeBody(ctx, game, ui, L, now) {
+    var hero = currentHero(game, now);
+    var t = logAnim.offerT == null ? 1 : easeOut(logAnim.offerT);
+    var dy = (1 - t) * 14;
+    var x = 12;
+    var w = L.w - 24;
+    var y = L.header + 10 + dy;
+    var floor = L.tabY - 8;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 0.25 + 0.75 * t;
+    var cardH = drawEventCard(ctx, game, ui, hero, x, y, w, now);
+    y += cardH + 8;
+    if (y + 40 <= floor) {
+      drawClicker(ctx, ui, game, x, y, w);
+      y += 42;
+    }
+    if (y + 32 <= floor) {
+      drawIdleBar(ctx, game, x, y, w, now);
+      y += 36;
+    }
+    var logH = floor - y;
+    if (logH >= 52) drawLogPanel(ctx, game, ui, x, y, w, logH);
+    else {
+      ui.logTop = null;
+      ui.logBot = null;
+    }
+    ctx.restore();
+  }
+
+  function sheetTitle(which) {
+    if (which === "job") return "Work";
+    if (which === "edu") return "School";
+    if (which === "scout") return "People";
+    if (which === "lab") return "Stuff";
+    if (which === "journal") return "The book";
+    return "Settings";
+  }
+
+  function drawSheet(ctx, game, ui, L, which) {
+    var x = 8;
+    var y = L.header + 6;
+    var w = L.w - 16;
+    var h = L.tabY - y - 6;
+    if (w < 40 || h < 80) return;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "rgba(20, 16, 14, 0.55)";
+    ctx.fillRect(0, L.header, L.w, L.tabY - L.header);
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = BRICK;
+    ctx.fillRect(x, y, 6, h);
+    ctx.font = font(18, false, 700, true);
+    ctx.fillStyle = INK;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(sheetTitle(which), x + 18, y + 22);
+    button(ctx, ui, "close", x + w - 96, y + 8, 84, 28, "Close", false, false);
+    var body = { x: x, y: y + 44, w: w, h: h - 52 };
+    ui.clip = body;
+    var flow = openFlow(ctx, ui, body, ui.scroll || 0);
+    if (which === "job") drawOccupation(flow, game, ui);
+    else if (which === "edu") drawEducation(flow, game, ui);
+    else if (which === "scout") drawScouts(flow, game);
+    else if (which === "lab") drawLab(flow, game, ui);
+    else if (which === "journal") drawJournal(flow, game, ui);
+    else if (which === "settings") drawSettings(flow, game, ui);
+    ui.contentH = flow.cy + 12;
+    ctx.restore();
+    ui.clip = null;
+    var max = (ui.contentH || 0) - body.h;
+    if (max < 0) max = 0;
+    if (ui.scroll < 0) ui.scroll = 0;
+    if (ui.scroll > max) ui.scroll = max;
+    ctx.restore();
+    ctx.textAlign = "left";
+    ctx.globalAlpha = 1;
+  }
+
   function draw(ctx, game, ui, now) {
     var w = ui.w;
     var h = ui.h;
@@ -5196,13 +5574,13 @@
     ctx.globalAlpha = 1;
     ui.hits.length = 0;
     ui.clip = null;
-    if (ui.rewind) {
-      if (!ui.rewindAt) ui.rewindAt = now;
-      ui.rewindStep = Math.floor((now - ui.rewindAt) / 650) % 3;
-    } else ui.rewindStep = -1;
-    var phaseId = S.phaseAt(now).id;
-    var bg = ensurePlate(w, h, !!game.settings.performanceMode, dpr, phaseId);
-    ctx.drawImage(bg, 0, 0, w, h);
+    ui.logTop = null;
+    ui.logBot = null;
+    ui.screenSlip = false;
+    buttonTone = "";
+    sheetLock = false;
+    ctx.fillStyle = "#1a2744";
+    ctx.fillRect(0, 0, w, h);
     var heatN = (game.player && game.player.heat) || 0;
     if (game.flags && game.flags.shady && heatN > 28) {
       var ha = (heatN - 28) / 220;
@@ -5210,26 +5588,13 @@
       ctx.fillStyle = "rgba(28, 22, 18, " + ha.toFixed(3) + ")";
       ctx.fillRect(0, 0, w, h);
     }
-    buttonTone = "";
-    sheetLock = false;
     var L = layout(w, h);
     ui.L = L;
-    if (ui.camX == null) settle(ui, game, ui.dt || 16, now);
-    ui.screenSlip = true;
-    drawStory(ctx, game, ui, L, now);
-    drawTacks(ctx, ui, L);
+    drawIdentity(ctx, game, ui, L);
+    if (!ui.menu) drawLifeBody(ctx, game, ui, L, now);
+    if (ui.menu) drawMenu(ctx, game, ui, L);
     drawDock(ctx, game, ui, L);
-    if (ui.menu || (ui.holdT > 0.02 && ui.holdMenu)) drawMenu(ctx, game, ui, L);
-    drawHeader(ctx, game, ui, L, now);
-    noteCash(game, now, Math.min(120, w * 0.2), h * 0.62);
-    if (ui.menu === "scout") {
-      var backW = 84;
-      var backH = 32;
-      var backX = 16;
-      var backY = 16;
-      drawTag(ctx, backX, backY, backW, backH, "Back", ui.hover === "close");
-      pushHit(ui, "close", backX, backY, backW, backH);
-    }
+    noteCash(game, now, ui.cashX || (w - 80), L.header * 0.5);
     drawParts(ctx);
     drawPops(ctx, now);
     clearGlow(ctx);

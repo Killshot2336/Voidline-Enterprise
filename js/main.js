@@ -260,8 +260,8 @@
     var dy = p.y - ui.drag.sy;
     if (Math.abs(p.x - ui.drag.sx) + Math.abs(dy) > 8) ui.drag.moved = true;
     if (!ui.drag.moved) return;
-    if (ui.menu && p.y < (ui.L ? ui.L.tabY : ui.h)) ui.scroll = ui.drag.scroll - (p.y - ui.drag.sy);
-    else if (p.y < ui.h * 0.5) {
+    if (ui.menu && p.y > (ui.L ? ui.L.header : 0) && p.y < (ui.L ? ui.L.tabY : ui.h)) ui.scroll = ui.drag.scroll - (p.y - ui.drag.sy);
+    else if (ui.logTop != null && p.y >= ui.logTop && p.y <= ui.logBot) {
       ui.logPin = false;
       ui.logScroll = ui.drag.log + Math.round((ui.drag.sy - p.y) / 18);
     }
@@ -294,7 +294,7 @@
       e.preventDefault();
       return;
     }
-    if (p.y < ui.h * 0.5) {
+    if (ui.logTop != null && p.y >= ui.logTop && p.y <= ui.logBot) {
       ui.logPin = false;
       ui.logScroll += e.deltaY < 0 ? 1 : -1;
       if (ui.logScroll <= 0) {
