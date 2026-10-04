@@ -783,18 +783,22 @@
       ctx.fillStyle = "rgba(240,195,106,0.10)";
       ctx.fillRect(flow.x, r.y, flow.w, 24);
     }
-    var metaW = 0;
-    if (meta) metaW = measure(ctx, metaFont, meta) + 12;
+    var metaW = meta ? measure(ctx, metaFont, meta) + 14 : 0;
+    var lab = clipText(ctx, labFont, label || "", Math.max(24, flow.w - metaW - 4));
     ctx.font = labFont;
     ctx.fillStyle = disabled ? "#6e665c" : PAPER;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(clipText(ctx, labFont, label || "", Math.max(24, flow.w - metaW - 4)), flow.x + 2, r.y + 12);
+    ctx.fillText(lab, flow.x + 2, r.y + 12);
     if (meta) {
+      var labW = measure(ctx, labFont, lab);
+      var mx = flow.x + 2 + labW + 12;
+      var maxX = flow.x + flow.w - metaW + 2;
+      if (mx > maxX) mx = maxX;
       ctx.font = metaFont;
       ctx.fillStyle = disabled ? "#6e665c" : LAMP;
-      ctx.textAlign = "right";
-      ctx.fillText(meta, flow.x + flow.w - 2, r.y + 12);
+      ctx.textAlign = "left";
+      ctx.fillText(meta, mx, r.y + 12);
     }
     ctx.restore();
     if (id && !disabled && ui) pushHit(ui, id, flow.x, r.y, flow.w, 24);
@@ -1158,21 +1162,27 @@
     return { line: line, action: "fire:" + idx, label: "Fire", price: S.money(emp.salary) };
   }
 
-  function drawPeopleBand(flow, game, ui) {
+  function drawPeopleBand(flow, game, ui, active) {
     var cast = [
       ["sera", "Regular"],
       ["landlord", "Landlord"],
       ["juniper", "Rival"],
       ["hire", "Hire"]
     ];
-    var gap = 8;
+    var gap = 10;
     var bw = (flow.w - gap * 3) / 4;
-    var ph = Math.min(112, Math.max(72, bw * 0.9));
-    var pw = Math.min(bw - 8, Math.round(ph * 0.7));
-    var band = row(flow, ph + 28);
+    var viewH = Math.max(160, flow.bottom - flow.top);
+    var ph = Math.min(248, Math.max(150, viewH * 0.4));
+    if (ph + 40 > viewH - 80) ph = Math.max(130, viewH - 180);
+    var pw = Math.max(36, Math.round(ph * 318 / 1088));
+    if (pw > bw - 4) {
+      pw = bw - 4;
+      ph = Math.round(pw * 1088 / 318);
+    }
+    var band = row(flow, ph + 56);
     if (!band.on) return;
     var ctx = flow.ctx;
-    var look = ui && ui.look;
+    var look = active || (ui && ui.look) || "";
     var i;
     ctx.save();
     ctx.shadowBlur = 0;
@@ -1182,28 +1192,29 @@
       var here = personHere(game, who);
       var on = look === who;
       var px = bx + (bw - pw) * 0.5;
+      var imgY = band.y + 8;
       if (on) {
         ctx.fillStyle = LAMP;
-        ctx.fillRect(bx, band.y, bw, 2);
+        ctx.fillRect(px, band.y, pw, 3);
       }
-      ctx.globalAlpha = here ? 1 : 0.4;
+      ctx.globalAlpha = here ? 1 : 0.38;
       ctx.fillStyle = "#14110e";
-      ctx.fillRect(px, band.y + 8, pw, ph - 8);
-      blitContain(ctx, who, px, band.y + 8, pw, ph - 8);
+      ctx.fillRect(px, imgY, pw, ph);
+      blitContain(ctx, who, px, imgY, pw, ph);
       ctx.globalAlpha = 1;
       if (here) {
         ctx.fillStyle = LAMP;
         ctx.beginPath();
-        ctx.arc(px + pw - 4, band.y + 12, 3, 0, Math.PI * 2);
+        ctx.arc(px + pw - 5, imgY + 8, 3, 0, Math.PI * 2);
         ctx.fill();
       }
-      var capFont = font(bw < 72 ? 10 : 12, false, 700, true);
+      var capFont = font(bw < 72 ? 10 : 13, false, 700, true);
       ctx.font = capFont;
       ctx.fillStyle = on ? LAMP : (here ? PAPER : "#8a8178");
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(clipText(ctx, capFont, personCaption(game, who, ui), bw - 4), bx + bw * 0.5, band.y + ph + 14);
-      if (ui) pushHit(ui, "look:" + who, bx, band.y, bw, ph + 24);
+      ctx.fillText(clipText(ctx, capFont, personCaption(game, who, ui), bw - 4), bx + bw * 0.5, imgY + ph + 26);
+      if (ui) pushHit(ui, "look:" + who, bx, band.y, bw, ph + 40);
     }
     ctx.restore();
   }
@@ -1514,8 +1525,14 @@
     var place = (game.player && game.player.place) || {};
     var cap = (game.player && game.player.capital) || 0;
     darkTitle(flow, "Work");
-    var shopW = Math.min(flow.w, 560);
-    var shopH = Math.round(Math.min(220, Math.max(132, shopW * 0.4)));
+    var shopW = Math.min(flow.w, 520);
+    var pictureH = Math.round(shopW * 720 / 1280);
+    var shopH = pictureH + 16;
+    if (shopH > 292) {
+      shopH = 292;
+      pictureH = shopH - 16;
+      shopW = Math.round(pictureH * 1280 / 720);
+    }
     var shopRow = row(flow, shopH + 8);
     if (shopRow.on) {
       var shopX = flow.x + (flow.w - shopW) * 0.5;
@@ -1527,6 +1544,24 @@
     if (goal) darkFeature(flow, goal.action, goal.label, goal.price, goal.fill, cap < goal.cost);
     else darkNote(flow, "The room is finished.");
 
+    var i;
+    for (i = 0; i < slots.length; i++) {
+      var one = slots[i];
+      var job = D.jobById[one.jobId];
+      if (slots.length > 1) {
+        var shopName = "Shop " + (i + 1) + (job ? "  ·  " + job.name : "");
+        darkLine(flow, "focus:" + i, shopName, i === focus ? "Here" : "Open", false);
+      }
+      if (slots.length === 1 || i === focus) {
+        darkLine(flow, "stock:" + i, "Buy stock", (one.stock || 0) + "/" + S.stockCap(game), false);
+        darkLine(flow, "cam:" + i, one.camera ? "Camera on" : "Add camera", one.camera ? "On" : S.money(D.CAM_COST), !!one.camera);
+        if (one.employee) {
+          var bust = one.employee.caught ? "  Busted" : "";
+          darkLine(flow, "fire:" + i, one.employee.name, S.money(one.employee.salary) + bust, false);
+        }
+      }
+    }
+
     darkKicker(flow, "The rest");
     var catalog = roomCatalog();
     var ownedBits = [];
@@ -1534,7 +1569,7 @@
     for (pi = 0; pi < catalog.length; pi++) {
       var part = catalog[pi];
       if (partOwned(game, part[0])) {
-        if (part[0] !== "room") ownedBits.push(part[1]);
+        if (part[0] !== "room" && part[0] !== "floor") ownedBits.push(part[1]);
         continue;
       }
       if (!partOpen(game, part[0])) continue;
@@ -1556,24 +1591,6 @@
       var openH = S.hobbyOpen(game, hobby);
       var meta = openH ? S.money(hobby.pay) : ("needs " + hobby.needSkill + " " + hobby.need);
       darkLine(flow, "hobby:" + hobby.id, hobby.name, meta, !openH);
-    }
-
-    darkKicker(flow, slots.length > 1 ? "Shops" : "This counter");
-    var i;
-    for (i = 0; i < slots.length; i++) {
-      var one = slots[i];
-      var job = D.jobById[one.jobId];
-      var name = "Shop " + (i + 1) + (job ? "  ·  " + job.name : "");
-      if (slots.length > 1) darkLine(flow, "focus:" + i, name, i === focus ? "Here" : "Open", false);
-      if (slots.length === 1 || i === focus) {
-        darkLine(flow, "stock:" + i, "Buy stock", (one.stock || 0) + "/" + S.stockCap(game), false);
-        darkLine(flow, "cam:" + i, one.camera ? "Camera on" : "Add camera", one.camera ? "On" : S.money(D.CAM_COST), !!one.camera);
-        if (one.employee) {
-          var wage = S.money(one.employee.salary);
-          if (one.employee.caught) wage += "  Busted";
-          darkLine(flow, "fire:" + i, "Fire  " + one.employee.name, wage, false);
-        }
-      }
     }
     if (S.slotCap(game) < 2) darkNote(flow, "A second shop opens after Operations Bachelor or the Server Rack.");
 
@@ -1814,14 +1831,10 @@
   function drawScouts(flow, game) {
     var ui = flow.ui;
     darkTitle(flow, "People");
-    drawPeopleBand(flow, game, ui);
     var look = ui && ui.look;
-    var choice = look ? personChoice(game, look, ui) : null;
-    if (!choice) {
-      var anyHire = personHere(game, "hire");
-      if (!anyHire) choice = { line: "Nobody is on the clock.", action: "applicants", label: "Find people", price: "" };
-      else choice = { line: "Someone is on the clock.", action: "", label: "", price: "" };
-    }
+    var shown = look || (personHere(game, "hire") ? "hire" : "");
+    drawPeopleBand(flow, game, ui, shown);
+    var choice = shown ? personChoice(game, shown, ui) : { line: "Nobody is on the clock.", action: "applicants", label: "Find people", price: "" };
     if (choice.line) darkNote(flow, choice.line);
     if (choice.action) darkFeature(flow, choice.action, choice.label, choice.price || "", choice.fill, !!choice.disabled);
 
