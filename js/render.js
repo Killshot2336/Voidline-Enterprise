@@ -1313,20 +1313,26 @@
     var w = L.w;
     var h = L.h;
     var narrow = w < 560;
+    var sill = h * 0.69;
+    var x0 = w * (narrow ? 0.14 : 0.18);
     if (kind === "job") {
-      var bw = narrow ? 84 : 116;
-      return { x: w * 0.12, y: h * 0.55, w: bw, h: bw * 0.7 };
+      var bw = narrow ? 46 : 64;
+      var bh = bw * 0.64;
+      return { x: x0, y: sill - bh, w: bw, h: bh };
     }
     if (kind === "edu") {
-      var nw = narrow ? 78 : 104;
-      return { x: w * 0.25, y: h * 0.57, w: nw, h: nw * 0.68 };
+      var nw = narrow ? 42 : 56;
+      var nh = nw * 0.66;
+      return { x: x0 + (narrow ? 50 : 70), y: sill - nh + 2, w: nw, h: nh };
     }
     if (kind === "scout") {
-      var pw = narrow ? 112 : 156;
-      return { x: w * 0.66, y: h * 0.78, w: pw, h: pw * 0.36 };
+      var pw = narrow ? 72 : 96;
+      var ph = pw * 0.38;
+      return { x: x0 + (narrow ? 98 : 136), y: sill - ph + 4, w: pw, h: ph };
     }
-    var cw = narrow ? 76 : 104;
-    return { x: w * 0.56, y: h * 0.73, w: cw, h: cw * 0.68 };
+    var cw = narrow ? 40 : 54;
+    var ch = cw * 0.66;
+    return { x: x0 + (narrow ? 176 : 244), y: sill - ch, w: cw, h: ch };
   }
 
   function readSpot(L, kind) {
@@ -2460,38 +2466,22 @@
     for (i = 0; i < items.length; i++) {
       var item = items[i];
       var held = ui.holdMenu === item.menu && (ui.menu === item.menu || (ui.holdT || 0) > 0.02);
-      if (ui.menu === "scout" && item.menu !== "scout") continue;
       if (held && item.menu !== "scout") continue;
       var pose = held ? objectPose(L, item.menu, ui.holdT || 0) : restSpot(L, item.menu);
-      if (ui.menu === "scout" && item.menu === "scout") {
-        var pw = Math.min(150, L.w * 0.42);
-        pose = { x: L.w - pw - 12, y: 46, w: pw, h: pw * 0.34 };
-      }
-      ctx.fillStyle = "rgba(28,22,18,0.28)";
+      ctx.fillStyle = "rgba(20,14,10,0.22)";
       ctx.beginPath();
-      ctx.ellipse(pose.x + pose.w * 0.5, pose.y + pose.h - 2, pose.w * 0.32, 5, 0, 0, Math.PI * 2);
+      ctx.ellipse(pose.x + pose.w * 0.5, pose.y + pose.h - 1, pose.w * 0.28, 2.5, 0, 0, Math.PI * 2);
       ctx.fill();
       if (!paintCut(ctx, item.art, pose.x, pose.y, pose.w, pose.h)) {
-        ctx.fillStyle = "#e6d3b4";
+        ctx.fillStyle = "#c4b09a";
         ctx.fillRect(pose.x, pose.y, pose.w, pose.h);
       }
       pushHit(ui, item.id, pose.x, pose.y, pose.w, pose.h);
       if (item.faces) {
         var f;
-        var fw = pose.w / 4;
+        var fw = pose.w / faces.length;
         for (f = 0; f < faces.length; f++) {
-          var face = painted(faces[f]);
-          if (face && face.naturalWidth) {
-            var ir = face.naturalWidth / Math.max(1, face.naturalHeight);
-            var fh = pose.h * 0.72;
-            var ffw = fh * ir;
-            if (ffw > fw * 0.86) {
-              ffw = fw * 0.86;
-              fh = ffw / ir;
-            }
-            ctx.drawImage(face, pose.x + f * fw + (fw - ffw) * 0.5, pose.y + pose.h - fh - 4, ffw, fh);
-          }
-          pushHit(ui, "look:" + faces[f], pose.x + f * fw, pose.y, fw, pose.h * 0.78);
+          pushHit(ui, "look:" + faces[f], pose.x + f * fw, pose.y, fw, pose.h);
         }
       }
     }
